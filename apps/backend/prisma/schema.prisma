@@ -1,0 +1,542 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== UTILISATEURS ==========
+
+enum UserRole {
+  PASSENGER
+  DRIVER
+  MERCHANT
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model User {
+  id                String             @id @default(uuid())
+  phone             String             @unique
+  email             String?            @unique
+  firstName         String
+  lastName          String
+  role              UserRole           @default(PASSENGER)
+  avatar            String?
+  language          String             @default("fr") // fr, en, pidgin
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  // Relations
+  wallet            Wallet?
+  driverProfile     DriverProfile?
+  merchantProfile   MerchantProfile?
+  ridesAsPassenger  Ride[]             @relation("PassengerRides")
+  ridesAsDriver     Ride[]             @relation("DriverRides")
+  deliveriesSender  Delivery[]         @relation("SenderDeliveries")
+  deliveriesDriver  Delivery[]         @relation("DeliveryDriver")
+  ratings           Rating[]           @relation("RaterRatings")
+  receivedRatings   Rating[]           @relation("RatedRatings")
+  loyaltyPoints     LoyaltyPoints?
+  emergencyContacts EmergencyContact[]
+  notifications     Notification[]
+  carpoolsAsDriver  Carpool[]          @relation("CarpoolDriver")
+  carpoolBookings   CarpoolBooking[]
+  marketOrders      MarketOrder[]
+  vehiclesOwned     Vehicle[]
+  rentalBookings    RentalBooking[]
+  businessMembers   BusinessMember[]
+
+  @@map("users")
+}
+
+model DriverProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id])
+  licenseNumber      String
+  licenseExpiry      DateTime
+  cniNumber          String             // Carte Nationale d'Identité
+  vehicleType        VehicleType
+  vehiclePlate       String
+  vehicleBrand       String?
+  vehicleModel       String?
+  vehicleYear        Int?
+  verificationStatus VerificationStatus @default(PENDING)
+  isOnline           Boolean            @default(false)
+  currentLat         Float?
+  currentLng         Float?
+  totalTrips         Int                @default(0)
+  averageRating      Float              @default(5.0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@map("driver_profiles")
+}
+
+enum VehicleType {
+  MOTO
+  CAR_ECONOMY
+  CAR_COMFORT
+  CAR_VIP
+  TRUCK
+}
+
+// ========== PORTEFEUILLE & PAIEMENT ==========
+
+model Wallet {
+  id           String        @id @default(uuid())
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id])
+  balance      Float         @default(0)
+  currency     String        @default("XAF")
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id            String            @id @default(uuid())
+  walletId      String
+  wallet        Wallet            @relation(fields: [walletId], references: [id])
+  type          TransactionType
+  amount        Float
+  currency      String            @default("XAF")
+  status        TransactionStatus @default(PENDING)
+  paymentMethod PaymentMethod
+  reference     String?
+  description   String?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@map("transactions")
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  REFUND
+  BONUS
+  LOYALTY_REDEEM
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  ORANGE_MONEY
+  MTN_MOMO
+  EXPRESS_UNION
+  CASH
+  WALLET
+  CARD
+}
+
+// ========== PHASE 1: GO RIDE ==========
+
+model Ride {
+  id              String     @id @default(uuid())
+  passengerId     String
+  passenger       User       @relation("PassengerRides", fields: [passengerId], references: [id])
+  driverId        String?
+  driver          User?      @relation("DriverRides", fields: [driverId], references: [id])
+  status          RideStatus @default(PENDING)
+  vehicleType     VehicleType
+  pickupLat       Float
+  pickupLng       Float
+  pickupAddress   String
+  dropoffLat      Float
+  dropoffLng      Float
+  dropoffAddress  String
+  distance        Float?     // en km
+  duration        Int?       // en minutes
+  estimatedPrice  Float
+  finalPrice      Float?
+  proposedPrice   Float?     // prix proposé par le passager (négociation)
+  paymentMethod   PaymentMethod
+  isPaid          Boolean    @default(false)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  rating          Rating?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@map("rides")
+}
+
+enum RideStatus {
+  PENDING
+  ACCEPTED
+  DRIVER_ARRIVING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ========== PHASE 1: GO DELIVER ==========
+
+model Delivery {
+  id              String         @id @default(uuid())
+  senderId        String
+  sender          User           @relation("SenderDeliveries", fields: [senderId], references: [id])
+  driverId        String?
+  driver          User?          @relation("DeliveryDriver", fields: [driverId], references: [id])
+  status          DeliveryStatus @default(PENDING)
+  packageType     PackageType
+  packageDesc     String?
+  packageWeight   Float?         // en kg
+  pickupLat       Float
+  pickupLng       Float
+  pickupAddress   String
+  pickupContact   String         // numéro du contact au pickup
+  dropoffLat      Float
+  dropoffLng      Float
+  dropoffAddress  String
+  dropoffContact  String         // numéro du destinataire
+  distance        Float?
+  estimatedPrice  Float
+  finalPrice      Float?
+  paymentMethod   PaymentMethod
+  isPaid          Boolean        @default(false)
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("deliveries")
+}
+
+enum DeliveryStatus {
+  PENDING
+  ACCEPTED
+  PICKING_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum PackageType {
+  DOCUMENT
+  SMALL_PACKAGE
+  MEDIUM_PACKAGE
+  LARGE_PACKAGE
+  FOOD
+  FRAGILE
+}
+
+// ========== PHASE 2: GO MARKET ==========
+
+model MerchantProfile {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  shopName      String
+  shopAddress   String
+  shopLat       Float
+  shopLng       Float
+  category      String   // alimentation, artisanat, etc.
+  description   String?
+  isOpen        Boolean  @default(true)
+  openingHours  Json?
+  products      Product[]
+  orders        MarketOrder[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("merchant_profiles")
+}
+
+model Product {
+  id          String          @id @default(uuid())
+  merchantId  String
+  merchant    MerchantProfile @relation(fields: [merchantId], references: [id])
+  name        String
+  description String?
+  price       Float
+  currency    String          @default("XAF")
+  image       String?
+  category    String
+  isAvailable Boolean         @default(true)
+  orderItems  OrderItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("products")
+}
+
+model MarketOrder {
+  id             String           @id @default(uuid())
+  customerId     String
+  customer       User             @relation(fields: [customerId], references: [id])
+  merchantId     String
+  merchant       MerchantProfile  @relation(fields: [merchantId], references: [id])
+  status         MarketOrderStatus @default(PENDING)
+  items          OrderItem[]
+  totalAmount    Float
+  deliveryFee    Float
+  deliveryAddress String
+  deliveryLat    Float
+  deliveryLng    Float
+  paymentMethod  PaymentMethod
+  isPaid         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@map("market_orders")
+}
+
+model OrderItem {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     MarketOrder @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product     @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Float
+  createdAt DateTime    @default(now())
+
+  @@map("order_items")
+}
+
+enum MarketOrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  PICKED_UP
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+// ========== PHASE 2: GO SHARE (Covoiturage) ==========
+
+model Carpool {
+  id             String           @id @default(uuid())
+  driverId       String
+  driver         User             @relation("CarpoolDriver", fields: [driverId], references: [id])
+  departureLat   Float
+  departureLng   Float
+  departureCity  String
+  departureAddress String
+  arrivalLat     Float
+  arrivalLng     Float
+  arrivalCity    String
+  arrivalAddress String
+  departureTime  DateTime
+  availableSeats Int
+  pricePerSeat   Float
+  currency       String           @default("XAF")
+  description    String?
+  status         CarpoolStatus    @default(ACTIVE)
+  bookings       CarpoolBooking[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@map("carpools")
+}
+
+model CarpoolBooking {
+  id         String              @id @default(uuid())
+  carpoolId  String
+  carpool    Carpool             @relation(fields: [carpoolId], references: [id])
+  passengerId String
+  passenger  User                @relation(fields: [passengerId], references: [id])
+  seats      Int                 @default(1)
+  status     CarpoolBookingStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@map("carpool_bookings")
+}
+
+enum CarpoolStatus {
+  ACTIVE
+  FULL
+  DEPARTED
+  COMPLETED
+  CANCELLED
+}
+
+enum CarpoolBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// ========== PHASE 3: GO RENT ==========
+
+model Vehicle {
+  id           String          @id @default(uuid())
+  ownerId      String
+  owner        User            @relation(fields: [ownerId], references: [id])
+  type         VehicleType
+  brand        String
+  model        String
+  year         Int
+  plate        String
+  color        String?
+  seats        Int?
+  images       String[]
+  pricePerDay  Float
+  pricePerHour Float?
+  currency     String          @default("XAF")
+  withDriver   Boolean         @default(false)
+  isAvailable  Boolean         @default(true)
+  locationLat  Float
+  locationLng  Float
+  locationAddress String
+  bookings     RentalBooking[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@map("vehicles")
+}
+
+model RentalBooking {
+  id            String             @id @default(uuid())
+  vehicleId     String
+  vehicle       Vehicle            @relation(fields: [vehicleId], references: [id])
+  renterId      String
+  renter        User               @relation(fields: [renterId], references: [id])
+  startDate     DateTime
+  endDate       DateTime
+  totalPrice    Float
+  withDriver    Boolean            @default(false)
+  status        RentalBookingStatus @default(PENDING)
+  paymentMethod PaymentMethod
+  isPaid        Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@map("rental_bookings")
+}
+
+enum RentalBookingStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// ========== PHASE 3: GO BUSINESS ==========
+
+model BusinessAccount {
+  id           String           @id @default(uuid())
+  name         String
+  address      String?
+  contactEmail String
+  contactPhone String
+  monthlyBudget Float?
+  currency     String           @default("XAF")
+  members      BusinessMember[]
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@map("business_accounts")
+}
+
+model BusinessMember {
+  id             String          @id @default(uuid())
+  businessId     String
+  business       BusinessAccount @relation(fields: [businessId], references: [id])
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  role           BusinessRole    @default(EMPLOYEE)
+  monthlyLimit   Float?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("business_members")
+}
+
+enum BusinessRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+// ========== COMMUN ==========
+
+model Rating {
+  id        String   @id @default(uuid())
+  rideId    String?  @unique
+  ride      Ride?    @relation(fields: [rideId], references: [id])
+  raterId   String
+  rater     User     @relation("RaterRatings", fields: [raterId], references: [id])
+  ratedId   String
+  rated     User     @relation("RatedRatings", fields: [ratedId], references: [id])
+  score     Int      // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@map("ratings")
+}
+
+model LoyaltyPoints {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  points    Int      @default(0)
+  tier      LoyaltyTier @default(BRONZE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("loyalty_points")
+}
+
+enum LoyaltyTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+model EmergencyContact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  phone     String
+  relation  String?
+  createdAt DateTime @default(now())
+
+  @@map("emergency_contacts")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  body      String
+  type      String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}

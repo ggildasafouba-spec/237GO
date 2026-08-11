@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: 237go-db
+    restart: always
+    environment:
+      POSTGRES_DB: go237db
+      POSTGRES_USER: go237user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-go237secure2026}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U go237user -d go237db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: 237go-api
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://go237user:${DB_PASSWORD:-go237secure2026}@postgres:5432/go237db?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      JWT_EXPIRES_IN: 7d
+      CINETPAY_API_KEY: ${CINETPAY_API_KEY}
+      CINETPAY_SITE_ID: ${CINETPAY_SITE_ID}
+      MOMO_API_KEY: ${MOMO_API_KEY}
+      MOMO_SUBSCRIPTION_KEY: ${MOMO_SUBSCRIPTION_KEY}
+      ORANGE_MONEY_CLIENT_ID: ${ORANGE_MONEY_CLIENT_ID}
+      ORANGE_MONEY_CLIENT_SECRET: ${ORANGE_MONEY_CLIENT_SECRET}
+      SMS_PROVIDER: ${SMS_PROVIDER:-africas_talking}
+      SMS_API_KEY: ${SMS_API_KEY}
+      SMS_SENDER_ID: 237GO
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Admin Dashboard
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+    container_name: 237go-admin
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # Redis (pour le caching et les sessions Socket.IO en production)
+  redis:
+    image: redis:7-alpine
+    container_name: 237go-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

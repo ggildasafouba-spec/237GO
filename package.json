@@ -1,0 +1,20 @@
+{
+  "name": "237go",
+  "version": "1.0.0",
+  "description": "237GO - Super-app de mobilité camerounaise",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "backend:dev": "npm run dev --workspace=apps/backend",
+    "backend:build": "npm run build --workspace=apps/backend",
+    "mobile:start": "npm run start --workspace=apps/mobile",
+    "mobile:android": "npm run android --workspace=apps/mobile",
+    "mobile:ios": "npm run ios --workspace=apps/mobile"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

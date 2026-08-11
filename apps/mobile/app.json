@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "237GO",
+    "slug": "237go",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1B5E20"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.go237.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "237GO a besoin de votre position pour vous trouver un chauffeur à proximité.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "237GO utilise votre position pour le suivi en temps réel des courses."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1B5E20"
+      },
+      "package": "com.go237.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-location",
+      "expo-notifications"
+    ]
+  }
+}
