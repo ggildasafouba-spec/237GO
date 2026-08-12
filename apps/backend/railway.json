@@ -1,10 +1,10 @@
 {
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm ci && npx prisma generate && npm run build"
+    "buildCommand": "npm install && npx prisma generate && npx tsc --skipLibCheck"
   },
   "deploy": {
-    "startCommand": "npx prisma migrate deploy && node dist/server.js",
+    "startCommand": "node dist/server.js",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
