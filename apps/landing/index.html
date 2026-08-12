@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>237GO — On bouge ensemble 🇨🇲</title>
+    <meta name="description" content="237GO est la super-app de mobilité camerounaise. Transport, livraison, covoiturage, marché à domicile. Téléchargez maintenant !">
+    <meta property="og:title" content="237GO — On bouge ensemble">
+    <meta property="og:description" content="La super-app de mobilité camerounaise. Transport, livraison, covoiturage et plus.">
+    <meta property="og:type" content="website">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; color: #212121; line-height: 1.6; }
+        
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 50%, #1B5E20 100%);
+            display: flex; align-items: center; justify-content: center;
+            padding: 40px 20px; text-align: center; color: #fff;
+            position: relative; overflow: hidden;
+        }
+        .hero::before {
+            content: ''; position: absolute; top: -50%; right: -50%;
+            width: 100%; height: 200%; border-radius: 50%;
+            background: rgba(255,255,255,0.03);
+        }
+        .hero-content { max-width: 700px; position: relative; z-index: 1; }
+        .hero-logo { font-size: 72px; font-weight: 900; letter-spacing: 2px; margin-bottom: 8px; }
+        .hero-flag { font-size: 48px; margin-bottom: 16px; }
+        .hero-slogan { font-size: 24px; opacity: 0.9; margin-bottom: 32px; font-weight: 500; }
+        .hero-desc { font-size: 18px; opacity: 0.8; margin-bottom: 48px; line-height: 1.8; }
+        .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            padding: 16px 32px; border-radius: 12px; font-size: 16px;
+            font-weight: 700; text-decoration: none; transition: transform 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-primary { background: #FFB300; color: #1B5E20; }
+        .btn-secondary { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.3); }
+</style>
+</head>
+<body>
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-flag">🇨🇲</div>
+            <h1 class="hero-logo">237GO</h1>
+            <p class="hero-slogan">On bouge ensemble</p>
+            <p class="hero-desc">
+                La super-app de mobilité camerounaise. Transport, livraison, 
+                covoiturage inter-villes, marché à domicile — tout dans une seule application.
+            </p>
+            <div class="hero-buttons">
+                <a href="#download" class="btn btn-primary">📱 Télécharger l'app</a>
+                <a href="#services" class="btn btn-secondary">Découvrir →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services -->
+    <section id="services" style="padding: 80px 20px; background: #f9fafb;">
+        <div style="max-width: 1100px; margin: 0 auto; text-align: center;">
+            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">7 services, 1 seule app</h2>
+            <p style="color: #757575; font-size: 18px; margin-bottom: 48px;">Tout ce dont vous avez besoin pour vous déplacer au Cameroun</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; text-align: left;">
+                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #1B5E20;">
+                    <span style="font-size: 36px;">🚗</span>
+                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Ride</h3>
+                    <p style="color: #757575;">Transport à la demande : moto-taxi, voiture économique, confort ou VIP. Prix transparent, pas de surprise.</p>
+                </div>
+                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #E65100;">
+                    <span style="font-size: 36px;">📦</span>
+                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Deliver</h3>
+                    <p style="color: #757575;">Livraison de colis, documents, repas. Suivi en temps réel du point A au point B.</p>
+                </div>
+                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #4A148C;">
+                    <span style="font-size: 36px;">🛒</span>
+                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Market</h3>
+                    <p style="color: #757575;">Commandez au marché sans vous déplacer. Fruits, légumes, produits locaux livrés chez vous.</p>
+                </div>
+                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #01579B;">
+                    <span style="font-size: 36px;">🚌</span>
+                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Share</h3>
+                    <p style="color: #757575;">Covoiturage inter-villes. Douala ↔ Yaoundé, Bafoussam, Kribi... Moins cher, plus sûr.</p>
+                </div>
+                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #BF360C;">
+                    <span style="font-size: 36px;">🔑</span>
+                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Rent</h3>
+                    <p style="color: #757575;">Location de véhicules avec ou sans chauffeur. Du scooter au SUV premium.</p>
+                </div>
+                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #263238;">
+                    <span style="font-size: 36px;">💼</span>
+                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Business</h3>
+                    <p style="color: #757575;">Gestion des déplacements entreprise. Facturation centralisée, rapports, limites budgétaires.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pourquoi 237GO -->
+    <section style="padding: 80px 20px; background: #fff;">
+        <div style="max-width: 900px; margin: 0 auto; text-align: center;">
+            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">Pourquoi 237GO ?</h2>
+            <p style="color: #757575; font-size: 18px; margin-bottom: 48px;">Pensé par et pour les Camerounais</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 32px; text-align: center;">
+                <div>
+                    <div style="font-size: 48px; margin-bottom: 12px;">💰</div>
+                    <h3 style="font-weight: 700; margin-bottom: 8px;">Paiement 100% local</h3>
+                    <p style="color: #757575; font-size: 14px;">Orange Money, MTN MoMo, Express Union, Cash. Payez comme vous voulez.</p>
+                </div>
+                <div>
+                    <div style="font-size: 48px; margin-bottom: 12px;">📱</div>
+                    <h3 style="font-weight: 700; margin-bottom: 8px;">Fonctionne en 2G/3G</h3>
+                    <p style="color: #757575; font-size: 14px;">App ultra-légère, optimisée pour les réseaux camerounais.</p>
+                </div>
+                <div>
+                    <div style="font-size: 48px; margin-bottom: 12px;">💬</div>
+                    <h3 style="font-weight: 700; margin-bottom: 8px;">Négociez le prix</h3>
+                    <p style="color: #757575; font-size: 14px;">Proposez votre prix. Comme au marché, mais sur l'app.</p>
+                </div>
+                <div>
+                    <div style="font-size: 48px; margin-bottom: 12px;">⭐</div>
+                    <h3 style="font-weight: 700; margin-bottom: 8px;">Points de fidélité</h3>
+                    <p style="color: #757575; font-size: 14px;">Gagnez des points à chaque course. Échangez contre du crédit gratuit.</p>
+                </div>
+                <div>
+                    <div style="font-size: 48px; margin-bottom: 12px;">🚨</div>
+                    <h3 style="font-weight: 700; margin-bottom: 8px;">Sécurité maximale</h3>
+                    <p style="color: #757575; font-size: 14px;">Bouton SOS, partage de trajet, chauffeurs vérifiés (CNI + casier).</p>
+                </div>
+                <div>
+                    <div style="font-size: 48px; margin-bottom: 12px;">🌍</div>
+                    <h3 style="font-weight: 700; margin-bottom: 8px;">Multilingue</h3>
+                    <p style="color: #757575; font-size: 14px;">Français, English, Pidgin. Pour tous les Camerounais.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chauffeurs -->
+    <section style="padding: 80px 20px; background: #1B5E20; color: #fff;">
+        <div style="max-width: 800px; margin: 0 auto; text-align: center;">
+            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">🚗 Devenez chauffeur 237GO</h2>
+            <p style="opacity: 0.8; font-size: 18px; margin-bottom: 32px;">Gagnez plus, avec plus d'avantages</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; margin-bottom: 40px;">
+                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">💵</div>
+                    <p style="font-weight: 600;">Revenus quotidiens</p>
+                    <p style="opacity: 0.7; font-size: 13px;">Pas de commission abusive</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">🏥</div>
+                    <p style="font-weight: 600;">Assurance santé</p>
+                    <p style="opacity: 0.7; font-size: 13px;">Couverture partenaire</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">🏦</div>
+                    <p style="font-weight: 600;">Micro-crédit</p>
+                    <p style="opacity: 0.7; font-size: 13px;">Pour acheter votre véhicule</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">📚</div>
+                    <p style="font-weight: 600;">Formation gratuite</p>
+                    <p style="opacity: 0.7; font-size: 13px;">Conduite et service client</p>
+                </div>
+            </div>
+            
+            <a href="#download" class="btn btn-primary" style="display: inline-block;">Rejoindre 237GO →</a>
+        </div>
+    </section>
+
+    <!-- Download -->
+    <section id="download" style="padding: 80px 20px; background: #f9fafb; text-align: center;">
+        <div style="max-width: 600px; margin: 0 auto;">
+            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">Téléchargez 237GO</h2>
+            <p style="color: #757575; font-size: 18px; margin-bottom: 32px;">Disponible bientôt sur Android et iOS</p>
+            
+            <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px;">
+                <a href="#" style="display: inline-flex; align-items: center; gap: 12px; background: #212121; color: #fff; padding: 16px 28px; border-radius: 12px; text-decoration: none;">
+                    <span style="font-size: 28px;">▶️</span>
+                    <span><small style="opacity: 0.7; display: block;">Bientôt sur</small><strong>Google Play</strong></span>
+                </a>
+                <a href="#" style="display: inline-flex; align-items: center; gap: 12px; background: #212121; color: #fff; padding: 16px 28px; border-radius: 12px; text-decoration: none;">
+                    <span style="font-size: 28px;">🍎</span>
+                    <span><small style="opacity: 0.7; display: block;">Bientôt sur</small><strong>App Store</strong></span>
+                </a>
+            </div>
+
+            <p style="color: #757575; font-size: 14px;">Ou préinscrivez-vous pour être notifié du lancement :</p>
+            <form style="display: flex; gap: 8px; max-width: 400px; margin: 16px auto 0;" onsubmit="event.preventDefault(); alert('Merci ! Nous vous contacterons au lancement.');">
+                <input type="tel" placeholder="Votre numéro (6XXXXXXXX)" style="flex: 1; padding: 14px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px;" maxlength="9">
+                <button type="submit" style="padding: 14px 24px; background: #1B5E20; color: #fff; border-radius: 8px; font-weight: 700; font-size: 14px; border: none; cursor: pointer;">OK</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="padding: 40px 20px; background: #212121; color: rgba(255,255,255,0.7); text-align: center;">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <p style="font-size: 24px; font-weight: 900; color: #fff; margin-bottom: 8px;">237GO</p>
+            <p style="margin-bottom: 24px;">On bouge ensemble 🇨🇲</p>
+            <div style="display: flex; gap: 24px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
+                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">Facebook</a>
+                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">Instagram</a>
+                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">Twitter</a>
+                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">WhatsApp</a>
+            </div>
+            <p style="font-size: 12px; opacity: 0.5;">© 2026 237GO. Tous droits réservés. Made with ❤️ in Cameroun.</p>
+        </div>
+    </footer>
+</body>
+</html>
