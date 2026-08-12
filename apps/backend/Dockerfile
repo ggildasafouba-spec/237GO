@@ -22,7 +22,4 @@ COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3000
 
-COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
-
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["node", "dist/server.js"]
