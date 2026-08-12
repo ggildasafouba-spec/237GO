@@ -59,7 +59,7 @@ router.post(
       const token = jwt.sign(
         { userId: user.id },
         process.env.JWT_SECRET || 'default-secret',
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        { expiresIn: '7d' } as any
       );
 
       res.status(201).json({
@@ -101,7 +101,7 @@ router.post(
       const token = jwt.sign(
         { userId: user.id },
         process.env.JWT_SECRET || 'default-secret',
-        { expiresIn: '7d' }
+        { expiresIn: '7d' } as any
       );
 
       res.json({
