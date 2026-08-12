@@ -4,7 +4,7 @@
   "description": "237GO Landing Page",
   "private": true,
   "scripts": {
-    "dev": "npx serve .",
+    "dev": "npx serve public",
     "build": "echo 'Static site - no build needed'"
   }
 }
