@@ -2,7 +2,7 @@
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = ["npm ci --prefer-offline"]
+cmds = ["npm install"]
 
 [phases.build]
 cmds = ["npx prisma generate", "npx tsc"]
