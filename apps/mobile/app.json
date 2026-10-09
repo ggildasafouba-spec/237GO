@@ -28,9 +28,16 @@
       "package": "com.go237.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
       ]
     },
-    "plugins": []
+    "plugins": [
+      "expo-location",
+      "expo-notifications",
+      "expo-image-picker"
+    ]
   }
 }
