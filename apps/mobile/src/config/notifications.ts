@@ -40,7 +40,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
         name: '237GO',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#1B5E20',
+        lightColor: '#1DB954',
       });
     }
 
