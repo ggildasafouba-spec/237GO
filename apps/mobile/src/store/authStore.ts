@@ -64,11 +64,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('user');
-    disconnectSocket();
-
+    // On déconnecte l'état en premier pour que l'UI réagisse immédiatement,
+    // puis on nettoie le stockage/socket (sans bloquer si une étape échoue).
     set({ user: null, token: null, isAuthenticated: false });
+    try {
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+    } catch {}
+    try {
+      disconnectSocket();
+    } catch {}
   },
 
   loadUser: async () => {
