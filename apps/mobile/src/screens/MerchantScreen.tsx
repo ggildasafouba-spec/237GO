@@ -71,7 +71,7 @@ const NEXT_STATUS: Record<string, { status: string; label: string }> = {
 };
 
 export default function MerchantScreen({ navigation }: { navigation: any }) {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [tab, setTab] = useState<'products' | 'orders'>('orders');
   const [shop, setShop] = useState<Shop | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -186,9 +186,30 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
 
   if (!shop) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyIcon}>🏪</Text>
-        <Text style={styles.emptyText}>Aucune boutique associée à ce compte.</Text>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={() => navigation.navigate('Profile')}
+            accessibilityLabel="Profil et déconnexion"
+          >
+            <Text style={styles.avatarText}>{user?.firstName?.[0]}{user?.lastName?.[0]}</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={styles.shopName}>{user?.firstName} {user?.lastName}</Text>
+            <Text style={styles.shopStatus}>Compte marchand</Text>
+          </View>
+        </View>
+        <View style={styles.center}>
+          <Text style={styles.emptyIcon}>🏪</Text>
+          <Text style={styles.emptyText}>Aucune boutique associée à ce compte pour le moment.</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); Promise.all([loadShop(), loadOrders()]).finally(() => setLoading(false)); }} accessibilityRole="button">
+            <Text style={styles.retryBtnText}>🔄 Réessayer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutBtn} onPress={() => logout()} accessibilityRole="button">
+            <Text style={styles.logoutBtnText}>Changer de compte</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -391,4 +412,8 @@ const styles = StyleSheet.create({
   productDesc: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
   productActions: { alignItems: 'center' },
   deleteIcon: { fontSize: 18, marginTop: spacing.sm },
+  retryBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: 10, marginTop: spacing.lg },
+  retryBtnText: { color: '#fff', fontWeight: '700' },
+  logoutBtn: { borderWidth: 1, borderColor: colors.error, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: 10, marginTop: spacing.md },
+  logoutBtnText: { color: colors.error, fontWeight: '700' },
 });

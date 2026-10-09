@@ -32,7 +32,7 @@ const services: ServiceItem[] = [
     icon: '🚗',
     description: 'Transport à la demande',
     screen: 'Ride',
-    color: '#1B5E20',
+    color: colors.primary, // vert
     phase: 1,
   },
   {
@@ -41,7 +41,7 @@ const services: ServiceItem[] = [
     icon: '📦',
     description: 'Livraison de colis',
     screen: 'Delivery',
-    color: '#E65100',
+    color: colors.secondaryDark, // jaune/or
     phase: 1,
   },
   {
@@ -50,7 +50,7 @@ const services: ServiceItem[] = [
     icon: '🛒',
     description: 'Marché à domicile',
     screen: 'Market',
-    color: '#4A148C',
+    color: colors.accent, // rouge Cameroun
     phase: 2,
   },
   {
@@ -59,7 +59,7 @@ const services: ServiceItem[] = [
     icon: '🚌',
     description: 'Covoiturage inter-villes',
     screen: 'Carpool',
-    color: '#01579B',
+    color: colors.primaryDark, // vert foncé
     phase: 2,
   },
   {
@@ -68,7 +68,7 @@ const services: ServiceItem[] = [
     icon: '🔑',
     description: 'Location de véhicules',
     screen: 'Rental',
-    color: '#BF360C',
+    color: colors.info, // bleu
     phase: 3,
   },
   {
@@ -77,7 +77,7 @@ const services: ServiceItem[] = [
     icon: '💼',
     description: 'Entreprises',
     screen: 'Business',
-    color: '#263238',
+    color: colors.dark, // anthracite
     phase: 3,
   },
 ];
