@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://YOUR-RAILWAY-URL.up.railway.app/api/$1" },
+    { "source": "/api/(.*)", "destination": "https://237go-production-ee3d.up.railway.app/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
