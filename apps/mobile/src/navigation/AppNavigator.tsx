@@ -24,6 +24,7 @@ import BusinessScreen from '../screens/BusinessScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import BecomeDriverScreen from '../screens/BecomeDriverScreen';
 import AssistantScreen from '../screens/AssistantScreen';
+import MerchantScreen from '../screens/MerchantScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -34,6 +35,7 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
     Course: '🚗',
     Portefeuille: '💰',
     Chauffeur: '🚕',
+    Boutique: '🏪',
     Plus: '⚙️',
   };
   return (
@@ -113,6 +115,47 @@ function DriverTabs() {
   );
 }
 
+function MerchantTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarStyle: { height: 60, paddingBottom: 8, paddingTop: 4 },
+        tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
+      })}
+    >
+      <Tab.Screen
+        name="Boutique"
+        component={MerchantScreen}
+        options={{ tabBarAccessibilityLabel: 'Ma boutique' }}
+      />
+      <Tab.Screen
+        name="Accueil"
+        component={HomeScreen}
+        options={{ tabBarAccessibilityLabel: "Page d'accueil" }}
+      />
+      <Tab.Screen
+        name="Portefeuille"
+        component={WalletScreen}
+        options={{ tabBarAccessibilityLabel: 'Mon portefeuille' }}
+      />
+      <Tab.Screen
+        name="Plus"
+        component={ProfileScreen}
+        options={{ tabBarAccessibilityLabel: "Plus d'options" }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+function getMainTabs(role?: string) {
+  if (role === 'DRIVER') return DriverTabs;
+  if (role === 'MERCHANT') return MerchantTabs;
+  return PassengerTabs;
+}
+
 export default function AppNavigator() {
   const { isAuthenticated, isLoading, loadUser, user } = useAuthStore();
 
@@ -141,7 +184,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen
               name="Main"
-              component={user?.role === 'DRIVER' ? DriverTabs : PassengerTabs}
+              component={getMainTabs(user?.role)}
             />
             <Stack.Screen name="Ride" component={RideScreen} />
             <Stack.Screen name="Delivery" component={DeliveryScreen} />

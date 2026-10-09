@@ -341,6 +341,16 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
       </View>
 
+      {/* Changer de compte (déconnexion directe, pratique pour tester) */}
+      <TouchableOpacity
+        style={styles.switchAccountButton}
+        onPress={() => logout()}
+        accessibilityRole="button"
+        accessibilityLabel="Changer de compte"
+      >
+        <Text style={styles.switchAccountText}>🔄 Changer de compte</Text>
+      </TouchableOpacity>
+
       {/* Logout */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
         <Text style={styles.logoutText}>Se déconnecter</Text>
@@ -411,6 +421,11 @@ const styles = StyleSheet.create({
   actionIcon: { fontSize: 20, marginRight: spacing.md },
   actionText: { flex: 1, fontSize: typography.md, color: colors.text },
   actionArrow: { color: colors.textSecondary, fontSize: typography.md },
+  switchAccountButton: {
+    padding: spacing.md, borderRadius: 12, alignItems: 'center',
+    backgroundColor: colors.primary, marginBottom: spacing.sm,
+  },
+  switchAccountText: { color: '#fff', fontSize: typography.md, fontWeight: '700' },
   logoutButton: {
     padding: spacing.md, borderRadius: 12, alignItems: 'center',
     borderWidth: 1, borderColor: colors.error, marginBottom: spacing.md,

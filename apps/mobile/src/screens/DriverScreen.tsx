@@ -264,7 +264,17 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
     <View style={styles.container}>
       {/* Header chauffeur */}
       <View style={styles.driverHeader}>
-        <View>
+        <TouchableOpacity
+          style={styles.driverAvatar}
+          onPress={() => navigation.navigate('Profile')}
+          accessibilityLabel="Voir le profil et se déconnecter"
+          accessibilityRole="button"
+        >
+          <Text style={styles.driverAvatarText}>
+            {user?.firstName?.[0]}{user?.lastName?.[0]}
+          </Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: spacing.md }}>
           <Text style={styles.driverGreeting}>Salut {user?.firstName} 🚗</Text>
           <Text style={styles.driverStatus}>
             {isOnline ? '🟢 En ligne' : '🔴 Hors ligne'}
@@ -392,6 +402,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: '#fff', padding: spacing.lg, borderRadius: 12, marginBottom: spacing.lg,
   },
+  driverAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center',
+  },
+  driverAvatarText: { color: '#fff', fontSize: typography.md, fontWeight: '800' },
   driverGreeting: { fontSize: typography.lg, fontWeight: '700', color: colors.text },
   driverStatus: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 4 },
   earningsCard: {
