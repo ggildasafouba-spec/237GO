@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 const DEV_HOST = Platform.OS === 'web' ? 'localhost' : '192.168.1.61';
 const API_BASE_URL = __DEV__
   ? `http://${DEV_HOST}:3002/api`
-  : 'https://237gobackend-production.up.railway.app/api';
+  : 'https://237go-production-ee3d.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
