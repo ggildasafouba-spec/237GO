@@ -17,19 +17,21 @@ export default function RatingScreen({ navigation, route }: { navigation: any; r
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    if (!rideId) {
+      Alert.alert('Erreur', 'Course introuvable');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await api.post('/rides/rate', {
-        rideId,
-        ratedId: driverId,
+      await api.post(`/rides/${rideId}/rate`, {
         score: rating,
         comment: comment || undefined,
       });
       Alert.alert('Merci ! 🙏', 'Votre évaluation a été enregistrée.', [
         { text: 'OK', onPress: () => navigation.navigate('Main') },
       ]);
-    } catch {
-      Alert.alert('Erreur', 'Impossible d\'enregistrer l\'évaluation');
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.response?.data?.message || 'Impossible d\'enregistrer l\'évaluation');
     } finally {
       setIsSubmitting(false);
     }

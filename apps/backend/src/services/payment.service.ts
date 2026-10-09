@@ -260,3 +260,73 @@ export async function processPayment(data: PaymentRequest): Promise<PaymentRespo
       return initiatePayment(data);
   }
 }
+
+
+// ========== CONFIRMATION DE DÉPÔT (appelée par les webhooks) ==========
+
+import { PrismaClient } from '@prisma/client';
+import { addLoyaltyPoints } from './loyalty.service';
+
+const prisma = new PrismaClient();
+
+/**
+ * Confirme un dépôt après validation du paiement par le prestataire (webhook).
+ * Crédite le wallet du montant + bonus, puis ajoute les points de fidélité.
+ * Idempotent : ne fait rien si la transaction est déjà COMPLETED.
+ *
+ * @param reference  La référence de la transaction (= son id)
+ */
+export async function confirmDeposit(reference: string): Promise<boolean> {
+  const transaction = await prisma.transaction.findFirst({
+    where: { reference },
+  });
+
+  if (!transaction) {
+    console.warn(`confirmDeposit: transaction introuvable pour la référence ${reference}`);
+    return false;
+  }
+
+  // Idempotence : déjà traité
+  if (transaction.status === 'COMPLETED') {
+    return true;
+  }
+
+  // Récupérer le bonus stocké dans metadata
+  const metadata = (transaction.metadata as { bonus?: number; originalAmount?: number }) || {};
+  const bonus = metadata.bonus || 0;
+  const totalCredit = transaction.amount + bonus;
+
+  // Créditer le wallet et marquer la transaction comme complétée
+  await prisma.$transaction([
+    prisma.wallet.update({
+      where: { id: transaction.walletId },
+      data: { balance: { increment: totalCredit } },
+    }),
+    prisma.transaction.update({
+      where: { id: transaction.id },
+      data: { status: 'COMPLETED' },
+    }),
+  ]);
+
+  // Ajouter les points de fidélité (1 point / 500 XAF rechargés) + recalcul du palier
+  const loyaltyPointsEarned = Math.floor(transaction.amount / 500);
+  if (loyaltyPointsEarned > 0) {
+    const wallet = await prisma.wallet.findUnique({ where: { id: transaction.walletId } });
+    if (wallet) {
+      await addLoyaltyPoints(wallet.userId, loyaltyPointsEarned).catch(() => {});
+    }
+  }
+
+  console.log(`✅ Dépôt confirmé: ${totalCredit} XAF crédités (ref ${reference})`);
+  return true;
+}
+
+/**
+ * Marque un dépôt comme échoué.
+ */
+export async function failDeposit(reference: string): Promise<void> {
+  await prisma.transaction.updateMany({
+    where: { reference, status: 'PENDING' },
+    data: { status: 'FAILED' },
+  });
+}

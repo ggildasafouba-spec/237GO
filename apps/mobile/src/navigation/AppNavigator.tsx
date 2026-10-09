@@ -8,6 +8,7 @@ import { colors } from '../theme';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import HomeScreen from '../screens/HomeScreen';
 import RideScreen from '../screens/RideScreen';
 import WalletScreen from '../screens/WalletScreen';
@@ -21,6 +22,8 @@ import HistoryScreen from '../screens/HistoryScreen';
 import RentalScreen from '../screens/RentalScreen';
 import BusinessScreen from '../screens/BusinessScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
+import BecomeDriverScreen from '../screens/BecomeDriverScreen';
+import AssistantScreen from '../screens/AssistantScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -130,7 +133,10 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          </>
         ) : (
           <>
             <Stack.Screen
@@ -147,7 +153,8 @@ export default function AppNavigator() {
             <Stack.Screen name="Rating" component={RatingScreen} />
             <Stack.Screen name="DriverMode" component={DriverScreen} />
             <Stack.Screen name="History" component={HistoryScreen} />
-            <Stack.Screen name="BecomeDriver" component={PlaceholderScreen} />
+            <Stack.Screen name="BecomeDriver" component={BecomeDriverScreen} />
+            <Stack.Screen name="Assistant" component={AssistantScreen} />
             <Stack.Screen name="BecomeMerchant" component={PlaceholderScreen} />
             <Stack.Screen name="Wallet" component={WalletScreen} />
           </>

@@ -111,9 +111,21 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
       });
       setRideRequests([]);
       Alert.alert('✅ Course acceptée !', `Direction: ${request.pickup.address}`);
-    } catch {
-      Alert.alert('Erreur', 'Course déjà prise par un autre chauffeur');
-      setRideRequests((prev) => prev.filter((r) => r.rideId !== request.rideId));
+    } catch (error: any) {
+      // 402 = solde insuffisant pour couvrir la commission d'une course en espèces
+      if (error?.response?.status === 402) {
+        Alert.alert(
+          'Solde insuffisant 💰',
+          error.response.data.message,
+          [
+            { text: 'Plus tard' },
+            { text: 'Recharger', onPress: () => navigation.navigate('Wallet') },
+          ]
+        );
+      } else {
+        Alert.alert('Erreur', error?.response?.data?.message || 'Course déjà prise par un autre chauffeur');
+        setRideRequests((prev) => prev.filter((r) => r.rideId !== request.rideId));
+      }
     }
   };
 
@@ -130,9 +142,20 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
       });
       setDeliveryRequests([]);
       Alert.alert('✅ Livraison acceptée !', `Récupération: ${request.pickup.address}`);
-    } catch {
-      Alert.alert('Erreur', 'Livraison déjà prise');
-      setDeliveryRequests((prev) => prev.filter((d) => d.deliveryId !== request.deliveryId));
+    } catch (error: any) {
+      if (error?.response?.status === 402) {
+        Alert.alert(
+          'Solde insuffisant 💰',
+          error.response.data.message,
+          [
+            { text: 'Plus tard' },
+            { text: 'Recharger', onPress: () => navigation.navigate('Wallet') },
+          ]
+        );
+      } else {
+        Alert.alert('Erreur', error?.response?.data?.message || 'Livraison déjà prise');
+        setDeliveryRequests((prev) => prev.filter((d) => d.deliveryId !== request.deliveryId));
+      }
     }
   };
 

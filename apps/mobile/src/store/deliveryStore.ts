@@ -104,7 +104,15 @@ export const useDeliveryStore = create<DeliveryState>((set, get) => ({
     socket.on('delivery_status_update', (data) => {
       set((state) => ({
         currentDelivery: state.currentDelivery
-          ? { ...state.currentDelivery, status: data.status }
+          ? { ...state.currentDelivery, status: data.status, finalPrice: data.finalPrice ?? state.currentDelivery.finalPrice }
+          : null,
+      }));
+    });
+
+    socket.on('delivery_completed', (data) => {
+      set((state) => ({
+        currentDelivery: state.currentDelivery
+          ? { ...state.currentDelivery, status: 'DELIVERED', finalPrice: data.finalPrice ?? state.currentDelivery.finalPrice }
           : null,
       }));
     });

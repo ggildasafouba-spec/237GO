@@ -8,6 +8,7 @@ import Deliveries from './pages/Deliveries';
 import Drivers from './pages/Drivers';
 import Merchants from './pages/Merchants';
 import Finance from './pages/Finance';
+import Disputes from './pages/Disputes';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 
@@ -35,6 +36,7 @@ export default function App() {
                   <Route path="/drivers" element={<Drivers />} />
                   <Route path="/merchants" element={<Merchants />} />
                   <Route path="/finance" element={<Finance />} />
+                  <Route path="/disputes" element={<Disputes />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </Layout>

@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
+import { processPayment } from '../services/payment.service';
+import { redeemLoyaltyPoints, computeTier } from '../services/loyalty.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -49,7 +51,12 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const { amount, paymentMethod } = req.body;
+      const { amount, paymentMethod, phone } = req.body;
+
+      // Le numéro est requis pour MoMo / Orange Money
+      if ((paymentMethod === 'MTN_MOMO' || paymentMethod === 'ORANGE_MONEY') && !phone) {
+        throw new AppError('Numéro de téléphone requis pour ce mode de paiement', 400);
+      }
 
       const wallet = await prisma.wallet.findUnique({
         where: { userId: req.user!.id },
@@ -59,11 +66,12 @@ router.post(
         throw new AppError('Portefeuille non trouvé', 404);
       }
 
+      const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+
       // Bonus de recharge : 5% pour les recharges >= 5000 XAF
       const bonus = amount >= 5000 ? Math.floor(amount * 0.05) : 0;
-      const totalCredit = amount + bonus;
 
-      // Créer la transaction
+      // Créer la transaction EN ATTENTE (le crédit se fera via le webhook)
       const transaction = await prisma.transaction.create({
         data: {
           walletId: wallet.id,
@@ -76,36 +84,46 @@ router.post(
         },
       });
 
-      // TODO: Intégrer l'API de paiement réelle (CinetPay, MoMo, etc.)
-      // Pour le moment, on simule un succès
-      await prisma.$transaction([
-        prisma.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: totalCredit } },
-        }),
-        prisma.transaction.update({
-          where: { id: transaction.id },
-          data: { status: 'COMPLETED' },
-        }),
-      ]);
+      // La référence de paiement = l'id de la transaction (utilisée par les webhooks)
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: { reference: transaction.id },
+      });
 
-      // Ajouter des points de fidélité (1 point / 500 XAF rechargés)
-      const loyaltyPointsEarned = Math.floor(amount / 500);
-      if (loyaltyPointsEarned > 0) {
-        await prisma.loyaltyPoints.update({
-          where: { userId: req.user!.id },
-          data: { points: { increment: loyaltyPointsEarned } },
+      // Lancer le paiement réel via le prestataire
+      const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3002}`;
+      const payment = await processPayment({
+        amount,
+        currency: 'XAF',
+        transactionId: transaction.id,
+        description: `Recharge portefeuille 237GO`,
+        customerPhone: phone || user?.phone || '',
+        customerName: user ? `${user.firstName} ${user.lastName}` : 'Client 237GO',
+        paymentMethod: paymentMethod === 'CARD' ? 'MTN_MOMO' : paymentMethod,
+        notifyUrl: `${apiBaseUrl}/api/webhooks/cinetpay`,
+        returnUrl: `${apiBaseUrl}/api/webhooks/return`,
+      });
+
+      if (!payment.success) {
+        // Marquer la transaction comme échouée
+        await prisma.transaction.update({
+          where: { id: transaction.id },
+          data: { status: 'FAILED' },
         });
+        throw new AppError(payment.message || 'Échec de l\'initiation du paiement', 502);
       }
 
       res.json({
         success: true,
-        message: `Recharge de ${amount} XAF réussie${bonus > 0 ? ` (+${bonus} XAF bonus !)` : ''}`,
+        message: payment.paymentUrl
+          ? 'Redirection vers le paiement...'
+          : 'Demande de paiement envoyée. Confirmez sur votre téléphone.',
         data: {
-          newBalance: wallet.balance + totalCredit,
-          bonus,
-          loyaltyPointsEarned,
           transactionId: transaction.id,
+          paymentUrl: payment.paymentUrl || null,
+          transactionRef: payment.transactionRef || null,
+          bonus,
+          status: 'PENDING',
         },
       });
     } catch (error) {
@@ -217,13 +235,22 @@ router.get('/loyalty', authenticate, async (req: AuthRequest, res: Response) => 
       where: { userId: req.user!.id },
     });
 
+    const points = loyalty?.points || 0;
+    // Le palier est recalculé depuis les points (source de vérité)
+    const tier = computeTier(points);
+
+    // Auto-correction : si le tier stocké est obsolète, on le met à jour
+    if (loyalty && loyalty.tier !== tier) {
+      await prisma.loyaltyPoints.update({ where: { userId: req.user!.id }, data: { tier } });
+    }
+
     res.json({
       success: true,
       data: {
-        points: loyalty?.points || 0,
-        tier: loyalty?.tier || 'BRONZE',
-        nextTier: getNextTier(loyalty?.tier || 'BRONZE'),
-        pointsToNextTier: getPointsToNextTier(loyalty?.points || 0, loyalty?.tier || 'BRONZE'),
+        points,
+        tier,
+        nextTier: getNextTier(tier),
+        pointsToNextTier: getPointsToNextTier(points, tier),
       },
     });
   } catch {
@@ -259,11 +286,8 @@ router.post(
         throw new AppError('Portefeuille non trouvé', 404);
       }
 
+      // Créditer le wallet et enregistrer la transaction
       await prisma.$transaction([
-        prisma.loyaltyPoints.update({
-          where: { userId: req.user!.id },
-          data: { points: { decrement: points } },
-        }),
         prisma.wallet.update({
           where: { id: wallet.id },
           data: { balance: { increment: creditAmount } },
@@ -280,10 +304,17 @@ router.post(
         }),
       ]);
 
+      // Retirer les points et recalculer le palier
+      const result = await redeemLoyaltyPoints(req.user!.id, points);
+
       res.json({
         success: true,
         message: `${points} points échangés contre ${creditAmount} XAF !`,
-        data: { creditAmount, remainingPoints: loyalty.points - points },
+        data: {
+          creditAmount,
+          remainingPoints: result?.points ?? loyalty.points - points,
+          tier: result?.tier,
+        },
       });
     } catch (error) {
       if (error instanceof AppError) {
@@ -293,6 +324,39 @@ router.post(
     }
   }
 );
+
+// Vérifier le statut d'une transaction (pour le polling côté mobile)
+router.get('/transactions/:id/status', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const wallet = await prisma.wallet.findUnique({ where: { userId: req.user!.id } });
+    if (!wallet) {
+      throw new AppError('Portefeuille non trouvé', 404);
+    }
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { id: req.params.id, walletId: wallet.id },
+    });
+
+    if (!transaction) {
+      throw new AppError('Transaction non trouvée', 404);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: transaction.id,
+        status: transaction.status,
+        amount: transaction.amount,
+        type: transaction.type,
+      },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
 
 function getNextTier(currentTier: string): string | null {
   const tiers = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];

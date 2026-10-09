@@ -10,11 +10,12 @@ async function main() {
   const adminPassword = await bcrypt.hash('admin237go', 12);
   const admin = await prisma.user.upsert({
     where: { phone: '600000000' },
-    update: {},
+    update: { passwordHash: adminPassword },
     create: {
       phone: '600000000',
       firstName: 'Admin',
       lastName: '237GO',
+      passwordHash: adminPassword,
       role: 'ADMIN',
       language: 'fr',
       wallet: { create: { balance: 0 } },
@@ -24,6 +25,7 @@ async function main() {
   console.log('✅ Admin créé:', admin.phone);
 
   // Passagers de test
+  const defaultPassword = await bcrypt.hash('test237go', 12);
   const passengers = [
     { phone: '691234567', firstName: 'Jean', lastName: 'Mballa' },
     { phone: '677654321', firstName: 'Marie', lastName: 'Ngo' },
@@ -33,9 +35,10 @@ async function main() {
   for (const p of passengers) {
     await prisma.user.upsert({
       where: { phone: p.phone },
-      update: {},
+      update: { passwordHash: defaultPassword },
       create: {
         ...p,
+        passwordHash: defaultPassword,
         role: 'PASSENGER',
         language: 'fr',
         wallet: { create: { balance: 5000 } },
@@ -55,11 +58,12 @@ async function main() {
   for (const d of drivers) {
     const user = await prisma.user.upsert({
       where: { phone: d.phone },
-      update: {},
+      update: { passwordHash: defaultPassword },
       create: {
         phone: d.phone,
         firstName: d.firstName,
         lastName: d.lastName,
+        passwordHash: defaultPassword,
         role: 'DRIVER',
         language: 'fr',
         wallet: { create: { balance: 15000 } },
@@ -94,11 +98,12 @@ async function main() {
   // Marchand de test
   const merchantUser = await prisma.user.upsert({
     where: { phone: '699887766' },
-    update: {},
+    update: { passwordHash: defaultPassword },
     create: {
       phone: '699887766',
       firstName: 'Rose',
       lastName: 'Ngono',
+      passwordHash: defaultPassword,
       role: 'MERCHANT',
       language: 'fr',
       wallet: { create: { balance: 0 } },
@@ -172,9 +177,9 @@ async function main() {
   console.log('');
   console.log('📋 Comptes de test:');
   console.log('   Admin:     600000000 / admin237go');
-  console.log('   Passager:  691234567');
-  console.log('   Chauffeur: 698765432');
-  console.log('   Marchand:  699887766');
+  console.log('   Passager:  691234567 / test237go');
+  console.log('   Chauffeur: 698765432 / test237go');
+  console.log('   Marchand:  699887766 / test237go');
 }
 
 main()

@@ -53,6 +53,10 @@ interface RideState {
     proposedPrice?: number;
   }) => Promise<void>;
   cancelRide: (rideId: string) => Promise<void>;
+  confirmArrival: (rideId: string) => Promise<string>;
+  openDispute: (rideId: string, reason: string) => Promise<void>;
+  sendSOS: (lat: number, lng: number, rideId?: string) => void;
+  shareTrip: (rideId: string, contactPhone: string) => void;
   listenToRideUpdates: () => void;
   clearRide: () => void;
 }
@@ -111,6 +115,29 @@ export const useRideStore = create<RideState>((set, get) => ({
   cancelRide: async (rideId) => {
     await api.patch(`/rides/${rideId}/status`, { status: 'CANCELLED' });
     set({ currentRide: null, driverLocation: null });
+  },
+
+  // Le passager confirme son arrivée → libère le paiement (escrow)
+  confirmArrival: async (rideId) => {
+    const response = await api.post(`/rides/${rideId}/confirm-arrival`);
+    return response.data.message as string;
+  },
+
+  // Ouvrir un litige sur la course
+  openDispute: async (rideId, reason) => {
+    await api.post(`/rides/${rideId}/dispute`, { reason });
+  },
+
+  // Déclencher une alerte SOS via le socket
+  sendSOS: (lat, lng, rideId) => {
+    const socket = getSocket();
+    socket?.emit('sos', { lat, lng, rideId });
+  },
+
+  // Partager le trajet par SMS
+  shareTrip: (rideId, contactPhone) => {
+    const socket = getSocket();
+    socket?.emit('share:trip', { rideId, contactPhone });
   },
 
   listenToRideUpdates: () => {

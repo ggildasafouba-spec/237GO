@@ -58,7 +58,7 @@ interface CarpoolState {
     description?: string;
   }) => Promise<void>;
 
-  bookCarpool: (carpoolId: string, seats: number) => Promise<void>;
+  bookCarpool: (carpoolId: string, seats: number, paymentMethod?: string) => Promise<void>;
   fetchMyTrips: () => Promise<void>;
   fetchMyBookings: () => Promise<void>;
 }
@@ -90,10 +90,10 @@ export const useCarpoolStore = create<CarpoolState>((set) => ({
     }
   },
 
-  bookCarpool: async (carpoolId, seats) => {
+  bookCarpool: async (carpoolId, seats, paymentMethod = 'WALLET') => {
     set({ isLoading: true });
     try {
-      await api.post(`/carpools/${carpoolId}/book`, { seats });
+      await api.post(`/carpools/${carpoolId}/book`, { seats, paymentMethod });
       set({ isLoading: false });
     } catch (error) {
       set({ isLoading: false });

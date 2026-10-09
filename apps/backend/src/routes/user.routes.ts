@@ -44,6 +44,30 @@ router.patch(
   }
 );
 
+// Enregistrer le token de notification push Expo
+router.post(
+  '/push-token',
+  authenticate,
+  [body('pushToken').trim().notEmpty().withMessage('Token requis')],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { pushToken: req.body.pushToken },
+      });
+
+      res.json({ success: true, message: 'Token enregistré' });
+    } catch {
+      res.status(500).json({ success: false, message: 'Erreur' });
+    }
+  }
+);
+
 // Ajouter un contact d'urgence
 router.post(
   '/emergency-contacts',
@@ -155,6 +179,9 @@ router.post(
     body('vehiclePlate').trim().notEmpty(),
     body('vehicleBrand').optional().trim(),
     body('vehicleModel').optional().trim(),
+    body('licensePhoto').optional().isURL(),
+    body('cniPhoto').optional().isURL(),
+    body('vehiclePhoto').optional().isURL(),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
@@ -181,18 +208,20 @@ router.post(
           vehiclePlate: req.body.vehiclePlate,
           vehicleBrand: req.body.vehicleBrand,
           vehicleModel: req.body.vehicleModel,
+          licensePhoto: req.body.licensePhoto,
+          cniPhoto: req.body.cniPhoto,
+          vehiclePhoto: req.body.vehiclePhoto,
+          // verificationStatus reste PENDING par défaut
         },
       });
 
-      // Mettre à jour le rôle
-      await prisma.user.update({
-        where: { id: req.user!.id },
-        data: { role: 'DRIVER' },
-      });
+      // IMPORTANT : le rôle NE passe PAS à DRIVER ici.
+      // Il sera attribué par l'admin lors de l'approbation (verificationStatus = VERIFIED).
+      // Cela empêche un chauffeur non vérifié d'accepter des courses.
 
       res.status(201).json({
         success: true,
-        message: 'Demande de chauffeur soumise ! En attente de vérification.',
+        message: 'Demande de chauffeur soumise ! En attente de vérification par notre équipe.',
         data: profile,
       });
     } catch (error) {

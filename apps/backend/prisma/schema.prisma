@@ -31,6 +31,10 @@ model User {
   firstName         String
   lastName          String
   role              UserRole           @default(PASSENGER)
+  passwordHash      String?
+  resetOtp          String?
+  resetOtpExpiry    DateTime?
+  pushToken         String?
   avatar            String?
   language          String             @default("fr") // fr, en, pidgin
   isActive          Boolean            @default(true)
@@ -56,6 +60,8 @@ model User {
   vehiclesOwned     Vehicle[]
   rentalBookings    RentalBooking[]
   businessMembers   BusinessMember[]
+  escrowsAsPayer    Escrow[]           @relation("EscrowPayer")
+  escrowsAsPayee    Escrow[]           @relation("EscrowPayee")
 
   @@map("users")
 }
@@ -67,6 +73,9 @@ model DriverProfile {
   licenseNumber      String
   licenseExpiry      DateTime
   cniNumber          String             // Carte Nationale d'Identité
+  licensePhoto       String?            // URL photo du permis
+  cniPhoto           String?            // URL photo de la CNI
+  vehiclePhoto       String?            // URL photo du véhicule
   vehicleType        VehicleType
   vehiclePlate       String
   vehicleBrand       String?
@@ -541,4 +550,49 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+// ========== ESCROW (Séquestre de paiement) ==========
+
+model Escrow {
+  id                String        @id @default(uuid())
+  serviceType       EscrowServiceType
+  serviceId         String        // référence vers ride/delivery/carpool/rental/order
+  amount            Float         // montant total bloqué
+  commission        Float         @default(0) // commission plateforme
+  currency          String        @default("XAF")
+  payerId           String        // client qui paie
+  payer             User          @relation("EscrowPayer", fields: [payerId], references: [id])
+  payeeId           String        // prestataire qui recevra l'argent
+  payee             User          @relation("EscrowPayee", fields: [payeeId], references: [id])
+  paymentMethod     PaymentMethod
+  status            EscrowStatus  @default(HELD)
+  clientConfirmed   Boolean       @default(false) // le client a validé la fin
+  providerConfirmed Boolean       @default(false) // le prestataire a validé la fin
+  disputeReason     String?       // raison du litige si DISPUTED
+  resolvedBy        String?       // id de l'admin qui a tranché
+  heldAt            DateTime      @default(now())
+  releasedAt        DateTime?
+  refundedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([serviceType, serviceId])
+  @@index([status])
+  @@map("escrows")
+}
+
+enum EscrowServiceType {
+  RIDE
+  DELIVERY
+  CARPOOL
+  RENTAL
+  MARKET
+}
+
+enum EscrowStatus {
+  HELD      // argent bloqué
+  RELEASED  // argent versé au prestataire
+  REFUNDED  // argent remboursé au client
+  DISPUTED  // litige en cours, décision admin requise
 }

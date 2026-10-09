@@ -12,9 +12,10 @@ import {
   Switch,
 } from 'react-native';
 import { useRentalStore } from '../store/rentalStore';
+import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
 
-type ViewMode = 'search' | 'detail' | 'book' | 'publish' | 'my-vehicles';
+type ViewMode = 'search' | 'detail' | 'book' | 'publish' | 'my-vehicles' | 'my-bookings';
 
 const vehicleTypes = [
   { id: 'all', name: 'Tous', icon: '🚘' },
@@ -55,12 +56,14 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     vehicles,
     selectedVehicle,
     myVehicles,
+    myBookings,
     isLoading,
     searchVehicles,
     getVehicleDetails,
     publishVehicle,
     bookVehicle,
     fetchMyVehicles,
+    fetchMyBookings,
   } = useRentalStore();
 
   useEffect(() => {
@@ -173,6 +176,12 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
             onPress={() => { fetchMyVehicles(); setView('my-vehicles'); }}
           >
             <Text style={styles.tabText}>Mes véhicules</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.tab}
+            onPress={() => { fetchMyBookings(); setView('my-bookings'); }}
+          >
+            <Text style={styles.tabText}>Mes locations</Text>
           </TouchableOpacity>
         </View>
 
@@ -535,25 +544,78 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   }
 
   // Vue: Mes véhicules
+  if (view === 'my-vehicles') {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
+          <Text style={styles.backText}>← Retour</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.title}>Mes véhicules</Text>
+
+        <FlatList
+          data={myVehicles}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>🚗</Text>
+              <Text style={styles.emptyText}>Vous n'avez aucun véhicule en location</Text>
+              <TouchableOpacity style={styles.button} onPress={() => setView('publish')}>
+                <Text style={styles.buttonText}>+ Publier un véhicule</Text>
+              </TouchableOpacity>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View style={styles.vehicleCard}>
+              <View style={styles.vehicleCardHeader}>
+                <Text style={styles.vehicleEmoji}>🚗</Text>
+                <View style={styles.vehicleCardInfo}>
+                  <Text style={styles.vehicleCardName}>{item.brand} {item.model}</Text>
+                  <Text style={styles.vehicleCardMeta}>{item.year} • {item.plate}</Text>
+                </View>
+              </View>
+              <View style={styles.vehicleCardFooter}>
+                <View style={[styles.featureBadge, { backgroundColor: item.isAvailable ? '#E8F5E9' : '#FFEBEE' }]}>
+                  <Text style={{ color: item.isAvailable ? colors.success : colors.error, fontSize: 11, fontWeight: '600' }}>
+                    {item.isAvailable ? '✅ Disponible' : '🔒 Loué'}
+                  </Text>
+                </View>
+                <Text style={styles.vehicleCardPrice}>{item.pricePerDay.toLocaleString()} XAF/j</Text>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    );
+  }
+
+  // Vue: Mes locations (réservations du locataire)
+  const bookingStatusLabel = (s: string) => {
+    const map: Record<string, string> = {
+      PENDING: '⏳ En attente', CONFIRMED: '✅ Confirmée', ACTIVE: '🚗 En cours',
+      COMPLETED: '🏁 Terminée', CANCELLED: '❌ Annulée',
+    };
+    return map[s] || s;
+  };
+
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
         <Text style={styles.backText}>← Retour</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>Mes véhicules</Text>
+      <Text style={styles.title}>Mes locations</Text>
 
       <FlatList
-        data={myVehicles}
+        data={myBookings}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: 40 }}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🚗</Text>
-            <Text style={styles.emptyText}>Vous n'avez aucun véhicule en location</Text>
-            <TouchableOpacity style={styles.button} onPress={() => setView('publish')}>
-              <Text style={styles.buttonText}>+ Publier un véhicule</Text>
-            </TouchableOpacity>
+            <Text style={styles.emptyIcon}>🔑</Text>
+            <Text style={styles.emptyText}>Aucune location</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -561,18 +623,28 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
             <View style={styles.vehicleCardHeader}>
               <Text style={styles.vehicleEmoji}>🚗</Text>
               <View style={styles.vehicleCardInfo}>
-                <Text style={styles.vehicleCardName}>{item.brand} {item.model}</Text>
-                <Text style={styles.vehicleCardMeta}>{item.year} • {item.plate}</Text>
+                <Text style={styles.vehicleCardName}>
+                  {item.vehicle ? `${item.vehicle.brand} ${item.vehicle.model}` : 'Véhicule'}
+                </Text>
+                <Text style={styles.vehicleCardMeta}>
+                  {new Date(item.startDate).toLocaleDateString('fr-FR')} → {new Date(item.endDate).toLocaleDateString('fr-FR')}
+                </Text>
               </View>
             </View>
             <View style={styles.vehicleCardFooter}>
-              <View style={[styles.featureBadge, { backgroundColor: item.isAvailable ? '#E8F5E9' : '#FFEBEE' }]}>
-                <Text style={{ color: item.isAvailable ? colors.success : colors.error, fontSize: 11, fontWeight: '600' }}>
-                  {item.isAvailable ? '✅ Disponible' : '🔒 Loué'}
-                </Text>
-              </View>
-              <Text style={styles.vehicleCardPrice}>{item.pricePerDay.toLocaleString()} XAF/j</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>{bookingStatusLabel(item.status)}</Text>
+              <Text style={styles.vehicleCardPrice}>{item.totalPrice.toLocaleString()} XAF</Text>
             </View>
+
+            {/* Actions escrow : confirmer le retour pour libérer le paiement au propriétaire */}
+            {item.status === 'CONFIRMED' && (
+              <EscrowActions
+                serviceType="rental"
+                serviceId={item.id}
+                amount={item.totalPrice}
+                onDone={fetchMyBookings}
+              />
+            )}
           </View>
         )}
       />

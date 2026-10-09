@@ -53,6 +53,10 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     getAllEstimates,
     createRide,
     cancelRide,
+    confirmArrival,
+    openDispute,
+    sendSOS,
+    shareTrip,
     clearRide,
   } = useRideStore();
 
@@ -60,14 +64,87 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   const pickup = { lat: 4.0511, lng: 9.7679, address: pickupAddress }; // Douala
   const dropoff = { lat: 4.0611, lng: 9.7879, address: dropoffAddress };
 
-  useEffect(() => {
-    if (currentRide?.status === 'COMPLETED') {
-      Alert.alert('Course terminée !', 'Merci d\'avoir voyagé avec 237GO 🎉', [
-        { text: 'Évaluer', onPress: () => navigation.navigate('Rating', { rideId: currentRide.id }) },
+  const [confirming, setConfirming] = useState(false);
+
+  const handleConfirmArrival = async () => {
+    if (!currentRide) return;
+    setConfirming(true);
+    try {
+      const message = await confirmArrival(currentRide.id);
+      const driverName = currentRide.driver ? `${currentRide.driver.firstName} ${currentRide.driver.lastName}` : undefined;
+      Alert.alert('Course validée ✅', message, [
+        { text: 'Évaluer', onPress: () => { navigation.navigate('Rating', { rideId: currentRide.id, driverName }); clearRide(); } },
         { text: 'Fermer', onPress: () => clearRide() },
       ]);
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.response?.data?.message || 'Impossible de valider la course');
+    } finally {
+      setConfirming(false);
     }
-  }, [currentRide?.status]);
+  };
+
+  const handleDispute = () => {
+    if (!currentRide) return;
+    Alert.prompt?.(
+      'Signaler un problème',
+      'Décrivez le problème rencontré :',
+      async (reason?: string) => {
+        if (!reason) return;
+        try {
+          await openDispute(currentRide.id, reason);
+          Alert.alert('Litige ouvert', 'Un administrateur va examiner votre dossier. Le paiement reste bloqué en attendant.');
+        } catch (error: any) {
+          Alert.alert('Erreur', error?.response?.data?.message || 'Impossible d\'ouvrir le litige');
+        }
+      }
+    );
+    // Fallback Android (Alert.prompt n'existe pas) : litige avec motif générique
+    if (!Alert.prompt) {
+      Alert.alert('Signaler un problème', 'Confirmer l\'ouverture d\'un litige sur cette course ?', [
+        { text: 'Annuler' },
+        {
+          text: 'Ouvrir le litige',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await openDispute(currentRide.id, 'Problème signalé par le passager');
+              Alert.alert('Litige ouvert', 'Un administrateur va examiner votre dossier.');
+            } catch (error: any) {
+              Alert.alert('Erreur', error?.response?.data?.message || 'Erreur');
+            }
+          },
+        },
+      ]);
+    }
+  };
+
+  const handleSOS = () => {
+    if (!currentRide) return;
+    sendSOS(pickup.lat, pickup.lng, currentRide.id);
+    Alert.alert('🚨 SOS envoyé', 'Alerte envoyée à vos contacts d\'urgence et à 237GO.');
+  };
+
+  const handleShare = () => {
+    if (!currentRide) return;
+    Alert.prompt?.(
+      'Partager le trajet',
+      'Numéro du contact (6XXXXXXXX) :',
+      (phone?: string) => {
+        if (phone && /^6[0-9]{8}$/.test(phone)) {
+          shareTrip(currentRide.id, phone);
+          Alert.alert('Partagé', 'Lien de suivi envoyé par SMS à votre contact.');
+        } else if (phone) {
+          Alert.alert('Numéro invalide', 'Format attendu : 6XXXXXXXX');
+        }
+      },
+      'plain-text',
+      '',
+      'phone-pad'
+    );
+    if (!Alert.prompt) {
+      Alert.alert('Partager', 'Le partage de trajet nécessite iOS. Fonctionnalité bientôt disponible sur Android.');
+    }
+  };
 
   const handleGetEstimates = async () => {
     if (!pickupAddress || !dropoffAddress) {
@@ -290,6 +367,45 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     );
   }
 
+  // Step: Course terminée → confirmation d'arrivée (escrow)
+  if (currentRide?.status === 'COMPLETED') {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={{ fontSize: 56, marginBottom: spacing.md }}>🏁</Text>
+        <Text style={styles.waitingTitle}>Course terminée</Text>
+        <Text style={styles.waitingSubtitle}>
+          Prix : {(currentRide.finalPrice || currentRide.estimatedPrice).toLocaleString()} XAF
+        </Text>
+        <Text style={[styles.waitingSubtitle, { textAlign: 'center', marginTop: spacing.md, paddingHorizontal: spacing.lg }]}>
+          Confirmez votre arrivée pour libérer le paiement au chauffeur. Le paiement reste protégé jusqu'à votre validation.
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.button, { width: '100%' }, confirming && styles.buttonDisabled]}
+          onPress={handleConfirmArrival}
+          disabled={confirming}
+          accessibilityLabel="Confirmer mon arrivée"
+          accessibilityRole="button"
+        >
+          {confirming ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>✅ Confirmer mon arrivée</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.cancelButton, { width: '100%' }]}
+          onPress={handleDispute}
+          accessibilityLabel="Signaler un problème"
+          accessibilityRole="button"
+        >
+          <Text style={[styles.buttonText, { color: colors.error }]}>⚠️ Signaler un problème</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   // Step: Course en cours
   return (
     <View style={styles.container}>
@@ -322,7 +438,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
         <View style={styles.rideActions}>
           <TouchableOpacity
             style={styles.sosButton}
-            onPress={() => Alert.alert('SOS', 'Alerte envoyée aux contacts d\'urgence et à 237GO')}
+            onPress={handleSOS}
             accessibilityLabel="Bouton SOS urgence"
             accessibilityRole="button"
           >
@@ -331,7 +447,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
 
           <TouchableOpacity
             style={styles.shareButton}
-            onPress={() => Alert.alert('Partager', 'Lien de suivi envoyé à votre contact')}
+            onPress={handleShare}
             accessibilityLabel="Partager le trajet"
             accessibilityRole="button"
           >

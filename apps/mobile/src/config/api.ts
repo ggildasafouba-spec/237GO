@@ -1,7 +1,12 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-const API_BASE_URL = __DEV__ ? 'http://10.0.2.2:3000/api' : 'https://237gobackend-production.up.railway.app/api';
+// En dev : le web (navigateur du PC) utilise localhost, le mobile (téléphone) utilise l'IP du PC sur le réseau.
+const DEV_HOST = Platform.OS === 'web' ? 'localhost' : '192.168.1.61';
+const API_BASE_URL = __DEV__
+  ? `http://${DEV_HOST}:3002/api`
+  : 'https://237gobackend-production.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

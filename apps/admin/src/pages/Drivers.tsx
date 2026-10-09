@@ -1,41 +1,69 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import api from '../config/api';
 
-interface Driver {
+interface DriverProfile {
   id: string;
-  name: string;
-  phone: string;
   vehicleType: string;
-  plate: string;
-  status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  vehiclePlate: string;
+  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
   isOnline: boolean;
   totalTrips: number;
-  rating: number;
-  earnings: number;
+  averageRating: number;
+  licenseNumber: string;
+  cniNumber: string;
+  licensePhoto?: string | null;
+  cniPhoto?: string | null;
+  vehiclePhoto?: string | null;
+  user: { firstName: string; lastName: string; phone: string };
 }
 
 export default function Drivers() {
-  const [drivers] = useState<Driver[]>([
-    { id: '1', name: 'Aimé Fotso', phone: '698765432', vehicleType: 'MOTO', plate: 'LT 1234 A', status: 'VERIFIED', isOnline: true, totalTrips: 234, rating: 4.8, earnings: 450000 },
-    { id: '2', name: 'Paul Tchamba', phone: '677112233', vehicleType: 'CAR_ECONOMY', plate: 'CE 5678 B', status: 'VERIFIED', isOnline: true, totalTrips: 156, rating: 4.5, earnings: 680000 },
-    { id: '3', name: 'Serge Nana', phone: '655443322', vehicleType: 'CAR_VIP', plate: 'LT 9012 C', status: 'PENDING', isOnline: false, totalTrips: 0, rating: 0, earnings: 0 },
-    { id: '4', name: 'Eric Kamga', phone: '691223344', vehicleType: 'CAR_COMFORT', plate: 'CE 3456 D', status: 'VERIFIED', isOnline: false, totalTrips: 89, rating: 4.2, earnings: 320000 },
-  ]);
-
+  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [filter, setFilter] = useState('ALL');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const filtered = drivers.filter((d) => {
-    if (filter === 'ONLINE') return d.isOnline;
-    if (filter === 'PENDING') return d.status === 'PENDING';
-    if (filter === 'VERIFIED') return d.status === 'VERIFIED';
-    return true;
-  });
+  const loadDrivers = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const params: Record<string, string> = {};
+      if (filter === 'VERIFIED') params.status = 'VERIFIED';
+      if (filter === 'PENDING') params.status = 'PENDING';
+      if (filter === 'ONLINE') params.online = 'true';
+
+      const res = await api.get('/admin/drivers', { params });
+      setDrivers(res.data.data || []);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur de chargement');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    loadDrivers();
+  }, [loadDrivers]);
+
+  const verifyDriver = async (id: string, status: 'VERIFIED' | 'REJECTED') => {
+    const label = status === 'VERIFIED' ? 'approuver' : 'rejeter';
+    if (!window.confirm(`Confirmer : ${label} ce chauffeur ?`)) return;
+    try {
+      await api.patch(`/admin/drivers/${id}/verify`, { status });
+      await loadDrivers();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const onlineCount = drivers.filter((d) => d.isOnline).length;
 
   return (
     <div>
       <div style={styles.header}>
         <h1 style={styles.title}>Chauffeurs</h1>
         <p style={styles.subtitle}>
-          {drivers.filter((d) => d.isOnline).length} en ligne sur {drivers.length} chauffeurs
+          {onlineCount} en ligne sur {drivers.length} chauffeur(s)
         </p>
       </div>
 
@@ -47,36 +75,74 @@ export default function Drivers() {
         ))}
       </div>
 
-      <div style={styles.grid}>
-        {filtered.map((driver) => (
-          <div key={driver.id} style={styles.card}>
-            <div style={styles.cardTop}>
-              <div style={styles.avatar}>{driver.name[0]}</div>
-              <div>
-                <h3 style={styles.driverName}>{driver.name}</h3>
-                <p style={styles.driverPhone}>+237 {driver.phone}</p>
+      {error && <div style={styles.errorBox}>{error}</div>}
+
+      {isLoading ? (
+        <div style={styles.empty}>Chargement...</div>
+      ) : drivers.length === 0 ? (
+        <div style={styles.empty}>Aucun chauffeur dans cette catégorie</div>
+      ) : (
+        <div style={styles.grid}>
+          {drivers.map((driver) => {
+            const name = `${driver.user.firstName} ${driver.user.lastName}`;
+            return (
+              <div key={driver.id} style={styles.card}>
+                <div style={styles.cardTop}>
+                  <div style={styles.avatar}>{driver.user.firstName[0]}</div>
+                  <div>
+                    <h3 style={styles.driverName}>{name}</h3>
+                    <p style={styles.driverPhone}>+237 {driver.user.phone}</p>
+                  </div>
+                  <span style={{ ...styles.onlineDot, backgroundColor: driver.isOnline ? '#388E3C' : '#BDBDBD' }} />
+                </div>
+                <div style={styles.cardDetails}>
+                  <div style={styles.detail}><span style={styles.detailLabel}>Véhicule</span><span>{driver.vehicleType} • {driver.vehiclePlate}</span></div>
+                  <div style={styles.detail}><span style={styles.detailLabel}>Permis</span><span>{driver.licenseNumber}</span></div>
+                  <div style={styles.detail}><span style={styles.detailLabel}>CNI</span><span>{driver.cniNumber}</span></div>
+                  <div style={styles.detail}><span style={styles.detailLabel}>Courses</span><span>{driver.totalTrips}</span></div>
+                  <div style={styles.detail}><span style={styles.detailLabel}>Note</span><span>⭐ {driver.averageRating > 0 ? driver.averageRating.toFixed(1) : 'N/A'}</span></div>
+                </div>
+
+                {/* Documents téléversés */}
+                {(driver.licensePhoto || driver.cniPhoto || driver.vehiclePhoto) && (
+                  <div style={styles.docsRow}>
+                    {driver.licensePhoto && (
+                      <a href={driver.licensePhoto} target="_blank" rel="noreferrer" style={styles.docThumb}>
+                        <img src={driver.licensePhoto} alt="Permis" style={styles.docImg} />
+                        <span style={styles.docCaption}>Permis</span>
+                      </a>
+                    )}
+                    {driver.cniPhoto && (
+                      <a href={driver.cniPhoto} target="_blank" rel="noreferrer" style={styles.docThumb}>
+                        <img src={driver.cniPhoto} alt="CNI" style={styles.docImg} />
+                        <span style={styles.docCaption}>CNI</span>
+                      </a>
+                    )}
+                    {driver.vehiclePhoto && (
+                      <a href={driver.vehiclePhoto} target="_blank" rel="noreferrer" style={styles.docThumb}>
+                        <img src={driver.vehiclePhoto} alt="Véhicule" style={styles.docImg} />
+                        <span style={styles.docCaption}>Véhicule</span>
+                      </a>
+                    )}
+                  </div>
+                )}
+                <div style={styles.cardActions}>
+                  {driver.verificationStatus === 'PENDING' ? (
+                    <>
+                      <button style={styles.approveBtn} onClick={() => verifyDriver(driver.id, 'VERIFIED')}>✅ Approuver</button>
+                      <button style={styles.rejectBtn} onClick={() => verifyDriver(driver.id, 'REJECTED')}>❌ Rejeter</button>
+                    </>
+                  ) : (
+                    <span style={styles.statusTag}>
+                      {driver.verificationStatus === 'VERIFIED' ? '✅ Vérifié' : '❌ Rejeté'}
+                    </span>
+                  )}
+                </div>
               </div>
-              <span style={{ ...styles.onlineDot, backgroundColor: driver.isOnline ? '#388E3C' : '#BDBDBD' }} />
-            </div>
-            <div style={styles.cardDetails}>
-              <div style={styles.detail}><span style={styles.detailLabel}>Véhicule</span><span>{driver.vehicleType} • {driver.plate}</span></div>
-              <div style={styles.detail}><span style={styles.detailLabel}>Courses</span><span>{driver.totalTrips}</span></div>
-              <div style={styles.detail}><span style={styles.detailLabel}>Note</span><span>⭐ {driver.rating > 0 ? driver.rating.toFixed(1) : 'N/A'}</span></div>
-              <div style={styles.detail}><span style={styles.detailLabel}>Gains</span><span style={{ fontWeight: 700, color: '#1B5E20' }}>{driver.earnings.toLocaleString()} XAF</span></div>
-            </div>
-            <div style={styles.cardActions}>
-              {driver.status === 'PENDING' ? (
-                <>
-                  <button style={styles.approveBtn}>✅ Approuver</button>
-                  <button style={styles.rejectBtn}>❌ Rejeter</button>
-                </>
-              ) : (
-                <button style={styles.viewBtn}>Voir le profil →</button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -86,20 +152,26 @@ const styles: Record<string, React.CSSProperties> = {
   title: { fontSize: 28, fontWeight: 700 },
   subtitle: { color: '#757575', marginTop: 4 },
   filters: { display: 'flex', gap: 8, marginBottom: 24 },
-  filterBtn: { padding: '8px 16px', backgroundColor: '#f5f5f5', borderRadius: 6, fontSize: 13, fontWeight: 600, color: '#757575' },
-  filterActive: { backgroundColor: '#1B5E20', color: '#fff' },
+  filterBtn: { padding: '8px 16px', backgroundColor: '#f5f5f5', borderRadius: 6, fontSize: 13, fontWeight: 600, color: '#757575', cursor: 'pointer' },
+  filterActive: { backgroundColor: '#1DB954', color: '#fff' },
+  errorBox: { backgroundColor: '#FFEBEE', color: '#D32F2F', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 14 },
+  empty: { backgroundColor: '#fff', padding: 48, borderRadius: 12, textAlign: 'center', color: '#999' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
   cardTop: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, position: 'relative' },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1B5E20', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1DB954', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18 },
   driverName: { fontSize: 16, fontWeight: 700 },
   driverPhone: { fontSize: 13, color: '#757575' },
   onlineDot: { position: 'absolute', right: 0, top: 0, width: 12, height: 12, borderRadius: 6, border: '2px solid #fff' },
   cardDetails: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 },
   detail: { display: 'flex', justifyContent: 'space-between', fontSize: 13 },
   detailLabel: { color: '#757575' },
+  docsRow: { display: 'flex', gap: 8, marginBottom: 12 },
+  docThumb: { display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#757575' },
+  docImg: { width: 70, height: 50, objectFit: 'cover', borderRadius: 6, border: '1px solid #e0e0e0' },
+  docCaption: { fontSize: 10, marginTop: 2 },
   cardActions: { display: 'flex', gap: 8 },
-  approveBtn: { flex: 1, padding: 10, backgroundColor: '#E8F5E9', color: '#388E3C', borderRadius: 6, fontWeight: 700, fontSize: 13 },
-  rejectBtn: { flex: 1, padding: 10, backgroundColor: '#FFEBEE', color: '#D32F2F', borderRadius: 6, fontWeight: 700, fontSize: 13 },
-  viewBtn: { flex: 1, padding: 10, backgroundColor: '#f5f5f5', color: '#212121', borderRadius: 6, fontWeight: 600, fontSize: 13, textAlign: 'center' },
+  approveBtn: { flex: 1, padding: 10, backgroundColor: '#E8F5E9', color: '#388E3C', borderRadius: 6, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' },
+  rejectBtn: { flex: 1, padding: 10, backgroundColor: '#FFEBEE', color: '#D32F2F', borderRadius: 6, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' },
+  statusTag: { flex: 1, padding: 10, backgroundColor: '#f5f5f5', color: '#212121', borderRadius: 6, fontWeight: 600, fontSize: 13, textAlign: 'center' },
 };

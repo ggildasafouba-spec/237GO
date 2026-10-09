@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   Switch,
+  Platform,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useWalletStore } from '../store/walletStore';
@@ -102,6 +103,12 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
   };
 
   const handleLogout = () => {
+    // Sur le web, Alert.alert avec boutons ne fonctionne pas : on utilise window.confirm
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined' ? window.confirm('Voulez-vous vraiment vous déconnecter ?') : true;
+      if (ok) logout();
+      return;
+    }
     Alert.alert('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', [
       { text: 'Non' },
       { text: 'Oui', style: 'destructive', onPress: logout },

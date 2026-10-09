@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useCarpoolStore } from '../store/carpoolStore';
 import { useAuthStore } from '../store/authStore';
+import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
 
 const popularRoutes = [
@@ -24,7 +25,8 @@ const popularRoutes = [
 ];
 
 export default function CarpoolScreen({ navigation }: { navigation: any }) {
-  const [view, setView] = useState<'search' | 'results' | 'publish' | 'my-trips'>('search');
+  type CarpoolView = 'search' | 'results' | 'publish' | 'my-trips';
+  const [view, setView] = useState<CarpoolView>('search');
   const [departureCity, setDepartureCity] = useState('');
   const [arrivalCity, setArrivalCity] = useState('');
   const [date, setDate] = useState('');
@@ -115,6 +117,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
 
   // Vue: Recherche
   if (view === 'search') {
+    const current: string = view;
     return (
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -127,24 +130,24 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
         {/* Tabs */}
         <View style={styles.tabs}>
           <TouchableOpacity
-            style={[styles.tab, view === 'search' && styles.tabActive]}
+            style={[styles.tab, current === 'search' && styles.tabActive]}
             onPress={() => setView('search')}
           >
-            <Text style={[styles.tabText, view === 'search' && styles.tabTextActive]}>Rechercher</Text>
+            <Text style={[styles.tabText, current === 'search' && styles.tabTextActive]}>Rechercher</Text>
           </TouchableOpacity>
           {user?.role === 'DRIVER' && (
             <TouchableOpacity
-              style={[styles.tab, view === 'publish' && styles.tabActive]}
+              style={[styles.tab, current === 'publish' && styles.tabActive]}
               onPress={() => setView('publish')}
             >
-              <Text style={[styles.tabText, view === 'publish' && styles.tabTextActive]}>Publier</Text>
+              <Text style={[styles.tabText, current === 'publish' && styles.tabTextActive]}>Publier</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.tab, view === 'my-trips' && styles.tabActive]}
+            style={[styles.tab, current === 'my-trips' && styles.tabActive]}
             onPress={() => { fetchMyBookings(); setView('my-trips'); }}
           >
-            <Text style={[styles.tabText, view === 'my-trips' && styles.tabTextActive]}>Mes trajets</Text>
+            <Text style={[styles.tabText, current === 'my-trips' && styles.tabTextActive]}>Mes trajets</Text>
           </TouchableOpacity>
         </View>
 
@@ -413,6 +416,16 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
                 {item.status === 'CONFIRMED' ? '✅ Confirmé' : '⏳ En attente'}
               </Text>
             </View>
+
+            {/* Actions escrow : confirmer l'arrivée pour libérer le paiement au chauffeur */}
+            {item.status === 'CONFIRMED' && (
+              <EscrowActions
+                serviceType="carpool"
+                serviceId={item.carpool.id}
+                amount={item.seats * item.carpool.pricePerSeat}
+                onDone={fetchMyBookings}
+              />
+            )}
           </View>
         )}
       />

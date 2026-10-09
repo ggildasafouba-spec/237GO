@@ -4,198 +4,217 @@
 
 ```
 Railway (Backend)
-├── API Node.js/Express (port 3000)
-├── PostgreSQL (base de données)
-└── WebSocket (Socket.IO)
+├── API Node.js/Express
+├── PostgreSQL (base de données managée)
+├── WebSocket (Socket.IO)
+└── Volume persistant (uploads : permis, CNI, photos)
 
 Vercel (Admin Dashboard)
-└── React/Vite (SPA)
+└── React/Vite (SPA, proxy /api → Railway)
+
+Expo EAS (Application mobile)
+└── Build APK Android (passagers, chauffeurs, marchands)
 ```
+
+---
+
+## Prérequis
+
+- Le code est poussé sur un dépôt GitHub.
+- Comptes créés : [Railway](https://railway.app), [Vercel](https://vercel.com), [Expo](https://expo.dev).
 
 ---
 
 ## Étape 1 : Déployer le Backend sur Railway
 
-### 1.1 Créer le projet
+### 1.1 Créer le projet + PostgreSQL
 
-1. Va sur [railway.app](https://railway.app)
-2. Clique **"New Project"**
-3. Choisis **"Deploy from GitHub"** (ou "Empty Project")
+1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
+2. Dans le projet, **+ New** → **Database** → **PostgreSQL**. Railway crée `DATABASE_URL` automatiquement.
 
-### 1.2 Ajouter PostgreSQL
+### 1.2 Configurer le service backend
 
-1. Dans ton projet Railway, clique **"+ New"** → **"Database"** → **"PostgreSQL"**
-2. Railway crée automatiquement la base et la variable `DATABASE_URL`
+Comme c'est un **monorepo**, il faut indiquer le bon sous-dossier :
 
-### 1.3 Déployer le backend
+- Service → **Settings** → **Root Directory** : `apps/backend`
+- Le build et le démarrage sont déjà définis dans `apps/backend/railway.json` :
+  - **Build** : `npm install && npx prisma generate && npx tsc --skipLibCheck`
+  - **Start** : `npx prisma migrate deploy && node dist/server.js`
 
-**Option A — Depuis GitHub :**
-1. Push le code sur GitHub
-2. Dans Railway, ajoute un nouveau service → "GitHub Repo"
-3. Sélectionne ton repo, et configure le root directory : `apps/backend`
+> `prisma migrate deploy` applique automatiquement toutes les migrations à chaque déploiement.
 
-**Option B — Depuis le CLI Railway :**
-```bash
-# Installer Railway CLI
-npm install -g @railway/cli
+### 1.3 Volume persistant pour les uploads
 
-# Se connecter
-railway login
+Les fichiers téléversés (permis, CNI, photos véhicule) doivent survivre aux redéploiements :
 
-# Lier au projet
-railway link
+1. Service → **Settings** → **Volumes** → **+ New Volume**
+2. Mount path : `/data`
+3. Ajoute la variable d'environnement : `UPLOAD_PATH=/data/uploads`
 
-# Déployer
-cd apps/backend
-railway up
-```
+Sans ce volume, les fichiers uploadés seront perdus à chaque redéploiement.
 
 ### 1.4 Variables d'environnement
 
-Dans Railway → Service → Variables, ajoute :
+Service → **Variables**, ajoute :
 
 ```
-PORT=3000
 NODE_ENV=production
-JWT_SECRET=ton-secret-ultra-securise-ici
+JWT_SECRET=<génère-un-secret-long-et-aléatoire>
 JWT_EXPIRES_IN=7d
-SOCKET_CORS_ORIGIN=https://ton-admin.vercel.app
+API_BASE_URL=https://<ton-backend>.up.railway.app
+SOCKET_CORS_ORIGIN=https://<ton-admin>.vercel.app
+UPLOAD_PATH=/data/uploads
 
-# Paiement (optionnel pour le moment)
+# Paiement (à remplir quand tu auras les clés)
 CINETPAY_API_KEY=
 CINETPAY_SITE_ID=
 MOMO_API_KEY=
 MOMO_SUBSCRIPTION_KEY=
+MOMO_BASE_URL=https://sandbox.momodeveloper.mtn.com
+MOMO_ENVIRONMENT=sandbox
+ORANGE_MONEY_CLIENT_ID=
+ORANGE_MONEY_CLIENT_SECRET=
+ORANGE_MONEY_MERCHANT_KEY=
 
-# SMS (optionnel pour le moment)
+# SMS (à remplir quand tu auras les clés)
 SMS_PROVIDER=africas_talking
 SMS_API_KEY=
 SMS_SENDER_ID=237GO
+AFRICAS_TALKING_USERNAME=sandbox
 ```
 
-> ⚠️ `DATABASE_URL` est ajouté automatiquement par Railway quand tu lies PostgreSQL.
+> ⚠️ Ne définis **pas** `PORT` manuellement : Railway l'injecte automatiquement.
+> ⚠️ `DATABASE_URL` est ajouté automatiquement par Railway via le plugin PostgreSQL.
 
-### 1.5 Seed la base de données
+### 1.5 Seed initial (une seule fois)
+
+Après le premier déploiement, crée le compte admin et les données de test :
 
 ```bash
-# Via Railway CLI
-railway run npx prisma db seed
-```
-
-Ou dans Railway → Service → Settings → Deploy → ajouter en "Release Command" :
-```
-npx prisma migrate deploy && npx prisma db seed
+npm install -g @railway/cli
+railway login
+railway link            # sélectionne ton projet
+railway run --service <backend> npx prisma db seed
 ```
 
 ---
 
 ## Étape 2 : Déployer l'Admin sur Vercel
 
-### 2.1 Configuration
+### 2.1 Importer le projet
 
-1. Va sur [vercel.com](https://vercel.com)
-2. Clique **"Add New Project"**
-3. Importe depuis GitHub
-4. Configure :
-   - **Framework** : Vite
+1. [vercel.com](https://vercel.com) → **Add New Project** → importe le repo GitHub.
+2. Configure :
    - **Root Directory** : `apps/admin`
+   - **Framework Preset** : Vite
    - **Build Command** : `npm run build`
    - **Output Directory** : `dist`
 
-### 2.2 Variable d'environnement
+### 2.2 Brancher l'admin sur le backend
 
-Ajoute sur Vercel :
-```
-VITE_API_URL=https://ton-backend.up.railway.app
-```
+Édite `apps/admin/vercel.json` et remplace `YOUR-RAILWAY-URL` par l'URL réelle de ton backend Railway :
 
-### 2.3 Mettre à jour vercel.json
-
-Après le déploiement Railway, récupère l'URL de ton backend (ex: `https://237go-api-production.up.railway.app`) et mets à jour le fichier `apps/admin/vercel.json` :
-
-Remplace `YOUR-RAILWAY-URL` par ton URL Railway réelle.
-
----
-
-## Étape 3 : Vérification
-
-### Tester le backend
-```
-https://ton-backend.up.railway.app/api/health
-```
-
-Réponse attendue :
 ```json
 {
-  "status": "ok",
-  "service": "237GO API",
-  "version": "1.0.0"
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://<ton-backend>.up.railway.app/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
 ```
 
-### Tester l'admin
-```
-https://ton-admin.vercel.app/login
-```
-
-Credentials de test :
-- Téléphone : `600000000`
-- Mot de passe : `admin237go`
+Le client admin appelle `/api/...` ; Vercel relaie ces appels vers Railway. Redéploie après modification.
 
 ---
 
-## Étape 4 : Connecter l'app mobile
+## Étape 3 : Builder l'application mobile (Expo EAS)
 
-Dans `apps/mobile/src/config/api.ts`, remplace l'URL de production :
+### 3.1 Pointer l'app vers le backend de production
+
+Dans `apps/mobile/src/config/api.ts` et `apps/mobile/src/config/socket.ts`, l'URL de production est déjà prévue (`__DEV__ ? local : production`). Remplace l'URL de production par ton URL Railway :
 
 ```typescript
-const API_BASE_URL = __DEV__
-  ? 'http://10.0.2.2:3000/api'
-  : 'https://ton-backend.up.railway.app/api';
+// api.ts
+const API_BASE_URL = __DEV__ ? 'http://10.0.2.2:3002/api' : 'https://<ton-backend>.up.railway.app/api';
+// socket.ts
+const SOCKET_URL = __DEV__ ? 'http://10.0.2.2:3002' : 'https://<ton-backend>.up.railway.app';
 ```
 
-Même chose dans `apps/mobile/src/config/socket.ts` :
-```typescript
-const SOCKET_URL = __DEV__
-  ? 'http://10.0.2.2:3000'
-  : 'https://ton-backend.up.railway.app';
-```
-
----
-
-## Commandes utiles
+### 3.2 Build de l'APK
 
 ```bash
-# Voir les logs Railway
-railway logs
+npm install -g eas-cli
+eas login
+cd apps/mobile
+eas build:configure
+eas build -p android --profile preview   # génère un APK installable
+```
 
-# Ouvrir la base en local
-railway connect postgres
+Récupère le lien de téléchargement de l'APK à la fin du build.
 
-# Redéployer
-railway up
+> Les notifications push et l'upload d'images nécessitent un build réel (pas Expo Go).
 
-# Variables d'environnement
-railway variables
+---
+
+## Étape 4 : Vérification
+
+### Backend
+```
+GET https://<ton-backend>.up.railway.app/api/health
+→ { "status": "ok", "service": "237GO API", "version": "1.0.0" }
+```
+
+### Admin
+```
+https://<ton-admin>.vercel.app/login
+Admin : 600000000 / admin237go
+```
+
+### Mobile
+Installe l'APK, connecte-toi avec un compte de test (`691234567` / `test237go`).
+
+---
+
+## Comptes de test (après seed)
+
+| Rôle | Téléphone | Mot de passe |
+|---|---|---|
+| Admin | 600000000 | admin237go |
+| Passager | 691234567 | test237go |
+| Chauffeur | 698765432 | test237go |
+| Marchand | 699887766 | test237go |
+
+---
+
+## Commandes utiles (Railway CLI)
+
+```bash
+railway logs                 # logs en temps réel
+railway run npx prisma studio   # explorer la base
+railway variables            # lister les variables
+railway up                   # redéployer manuellement
 ```
 
 ---
 
-## Après le déploiement
+## Checklist avant la vraie mise en production
 
-1. ✅ Tester `/api/health`
-2. ✅ Tester la connexion admin
-3. ✅ Tester l'inscription d'un utilisateur via API
-4. ✅ Configurer les clés API de paiement quand tu les auras
-5. ✅ Builder l'app mobile avec Expo et tester sur un vrai téléphone
+- [ ] `JWT_SECRET` fort et unique (pas la valeur par défaut)
+- [ ] `SOCKET_CORS_ORIGIN` restreint à l'URL de l'admin (pas `*`)
+- [ ] Volume Railway monté + `UPLOAD_PATH` défini
+- [ ] Clés API paiement réelles (CinetPay / MoMo / Orange)
+- [ ] Clé SMS réelle (Africa's Talking ou Infobip)
+- [ ] `MOMO_ENVIRONMENT=production` et URL MoMo de prod
+- [ ] Migrations appliquées (`prisma migrate deploy` au démarrage — automatique)
+- [ ] Build mobile EAS testé sur un vrai téléphone
 
 ---
 
-## Coûts estimés
+## Coûts estimés (MVP)
 
 | Service | Plan | Coût |
-|---------|------|------|
-| Railway (Backend + PostgreSQL) | Starter | ~5$/mois |
+|---|---|---|
+| Railway (Backend + PostgreSQL + volume) | Hobby | ~5 $/mois |
 | Vercel (Admin) | Hobby | Gratuit |
-| Domaine .cm | Registrar | ~15$/an |
-| **Total MVP** | | **~5$/mois** |
+| Expo EAS (builds) | Free tier | Gratuit (quota limité) |
+| **Total MVP** | | **~5 $/mois** |

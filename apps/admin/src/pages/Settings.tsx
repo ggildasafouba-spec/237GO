@@ -136,7 +136,7 @@ export default function Settings() {
 const styles: Record<string, React.CSSProperties> = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
   title: { fontSize: 28, fontWeight: 700 },
-  saveBtn: { padding: '12px 24px', backgroundColor: '#1B5E20', color: '#fff', borderRadius: 8, fontWeight: 700, fontSize: 14 },
+  saveBtn: { padding: '12px 24px', backgroundColor: '#1DB954', color: '#fff', borderRadius: 8, fontWeight: 700, fontSize: 14 },
   section: { marginBottom: 40 },
   sectionTitle: { fontSize: 20, fontWeight: 700, marginBottom: 16 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 },

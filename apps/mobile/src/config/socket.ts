@@ -1,7 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-const SOCKET_URL = __DEV__ ? 'http://10.0.2.2:3000' : 'https://237gobackend-production.up.railway.app';
+const DEV_HOST = Platform.OS === 'web' ? 'localhost' : '192.168.1.61';
+const SOCKET_URL = __DEV__ ? `http://${DEV_HOST}:3002` : 'https://237gobackend-production.up.railway.app';
 
 let socket: Socket | null = null;
 

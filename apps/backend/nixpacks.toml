@@ -8,4 +8,4 @@ cmds = ["npm install"]
 cmds = ["npx prisma generate", "npx tsc --skipLibCheck"]
 
 [start]
-cmd = "node dist/server.js"
+cmd = "npx prisma migrate deploy && node dist/server.js"

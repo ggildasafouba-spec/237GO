@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { useMarketStore } from '../store/marketStore';
+import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
 
 const categories = [
@@ -25,7 +26,7 @@ const categories = [
 ];
 
 export default function MarketScreen({ navigation }: { navigation: any }) {
-  const [view, setView] = useState<'merchants' | 'merchant-detail' | 'cart' | 'checkout'>('merchants');
+  const [view, setView] = useState<'merchants' | 'merchant-detail' | 'cart' | 'checkout' | 'orders'>('merchants');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -35,6 +36,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     merchants,
     selectedMerchant,
     cart,
+    orders,
     isLoading,
     fetchMerchants,
     fetchMerchantDetails,
@@ -44,6 +46,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     clearCart,
     getCartTotal,
     placeOrder,
+    fetchOrders,
   } = useMarketStore();
 
   useEffect(() => {
@@ -87,8 +90,20 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>🛒 GO Market</Text>
-        <Text style={styles.subtitle}>Le marché livré chez vous</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>🛒 GO Market</Text>
+            <Text style={styles.subtitle}>Le marché livré chez vous</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.ordersLink}
+            onPress={() => { fetchOrders(); setView('orders'); }}
+            accessibilityLabel="Mes commandes"
+            accessibilityRole="button"
+          >
+            <Text style={styles.ordersLinkText}>📋 Mes commandes</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Recherche */}
         <TextInput
@@ -333,6 +348,65 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     );
   }
 
+  // Vue: Mes commandes
+  if (view === 'orders') {
+    const statusLabel = (s: string) => {
+      const map: Record<string, string> = {
+        PENDING: '⏳ En attente', CONFIRMED: '👍 Confirmée', PREPARING: '👨‍🍳 Préparation',
+        READY: '📦 Prête', PICKED_UP: '🛵 Récupérée', DELIVERING: '🚗 En livraison',
+        DELIVERED: '✅ Livrée', CANCELLED: '❌ Annulée',
+      };
+      return map[s] || s;
+    };
+
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity onPress={() => setView('merchants')} style={styles.backBtn}>
+          <Text style={styles.backText}>← Marchands</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.title}>Mes commandes</Text>
+
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40, paddingTop: spacing.md }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyText}>Aucune commande</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View style={styles.orderCard}>
+              <View style={styles.orderCardHeader}>
+                <Text style={styles.orderShop}>{item.merchant.shopName}</Text>
+                <Text style={styles.orderStatus}>{statusLabel(item.status)}</Text>
+              </View>
+              <Text style={styles.orderItems}>
+                {item.items.map((it) => `${it.quantity}x ${it.product.name}`).join(', ')}
+              </Text>
+              <Text style={styles.orderTotal}>
+                Total : {(item.totalAmount + item.deliveryFee).toLocaleString()} XAF
+              </Text>
+
+              {/* Actions escrow : confirmer la réception de la commande livrée */}
+              {item.status === 'DELIVERED' && (
+                <EscrowActions
+                  serviceType="market"
+                  serviceId={item.id}
+                  amount={item.totalAmount + item.deliveryFee}
+                  onDone={fetchOrders}
+                />
+              )}
+            </View>
+          )}
+        />
+      </View>
+    );
+  }
+
   // Vue: Checkout
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -412,6 +486,15 @@ const styles = StyleSheet.create({
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: typography.sm, color: colors.textSecondary, marginBottom: spacing.md },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  ordersLink: { backgroundColor: '#fff', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 20, borderWidth: 1, borderColor: colors.border },
+  ordersLinkText: { fontSize: typography.xs, color: colors.primary, fontWeight: '600' },
+  orderCard: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: 12, marginBottom: spacing.md },
+  orderCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  orderShop: { fontSize: typography.md, fontWeight: '700', color: colors.text, flex: 1 },
+  orderStatus: { fontSize: typography.xs, fontWeight: '600', color: colors.primary },
+  orderItems: { fontSize: typography.sm, color: colors.textSecondary, marginBottom: spacing.xs },
+  orderTotal: { fontSize: typography.sm, fontWeight: '700', color: colors.primary },
   searchInput: {
     backgroundColor: '#fff',
     padding: spacing.md,

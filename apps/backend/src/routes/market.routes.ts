@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
+import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -185,6 +186,17 @@ router.post(
         include: { items: { include: { product: true } } },
       });
 
+      // ESCROW : bloquer le montant total (produits + livraison) à la commande.
+      // Libéré au marchand quand le client confirme la réception.
+      await holdFunds({
+        amount: totalAmount + deliveryFee,
+        payerId: req.user!.id,
+        payeeId: merchant.userId,
+        paymentMethod,
+        serviceType: 'MARKET',
+        serviceId: order.id,
+      });
+
       // Notifier le marchand
       const io = req.app.get('io');
       io.to(`merchant:${merchant.userId}`).emit('new_order', {
@@ -216,11 +228,23 @@ router.patch(
   '/orders/:id/status',
   authenticate,
   authorize('MERCHANT'),
-  [body('status').isIn(['CONFIRMED', 'PREPARING', 'READY', 'CANCELLED'])],
+  [body('status').isIn(['CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERING', 'DELIVERED', 'CANCELLED'])],
   async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
+
+      // Récupérer la commande et vérifier que c'est bien le marchand
+      const existingOrder = await prisma.marketOrder.findUnique({
+        where: { id },
+        include: { merchant: true },
+      });
+      if (!existingOrder) {
+        throw new AppError('Commande non trouvée', 404);
+      }
+      if (existingOrder.merchant.userId !== req.user!.id) {
+        throw new AppError('Vous n\'êtes pas le marchand de cette commande', 403);
+      }
 
       const order = await prisma.marketOrder.update({
         where: { id },
@@ -233,8 +257,25 @@ router.patch(
         status,
       });
 
+      // Si livrée : le marchand confirme son côté (prestataire).
+      // L'argent reste en séquestre jusqu'à ce que le client confirme la réception.
+      if (status === 'DELIVERED') {
+        const grandTotal = order.totalAmount + order.deliveryFee;
+
+        await confirmSide('MARKET', id, 'provider', req.user!.id).catch(() => {});
+
+        io.to(`user:${order.customerId}`).emit('order_completed', {
+          orderId: id,
+          grandTotal,
+          action: 'confirm_reception', // le client doit confirmer pour libérer le paiement
+        });
+      }
+
       res.json({ success: true, data: order });
-    } catch {
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
       res.status(500).json({ success: false, message: 'Erreur' });
     }
   }
@@ -258,6 +299,64 @@ router.get('/orders', authenticate, async (req: AuthRequest, res: Response) => {
     });
 
     res.json({ success: true, data: orders });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Le client confirme la réception de sa commande (libère l'escrow)
+router.post('/orders/:id/confirm-reception', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await confirmSide('MARKET', id, 'client', req.user!.id);
+
+    res.json({
+      success: true,
+      message: result.status === 'RELEASED'
+        ? 'Commande validée ! Le marchand a été payé.'
+        : 'Réception confirmée. En attente de la confirmation du marchand.',
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Ouvrir un litige sur une commande
+router.post(
+  '/orders/:id/dispute',
+  authenticate,
+  [body('reason').trim().notEmpty().withMessage('Motif du litige requis')],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+      const { id } = req.params;
+      const result = await openDispute('MARKET', id, req.user!.id, req.body.reason);
+
+      const io = req.app.get('io');
+      io.to('admins').emit('escrow_dispute', { serviceType: 'MARKET', serviceId: id, escrowId: result.id });
+
+      res.json({ success: true, message: 'Litige ouvert. Un administrateur va examiner votre dossier.', data: result });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur' });
+    }
+  }
+);
+
+// Consulter l'escrow d'une commande
+router.get('/orders/:id/escrow', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const escrow = await getEscrowForService('MARKET', req.params.id);
+    res.json({ success: true, data: escrow });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }

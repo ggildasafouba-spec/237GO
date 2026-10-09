@@ -31,3 +31,6 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+
+# Fichiers téléversés (uploads locaux)
+apps/backend/uploads/

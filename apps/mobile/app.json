@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1B5E20"
+      "backgroundColor": "#121A17"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -23,7 +23,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1B5E20"
+        "backgroundColor": "#121A17"
       },
       "package": "com.go237.app",
       "permissions": [
@@ -31,9 +31,6 @@
         "ACCESS_COARSE_LOCATION"
       ]
     },
-    "plugins": [
-      "expo-location",
-      "expo-notifications"
-    ]
+    "plugins": []
   }
 }

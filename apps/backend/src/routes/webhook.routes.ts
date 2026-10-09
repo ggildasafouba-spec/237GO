@@ -1,46 +1,25 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { verifyPayment } from '../services/payment.service';
+import { verifyPayment, confirmDeposit, failDeposit } from '../services/payment.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Webhook CinetPay — Notification de paiement
 router.post('/cinetpay', async (req: Request, res: Response) => {
   try {
-    const { cpm_trans_id, cpm_site_id } = req.body;
-
+    const { cpm_trans_id } = req.body;
     console.log(`🔔 Webhook CinetPay: Transaction ${cpm_trans_id}`);
 
-    // Vérifier le paiement
+    if (!cpm_trans_id) {
+      return res.status(200).json({ success: true });
+    }
+
+    // Vérifier le paiement auprès de CinetPay
     const result = await verifyPayment(cpm_trans_id);
 
     if (result.status === 'COMPLETED') {
-      // Mettre à jour la transaction
-      const transaction = await prisma.transaction.findFirst({
-        where: { reference: cpm_trans_id },
-        include: { wallet: true },
-      });
-
-      if (transaction && transaction.status !== 'COMPLETED') {
-        await prisma.$transaction([
-          prisma.transaction.update({
-            where: { id: transaction.id },
-            data: { status: 'COMPLETED' },
-          }),
-          prisma.wallet.update({
-            where: { id: transaction.walletId },
-            data: { balance: { increment: transaction.amount } },
-          }),
-        ]);
-
-        console.log(`✅ Paiement confirmé: ${transaction.amount} XAF pour wallet ${transaction.walletId}`);
-      }
+      await confirmDeposit(cpm_trans_id);
     } else if (result.status === 'FAILED') {
-      await prisma.transaction.updateMany({
-        where: { reference: cpm_trans_id },
-        data: { status: 'FAILED' },
-      });
+      await failDeposit(cpm_trans_id);
     }
 
     res.status(200).json({ success: true });
@@ -53,32 +32,13 @@ router.post('/cinetpay', async (req: Request, res: Response) => {
 // Webhook MTN MoMo
 router.post('/momo', async (req: Request, res: Response) => {
   try {
-    const { externalId, status, amount } = req.body;
-
+    const { externalId, status } = req.body;
     console.log(`🔔 Webhook MoMo: ${externalId} - ${status}`);
 
     if (status === 'SUCCESSFUL') {
-      const transaction = await prisma.transaction.findFirst({
-        where: { reference: externalId },
-      });
-
-      if (transaction && transaction.status !== 'COMPLETED') {
-        await prisma.$transaction([
-          prisma.transaction.update({
-            where: { id: transaction.id },
-            data: { status: 'COMPLETED' },
-          }),
-          prisma.wallet.update({
-            where: { id: transaction.walletId },
-            data: { balance: { increment: transaction.amount } },
-          }),
-        ]);
-      }
+      await confirmDeposit(externalId);
     } else if (status === 'FAILED') {
-      await prisma.transaction.updateMany({
-        where: { reference: externalId },
-        data: { status: 'FAILED' },
-      });
+      await failDeposit(externalId);
     }
 
     res.status(200).json({ success: true });
@@ -91,27 +51,13 @@ router.post('/momo', async (req: Request, res: Response) => {
 // Webhook Orange Money
 router.post('/orange-money', async (req: Request, res: Response) => {
   try {
-    const { order_id, status, notif_token } = req.body;
-
+    const { order_id, status } = req.body;
     console.log(`🔔 Webhook Orange Money: ${order_id} - ${status}`);
 
     if (status === 'SUCCESS') {
-      const transaction = await prisma.transaction.findFirst({
-        where: { reference: order_id },
-      });
-
-      if (transaction && transaction.status !== 'COMPLETED') {
-        await prisma.$transaction([
-          prisma.transaction.update({
-            where: { id: transaction.id },
-            data: { status: 'COMPLETED' },
-          }),
-          prisma.wallet.update({
-            where: { id: transaction.walletId },
-            data: { balance: { increment: transaction.amount } },
-          }),
-        ]);
-      }
+      await confirmDeposit(order_id);
+    } else if (status === 'FAILED' || status === 'CANCELLED') {
+      await failDeposit(order_id);
     }
 
     res.status(200).json({ success: true });
@@ -119,6 +65,11 @@ router.post('/orange-money', async (req: Request, res: Response) => {
     console.error('Webhook Orange Money Error:', error);
     res.status(200).json({ success: true });
   }
+});
+
+// URL de retour après paiement (redirection navigateur)
+router.get('/return', (_req: Request, res: Response) => {
+  res.send('<html><body style="font-family:sans-serif;text-align:center;padding:40px"><h2>Paiement traité</h2><p>Vous pouvez retourner dans l\'application 237GO.</p></body></html>');
 });
 
 export { router as webhookRouter };

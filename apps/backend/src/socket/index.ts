@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { sendSOSAlert, sendTripShareLink } from '../services/sms.service';
 
 const prisma = new PrismaClient();
 
@@ -41,6 +42,11 @@ export function setupSocketHandlers(io: Server) {
 
     // Rejoindre la room personnelle
     socket.join(`user:${socket.userId}`);
+
+    // Les admins rejoignent la room 'admins' (alertes SOS, litiges escrow)
+    if (socket.userRole === 'ADMIN') {
+      socket.join('admins');
+    }
 
     // === CHAUFFEUR ===
     if (socket.userRole === 'DRIVER') {
@@ -102,28 +108,73 @@ export function setupSocketHandlers(io: Server) {
     socket.on('sos', async (data: { lat: number; lng: number; rideId?: string }) => {
       console.log(`🚨 SOS de ${socket.userId} à (${data.lat}, ${data.lng})`);
 
-      // Notifier les contacts d'urgence
-      const contacts = await prisma.emergencyContact.findMany({
-        where: { userId: socket.userId! },
-      });
+      try {
+        // Récupérer l'utilisateur et ses contacts d'urgence
+        const [user, contacts] = await Promise.all([
+          prisma.user.findUnique({
+            where: { id: socket.userId! },
+            select: { firstName: true, lastName: true },
+          }),
+          prisma.emergencyContact.findMany({ where: { userId: socket.userId! } }),
+        ]);
 
-      // Notifier les admins
-      io.to('admins').emit('sos_alert', {
-        userId: socket.userId,
-        lat: data.lat,
-        lng: data.lng,
-        rideId: data.rideId,
-        timestamp: new Date().toISOString(),
-      });
+        const userName = user ? `${user.firstName} ${user.lastName}` : 'Un utilisateur';
 
-      // TODO: Envoyer SMS aux contacts d'urgence
-      console.log(`📱 SMS SOS envoyé à ${contacts.length} contact(s)`);
+        // Notifier les admins en temps réel
+        io.to('admins').emit('sos_alert', {
+          userId: socket.userId,
+          userName,
+          lat: data.lat,
+          lng: data.lng,
+          rideId: data.rideId,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Envoyer un SMS d'alerte aux contacts d'urgence
+        if (contacts.length > 0) {
+          await sendSOSAlert({
+            contacts: contacts.map((c) => ({ name: c.name, phone: c.phone })),
+            userName,
+            lat: data.lat,
+            lng: data.lng,
+            rideId: data.rideId,
+          });
+        }
+
+        // Confirmer à l'émetteur
+        socket.emit('sos_sent', { contactsNotified: contacts.length });
+      } catch (error) {
+        console.error('Erreur SOS:', error);
+        socket.emit('sos_error', { message: 'Échec de l\'envoi de l\'alerte SOS' });
+      }
     });
 
     // === PARTAGE DE TRAJET ===
     socket.on('share:trip', async (data: { rideId: string; contactPhone: string }) => {
-      // TODO: Envoyer un lien de suivi par SMS au contact
-      console.log(`📤 Partage de trajet ${data.rideId} avec ${data.contactPhone}`);
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: socket.userId! },
+          select: { firstName: true, lastName: true },
+        });
+        const passengerName = user ? `${user.firstName} ${user.lastName}` : 'Un passager';
+
+        // Construire le lien de suivi
+        const baseUrl = process.env.APP_BASE_URL || process.env.API_BASE_URL || 'https://237go.app';
+        const trackingUrl = `${baseUrl}/track/${data.rideId}`;
+
+        const result = await sendTripShareLink({
+          contactPhone: data.contactPhone,
+          passengerName,
+          rideId: data.rideId,
+          trackingUrl,
+        });
+
+        socket.emit('share:trip_result', { success: result.success });
+        console.log(`📤 Partage de trajet ${data.rideId} avec ${data.contactPhone} : ${result.success ? 'OK' : 'échec'}`);
+      } catch (error) {
+        console.error('Erreur partage trajet:', error);
+        socket.emit('share:trip_result', { success: false });
+      }
     });
 
     // === DÉCONNEXION ===

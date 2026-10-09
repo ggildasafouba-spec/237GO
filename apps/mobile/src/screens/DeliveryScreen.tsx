@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useDeliveryStore } from '../store/deliveryStore';
+import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
 
 type PackageType = 'DOCUMENT' | 'SMALL_PACKAGE' | 'MEDIUM_PACKAGE' | 'LARGE_PACKAGE' | 'FOOD' | 'FRAGILE';
@@ -42,13 +43,8 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
 
   const { currentDelivery, estimate, isLoading, getEstimate, createDelivery, clearDelivery } = useDeliveryStore();
 
-  useEffect(() => {
-    if (currentDelivery?.status === 'DELIVERED') {
-      Alert.alert('✅ Livraison effectuée !', 'Votre colis a été livré avec succès.', [
-        { text: 'OK', onPress: () => { clearDelivery(); setStep('type'); } },
-      ]);
-    }
-  }, [currentDelivery?.status]);
+  // Note : quand la livraison passe à DELIVERED, l'écran de suivi affiche
+  // les actions d'escrow (confirmer réception / litige) au lieu de fermer.
 
   const handleEstimate = async () => {
     if (!pickupAddress || !dropoffAddress || !pickupContact || !dropoffContact) {
@@ -331,6 +327,16 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
           </View>
         )}
       </View>
+
+      {/* Quand livré : confirmation de réception (escrow) */}
+      {currentDelivery?.status === 'DELIVERED' && currentDelivery?.id && (
+        <EscrowActions
+          serviceType="delivery"
+          serviceId={currentDelivery.id}
+          amount={currentDelivery.finalPrice || currentDelivery.estimatedPrice}
+          onDone={() => { clearDelivery(); setStep('type'); navigation.goBack(); }}
+        />
+      )}
 
       <TouchableOpacity
         style={[styles.button, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.error }]}

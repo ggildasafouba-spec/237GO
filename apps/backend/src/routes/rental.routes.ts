@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
+import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -174,7 +175,18 @@ router.post(
           totalPrice,
           withDriver: withDriver || false,
           paymentMethod,
+          status: 'CONFIRMED',
         },
+      });
+
+      // ESCROW : bloquer l'argent du locataire (versé au propriétaire après validation)
+      await holdFunds({
+        amount: totalPrice,
+        payerId: req.user!.id,
+        payeeId: vehicle.ownerId,
+        paymentMethod,
+        serviceType: 'RENTAL',
+        serviceId: booking.id,
       });
 
       // Notifier le propriétaire
@@ -216,6 +228,25 @@ router.get('/my-vehicles', authenticate, async (req: AuthRequest, res: Response)
   }
 });
 
+// Mes réservations (locataire)
+router.get('/my-bookings', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const bookings = await prisma.rentalBooking.findMany({
+      where: { renterId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        vehicle: {
+          include: { owner: { select: { firstName: true, lastName: true } } },
+        },
+      },
+    });
+
+    res.json({ success: true, data: bookings });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -227,5 +258,84 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+// Le locataire confirme la fin de location (libère l'escrow si le propriétaire a aussi confirmé)
+router.post('/bookings/:id/confirm-return', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await confirmSide('RENTAL', id, 'client', req.user!.id);
+
+    res.json({
+      success: true,
+      message: result.status === 'RELEASED'
+        ? 'Location validée ! Le propriétaire a été payé.'
+        : 'Retour confirmé. En attente de la confirmation du propriétaire.',
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Le propriétaire confirme la fin de location
+router.post('/bookings/:id/confirm-completion', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await confirmSide('RENTAL', id, 'provider', req.user!.id);
+
+    res.json({
+      success: true,
+      message: result.status === 'RELEASED'
+        ? 'Location terminée ! Paiement reçu.'
+        : 'Fin de location confirmée. En attente de la validation du locataire.',
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Ouvrir un litige
+router.post(
+  '/bookings/:id/dispute',
+  authenticate,
+  [body('reason').trim().notEmpty().withMessage('Motif du litige requis')],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+      const { id } = req.params;
+      const result = await openDispute('RENTAL', id, req.user!.id, req.body.reason);
+
+      const io = req.app.get('io');
+      io.to('admins').emit('escrow_dispute', { serviceType: 'RENTAL', serviceId: id, escrowId: result.id });
+
+      res.json({ success: true, message: 'Litige ouvert. Un administrateur va examiner votre dossier.', data: result });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur' });
+    }
+  }
+);
+
+// Consulter l'escrow d'une réservation
+router.get('/bookings/:id/escrow', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const escrow = await getEscrowForService('RENTAL', req.params.id);
+    res.json({ success: true, data: escrow });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
 
 export { router as rentalRouter };

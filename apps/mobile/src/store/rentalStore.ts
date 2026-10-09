@@ -140,7 +140,7 @@ export const useRentalStore = create<RentalState>((set) => ({
   },
 
   fetchMyBookings: async () => {
-    // TODO: endpoint à ajouter côté backend
-    set({ myBookings: [] });
+    const response = await api.get('/rentals/my-bookings');
+    set({ myBookings: response.data.data });
   },
 }));

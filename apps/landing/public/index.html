@@ -12,206 +12,317 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; color: #212121; line-height: 1.6; }
-        
+        :root {
+            --green: #1DB954;
+            --green-light: #2EE066;
+            --green-dark: #0E7A35;
+            --yellow: #FCD116;
+            --red: #CE1126;
+            --dark: #121A17;
+            --dark-2: #1C2621;
+            --dark-3: #0C1310;
+        }
+        body { font-family: 'Inter', sans-serif; color: #141A17; line-height: 1.6; background: #fff; }
+
+        /* Barre tricolore Cameroun */
+        .flag-bar { display: flex; height: 5px; }
+        .flag-bar > div { flex: 1; }
+
+        /* Navbar */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 32px; background: rgba(18,26,23,0.85); backdrop-filter: blur(10px);
+        }
+        .navbar .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 900; font-size: 22px; }
+        .navbar .links { display: flex; gap: 24px; }
+        .navbar .links a { color: rgba(255,255,255,0.8); text-decoration: none; font-size: 14px; font-weight: 500; }
+        .navbar .links a:hover { color: var(--green-light); }
+        @media (max-width: 700px) { .navbar .links { display: none; } }
+
         /* Hero */
+        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-22px) rotate(8deg); } }
+        @keyframes floatSlow { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(16px) rotate(-6deg); } }
         .hero {
             min-height: 100vh;
-            background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 50%, #1B5E20 100%);
+            background: linear-gradient(135deg, #0C1310 0%, #0E7A35 35%, #117A3D 50%, #0C1310 100%);
+            background-size: 300% 300%;
+            animation: gradientShift 14s ease infinite;
             display: flex; align-items: center; justify-content: center;
-            padding: 40px 20px; text-align: center; color: #fff;
+            padding: 100px 20px 60px; text-align: center; color: #fff;
             position: relative; overflow: hidden;
         }
-        .hero::before {
-            content: ''; position: absolute; top: -50%; right: -50%;
-            width: 100%; height: 200%; border-radius: 50%;
-            background: rgba(255,255,255,0.03);
-        }
-        .hero-content { max-width: 700px; position: relative; z-index: 1; }
-        .hero-logo { font-size: 72px; font-weight: 900; letter-spacing: 2px; margin-bottom: 8px; }
-        .hero-flag { font-size: 48px; margin-bottom: 16px; }
-        .hero-slogan { font-size: 24px; opacity: 0.9; margin-bottom: 32px; font-weight: 500; }
-        .hero-desc { font-size: 18px; opacity: 0.8; margin-bottom: 48px; line-height: 1.8; }
+        /* halos colorés drapeau */
+        .hero::before { content: ''; position: absolute; top: -30%; right: -20%; width: 55%; height: 120%; border-radius: 50%; background: radial-gradient(circle, rgba(252,209,22,0.22) 0%, transparent 70%); }
+        .hero::after { content: ''; position: absolute; bottom: -30%; left: -15%; width: 50%; height: 110%; border-radius: 50%; background: radial-gradient(circle, rgba(206,17,38,0.20) 0%, transparent 70%); }
+        /* emojis mobilité flottants */
+        .hero-float { position: absolute; font-size: 46px; opacity: 0.18; z-index: 0; }
+        .hero-float.f1 { top: 16%; left: 10%; animation: float 7s ease-in-out infinite; }
+        .hero-float.f2 { top: 24%; right: 12%; animation: floatSlow 9s ease-in-out infinite; }
+        .hero-float.f3 { bottom: 18%; left: 16%; animation: floatSlow 8s ease-in-out infinite; }
+        .hero-float.f4 { bottom: 22%; right: 14%; animation: float 6.5s ease-in-out infinite; }
+        .hero-content { max-width: 720px; position: relative; z-index: 1; }
+        .hero-logo-svg { margin-bottom: 20px; filter: drop-shadow(0 10px 30px rgba(252,209,22,0.3)); }
+        .hero-logo { font-size: 76px; font-weight: 900; letter-spacing: 2px; margin-bottom: 8px; text-shadow: 0 4px 30px rgba(0,0,0,0.3); }
+        .hero-logo .go { color: var(--yellow); }
+        .hero-slogan { font-size: 25px; opacity: 0.95; margin-bottom: 12px; font-weight: 700; }
+        .hero-flagbar { display: flex; width: 110px; height: 6px; border-radius: 3px; overflow: hidden; margin: 0 auto 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+        .hero-desc { font-size: 18px; opacity: 0.9; margin-bottom: 44px; line-height: 1.8; }
+        .hero-stats { display: flex; gap: 36px; justify-content: center; margin-bottom: 40px; flex-wrap: wrap; }
+        .hero-stat strong { display: block; font-size: 30px; font-weight: 900; color: var(--yellow); }
+        .hero-stat span { font-size: 13px; opacity: 0.8; }
         .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-        .btn {
-            padding: 16px 32px; border-radius: 12px; font-size: 16px;
-            font-weight: 700; text-decoration: none; transition: transform 0.2s;
-        }
+        .btn { padding: 16px 32px; border-radius: 12px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; display: inline-block; }
         .btn:hover { transform: translateY(-2px); }
-        .btn-primary { background: #FFB300; color: #1B5E20; }
-        .btn-secondary { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.3); }
-</style>
+        .btn-primary { background: var(--green); color: #fff; box-shadow: 0 8px 24px rgba(29,185,84,0.4); }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+
+        /* Sections */
+        .section { padding: 90px 20px; }
+        .section-title { font-size: 38px; font-weight: 800; margin-bottom: 12px; text-align: center; }
+        .section-sub { color: #6B7B70; font-size: 18px; margin-bottom: 56px; text-align: center; }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        .services-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 26px; }
+        .service-card { position: relative; background: #fff; padding: 34px 30px; border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); transition: transform 0.25s, box-shadow 0.25s; overflow: hidden; }
+        .service-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px; background: var(--svc, var(--green)); }
+        .service-card:hover { transform: translateY(-8px); box-shadow: 0 18px 40px rgba(0,0,0,0.12); }
+        .service-card:hover .service-icon { transform: scale(1.12) rotate(-6deg); }
+        .service-icon { width: 68px; height: 68px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 34px; margin-bottom: 18px; transition: transform 0.25s; }
+        .service-card h3 { font-size: 21px; margin-bottom: 8px; font-weight: 800; }
+        .service-card p { color: #6B7B70; font-size: 15px; margin-bottom: 14px; }
+        .service-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.3px; }
+
+        /* Section concepteur */
+        .maker { background: linear-gradient(160deg, #0C1310 0%, #0E7A35 55%, #0C1310 100%); background-size: 200% 200%; animation: gradientShift 18s ease infinite; color: #fff; }
+        .maker-card {
+            position: relative; max-width: 720px; margin: 0 auto;
+            background: rgba(255,255,255,0.07); backdrop-filter: blur(8px);
+            border: 1px solid rgba(252,209,22,0.25); border-radius: 28px;
+            padding: 54px 44px 48px; text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        /* liseré doré lumineux en haut de la carte */
+        .maker-card::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 70%; height: 3px; background: linear-gradient(90deg, transparent, var(--yellow), transparent); border-radius: 3px; }
+        .maker-avatar {
+            width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--green-light), var(--green));
+            display: flex; align-items: center; justify-content: center; font-size: 50px;
+            box-shadow: 0 12px 34px rgba(29,185,84,0.5);
+            border: 3px solid var(--yellow);
+        }
+        .maker-name { font-size: 27px; font-weight: 900; margin-bottom: 4px; letter-spacing: 0.3px; }
+        .maker-role { color: var(--yellow); font-weight: 700; font-size: 15px; margin-bottom: 18px; letter-spacing: 1px; text-transform: uppercase; }
+        .maker-bio { opacity: 0.82; font-size: 16px; line-height: 1.75; max-width: 560px; margin: 0 auto; }
+        .maker-tags { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+        .maker-tag { background: rgba(252,209,22,0.12); border: 1px solid rgba(252,209,22,0.35); color: var(--yellow); padding: 10px 20px; border-radius: 24px; font-size: 14px; font-weight: 700; transition: transform 0.2s, background 0.2s; }
+        .maker-tag:hover { transform: translateY(-3px); background: rgba(252,209,22,0.22); }
+
+        .why-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 36px; text-align: center; }
+        .why-item .emoji { font-size: 44px; margin-bottom: 12px; }
+        .why-item h3 { font-weight: 700; margin-bottom: 6px; }
+        .why-item p { color: #6B7B70; font-size: 14px; }
+
+        .driver-section { background: linear-gradient(160deg, var(--dark-3), var(--dark-2)); color: #fff; }
+        .driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; margin-bottom: 40px; }
+        .driver-card { background: rgba(255,255,255,0.06); padding: 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
+
+        .store-btn { display: inline-flex; align-items: center; gap: 12px; background: var(--dark); color: #fff; padding: 14px 26px; border-radius: 12px; text-decoration: none; }
+        .store-btn small { opacity: 0.7; display: block; font-size: 11px; }
+        .store-btn strong { font-size: 16px; }
+
+        footer { position: relative; padding: 0 20px 40px; background: linear-gradient(135deg, #0C1310 0%, #0E7A35 50%, #0C1310 100%); background-size: 200% 200%; animation: gradientShift 16s ease infinite; color: rgba(255,255,255,0.75); text-align: center; }
+        footer .brand { font-size: 30px; font-weight: 900; color: #fff; margin-bottom: 6px; letter-spacing: 1px; }
+        footer .brand .go { color: var(--yellow); }
+        .footer-flag { position: relative; display: flex; width: 100%; height: 10px; overflow: hidden; margin: 0 0 32px; }
+        .footer-flag::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); background-size: 200% 100%; animation: shine 3s linear infinite; }
+        @keyframes shine { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .footer-socials { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
+        .footer-socials a { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); display: inline-flex; align-items: center; justify-content: center; font-size: 20px; text-decoration: none; transition: transform 0.2s, background 0.2s; }
+        .footer-socials a:hover { transform: translateY(-4px) scale(1.1); background: var(--yellow); }
+    </style>
 </head>
 <body>
+    <!-- Barre tricolore haut -->
+    <div class="flag-bar"><div style="background:var(--green)"></div><div style="background:var(--red)"></div><div style="background:var(--yellow)"></div></div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="brand">
+            <svg width="34" height="34" viewBox="0 0 100 100"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2EE066"/><stop offset="1" stop-color="#1DB954"/></linearGradient></defs><circle cx="50" cy="50" r="48" fill="url(#g1)"/><path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56" stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="50" y="40" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">237</text><text x="50" y="82" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text></svg>
+            237GO
+        </div>
+        <div class="links">
+            <a href="#services">Services</a>
+            <a href="#why">Pourquoi nous</a>
+            <a href="#driver">Chauffeurs</a>
+            <a href="#download">Télécharger</a>
+        </div>
+    </nav>
+
     <!-- Hero -->
     <section class="hero">
+        <span class="hero-float f1">🛵</span>
+        <span class="hero-float f2">🚚</span>
+        <span class="hero-float f3">🚐</span>
+        <span class="hero-float f4">🛒</span>
         <div class="hero-content">
-            <div class="hero-flag">🇨🇲</div>
-            <h1 class="hero-logo">237GO</h1>
+            <div class="hero-logo-svg">
+                <svg width="120" height="120" viewBox="0 0 100 100"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2EE066"/><stop offset="1" stop-color="#1DB954"/></linearGradient></defs><circle cx="50" cy="50" r="48" fill="url(#g2)"/><path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56" stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="50" y="40" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">237</text><text x="50" y="82" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text></svg>
+            </div>
+            <h1 class="hero-logo">237<span class="go">GO</span></h1>
             <p class="hero-slogan">On bouge ensemble</p>
+            <div class="hero-flagbar"><div style="background:var(--green)"></div><div style="background:var(--red)"></div><div style="background:var(--yellow)"></div></div>
             <p class="hero-desc">
-                La super-app de mobilité camerounaise. Transport, livraison, 
+                La super-app de mobilité camerounaise. Transport, livraison,
                 covoiturage inter-villes, marché à domicile — tout dans une seule application.
             </p>
+            <div class="hero-stats">
+                <div class="hero-stat"><strong>6</strong><span>services</span></div>
+                <div class="hero-stat"><strong>3</strong><span>langues (fr · en · pidgin)</span></div>
+                <div class="hero-stat"><strong>100%</strong><span>Mobile Money</span></div>
+            </div>
             <div class="hero-buttons">
                 <a href="#download" class="btn btn-primary">📱 Télécharger l'app</a>
-                <a href="#services" class="btn btn-secondary">Découvrir →</a>
+                <a href="#services" class="btn btn-secondary">Découvrir nos services →</a>
             </div>
         </div>
     </section>
 
     <!-- Services -->
-    <section id="services" style="padding: 80px 20px; background: #f9fafb;">
-        <div style="max-width: 1100px; margin: 0 auto; text-align: center;">
-            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">7 services, 1 seule app</h2>
-            <p style="color: #757575; font-size: 18px; margin-bottom: 48px;">Tout ce dont vous avez besoin pour vous déplacer au Cameroun</p>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; text-align: left;">
-                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #1B5E20;">
-                    <span style="font-size: 36px;">🚗</span>
-                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Ride</h3>
-                    <p style="color: #757575;">Transport à la demande : moto-taxi, voiture économique, confort ou VIP. Prix transparent, pas de surprise.</p>
+    <section id="services" class="section" style="background:#F4F7F4;">
+        <div class="container">
+            <h2 class="section-title">6 services, 1 seule app</h2>
+            <p class="section-sub">Tout ce dont vous avez besoin pour vous déplacer au Cameroun</p>
+            <div class="services-grid">
+                <div class="service-card" style="--svc:#1DB954;">
+                    <div class="service-icon" style="background:#1DB95418;">🛵</div>
+                    <h3>GO Ride</h3>
+                    <p>Moto-taxi, voiture éco, confort ou VIP. Arrivez vite, payez juste.</p>
+                    <span class="service-badge" style="background:#1DB95418;color:#0E7A35;">💬 Négociez votre prix</span>
                 </div>
-                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #E65100;">
-                    <span style="font-size: 36px;">📦</span>
-                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Deliver</h3>
-                    <p style="color: #757575;">Livraison de colis, documents, repas. Suivi en temps réel du point A au point B.</p>
+                <div class="service-card" style="--svc:#E65100;">
+                    <div class="service-icon" style="background:#E6510018;">🚚</div>
+                    <h3>GO Deliver</h3>
+                    <p>Colis, documents, repas livrés en un éclair. Suivi en temps réel.</p>
+                    <span class="service-badge" style="background:#E6510018;color:#E65100;">📍 Suivi live</span>
                 </div>
-                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #4A148C;">
-                    <span style="font-size: 36px;">🛒</span>
-                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Market</h3>
-                    <p style="color: #757575;">Commandez au marché sans vous déplacer. Fruits, légumes, produits locaux livrés chez vous.</p>
+                <div class="service-card" style="--svc:#7B1FA2;">
+                    <div class="service-icon" style="background:#7B1FA218;">🥬</div>
+                    <h3>GO Market</h3>
+                    <p>Le marché livré chez vous. Fruits, légumes et produits locaux frais.</p>
+                    <span class="service-badge" style="background:#7B1FA218;color:#7B1FA2;">🏪 Marchands vérifiés</span>
                 </div>
-                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #01579B;">
-                    <span style="font-size: 36px;">🚌</span>
-                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Share</h3>
-                    <p style="color: #757575;">Covoiturage inter-villes. Douala ↔ Yaoundé, Bafoussam, Kribi... Moins cher, plus sûr.</p>
+                <div class="service-card" style="--svc:#0277BD;">
+                    <div class="service-icon" style="background:#0277BD18;">🚐</div>
+                    <h3>GO Share</h3>
+                    <p>Covoiturage inter-villes : Douala ↔ Yaoundé, Bafoussam, Kribi...</p>
+                    <span class="service-badge" style="background:#0277BD18;color:#0277BD;">💸 Jusqu'à -60%</span>
                 </div>
-                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #BF360C;">
-                    <span style="font-size: 36px;">🔑</span>
-                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Rent</h3>
-                    <p style="color: #757575;">Location de véhicules avec ou sans chauffeur. Du scooter au SUV premium.</p>
+                <div class="service-card" style="--svc:#BF360C;">
+                    <div class="service-icon" style="background:#BF360C18;">🚙</div>
+                    <h3>GO Rent</h3>
+                    <p>Location de véhicules avec ou sans chauffeur. Du scooter au SUV.</p>
+                    <span class="service-badge" style="background:#BF360C18;color:#BF360C;">🔑 Flexible</span>
                 </div>
-                <div style="background: #fff; padding: 32px; border-radius: 16px; border-left: 4px solid #263238;">
-                    <span style="font-size: 36px;">💼</span>
-                    <h3 style="font-size: 20px; margin: 12px 0 8px; font-weight: 700;">GO Business</h3>
-                    <p style="color: #757575;">Gestion des déplacements entreprise. Facturation centralisée, rapports, limites budgétaires.</p>
+                <div class="service-card" style="--svc:#00838F;">
+                    <div class="service-icon" style="background:#00838F18;">🏢</div>
+                    <h3>GO Business</h3>
+                    <p>Déplacements entreprise, facturation centralisée, budgets par employé.</p>
+                    <span class="service-badge" style="background:#00838F18;color:#00838F;">📊 Pour les pros</span>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Pourquoi 237GO -->
-    <section style="padding: 80px 20px; background: #fff;">
-        <div style="max-width: 900px; margin: 0 auto; text-align: center;">
-            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">Pourquoi 237GO ?</h2>
-            <p style="color: #757575; font-size: 18px; margin-bottom: 48px;">Pensé par et pour les Camerounais</p>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 32px; text-align: center;">
-                <div>
-                    <div style="font-size: 48px; margin-bottom: 12px;">💰</div>
-                    <h3 style="font-weight: 700; margin-bottom: 8px;">Paiement 100% local</h3>
-                    <p style="color: #757575; font-size: 14px;">Orange Money, MTN MoMo, Express Union, Cash. Payez comme vous voulez.</p>
-                </div>
-                <div>
-                    <div style="font-size: 48px; margin-bottom: 12px;">📱</div>
-                    <h3 style="font-weight: 700; margin-bottom: 8px;">Fonctionne en 2G/3G</h3>
-                    <p style="color: #757575; font-size: 14px;">App ultra-légère, optimisée pour les réseaux camerounais.</p>
-                </div>
-                <div>
-                    <div style="font-size: 48px; margin-bottom: 12px;">💬</div>
-                    <h3 style="font-weight: 700; margin-bottom: 8px;">Négociez le prix</h3>
-                    <p style="color: #757575; font-size: 14px;">Proposez votre prix. Comme au marché, mais sur l'app.</p>
-                </div>
-                <div>
-                    <div style="font-size: 48px; margin-bottom: 12px;">⭐</div>
-                    <h3 style="font-weight: 700; margin-bottom: 8px;">Points de fidélité</h3>
-                    <p style="color: #757575; font-size: 14px;">Gagnez des points à chaque course. Échangez contre du crédit gratuit.</p>
-                </div>
-                <div>
-                    <div style="font-size: 48px; margin-bottom: 12px;">🚨</div>
-                    <h3 style="font-weight: 700; margin-bottom: 8px;">Sécurité maximale</h3>
-                    <p style="color: #757575; font-size: 14px;">Bouton SOS, partage de trajet, chauffeurs vérifiés (CNI + casier).</p>
-                </div>
-                <div>
-                    <div style="font-size: 48px; margin-bottom: 12px;">🌍</div>
-                    <h3 style="font-weight: 700; margin-bottom: 8px;">Multilingue</h3>
-                    <p style="color: #757575; font-size: 14px;">Français, English, Pidgin. Pour tous les Camerounais.</p>
-                </div>
+    <section id="why" class="section" style="background:#fff;">
+        <div class="container">
+            <h2 class="section-title">Pourquoi 237GO ?</h2>
+            <p class="section-sub">Pensé par et pour les Camerounais</p>
+            <div class="why-grid">
+                <div class="why-item"><div class="emoji">💰</div><h3>Paiement 100% local</h3><p>Orange Money, MTN MoMo, Express Union, Cash. Payez comme vous voulez.</p></div>
+                <div class="why-item"><div class="emoji">🔒</div><h3>Paiement protégé</h3><p>Votre argent est bloqué en séquestre et libéré seulement quand le service est confirmé.</p></div>
+                <div class="why-item"><div class="emoji">💬</div><h3>Négociez le prix</h3><p>Proposez votre prix. Comme au marché, mais sur l'app.</p></div>
+                <div class="why-item"><div class="emoji">⭐</div><h3>Points de fidélité</h3><p>Gagnez des points à chaque course. Échangez-les contre du crédit gratuit.</p></div>
+                <div class="why-item"><div class="emoji">🚨</div><h3>Sécurité maximale</h3><p>Bouton SOS, partage de trajet, chauffeurs vérifiés (CNI + permis).</p></div>
+                <div class="why-item"><div class="emoji">🌍</div><h3>Multilingue</h3><p>Français, English, Pidgin. Pour tous les Camerounais.</p></div>
             </div>
         </div>
     </section>
 
     <!-- Chauffeurs -->
-    <section style="padding: 80px 20px; background: #1B5E20; color: #fff;">
-        <div style="max-width: 800px; margin: 0 auto; text-align: center;">
-            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">🚗 Devenez chauffeur 237GO</h2>
-            <p style="opacity: 0.8; font-size: 18px; margin-bottom: 32px;">Gagnez plus, avec plus d'avantages</p>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; margin-bottom: 40px;">
-                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">💵</div>
-                    <p style="font-weight: 600;">Revenus quotidiens</p>
-                    <p style="opacity: 0.7; font-size: 13px;">Pas de commission abusive</p>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">🏥</div>
-                    <p style="font-weight: 600;">Assurance santé</p>
-                    <p style="opacity: 0.7; font-size: 13px;">Couverture partenaire</p>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">🏦</div>
-                    <p style="font-weight: 600;">Micro-crédit</p>
-                    <p style="opacity: 0.7; font-size: 13px;">Pour acheter votre véhicule</p>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 24px; border-radius: 12px;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">📚</div>
-                    <p style="font-weight: 600;">Formation gratuite</p>
-                    <p style="opacity: 0.7; font-size: 13px;">Conduite et service client</p>
-                </div>
+    <section id="driver" class="section driver-section">
+        <div class="container" style="max-width:800px; text-align:center;">
+            <h2 class="section-title" style="color:#fff;">🚗 Devenez chauffeur 237GO</h2>
+            <p class="section-sub" style="color:rgba(255,255,255,0.7);">Gagnez plus, avec plus d'avantages</p>
+            <div class="driver-grid">
+                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">💵</div><p style="font-weight:600;">Revenus quotidiens</p><p style="opacity:0.6;font-size:13px;">Commission juste</p></div>
+                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">🏥</div><p style="font-weight:600;">Assurance santé</p><p style="opacity:0.6;font-size:13px;">Couverture partenaire</p></div>
+                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">🏦</div><p style="font-weight:600;">Micro-crédit</p><p style="opacity:0.6;font-size:13px;">Pour votre véhicule</p></div>
+                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">📚</div><p style="font-weight:600;">Formation gratuite</p><p style="opacity:0.6;font-size:13px;">Conduite & service client</p></div>
             </div>
-            
-            <a href="#download" class="btn btn-primary" style="display: inline-block;">Rejoindre 237GO →</a>
+            <a href="#download" class="btn btn-primary">Rejoindre 237GO →</a>
         </div>
     </section>
 
     <!-- Download -->
-    <section id="download" style="padding: 80px 20px; background: #f9fafb; text-align: center;">
-        <div style="max-width: 600px; margin: 0 auto;">
-            <h2 style="font-size: 36px; font-weight: 800; margin-bottom: 12px;">Téléchargez 237GO</h2>
-            <p style="color: #757575; font-size: 18px; margin-bottom: 32px;">Disponible bientôt sur Android et iOS</p>
-            
-            <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px;">
-                <a href="#" style="display: inline-flex; align-items: center; gap: 12px; background: #212121; color: #fff; padding: 16px 28px; border-radius: 12px; text-decoration: none;">
-                    <span style="font-size: 28px;">▶️</span>
-                    <span><small style="opacity: 0.7; display: block;">Bientôt sur</small><strong>Google Play</strong></span>
-                </a>
-                <a href="#" style="display: inline-flex; align-items: center; gap: 12px; background: #212121; color: #fff; padding: 16px 28px; border-radius: 12px; text-decoration: none;">
-                    <span style="font-size: 28px;">🍎</span>
-                    <span><small style="opacity: 0.7; display: block;">Bientôt sur</small><strong>App Store</strong></span>
-                </a>
+    <section id="download" class="section" style="background:#F4F7F4; text-align:center;">
+        <div class="container" style="max-width:600px;">
+            <h2 class="section-title">Téléchargez 237GO</h2>
+            <p class="section-sub">Disponible bientôt sur Android et iOS</p>
+            <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-bottom:32px;">
+                <a href="#" class="store-btn"><span style="font-size:26px;">▶️</span><span><small>Bientôt sur</small><strong>Google Play</strong></span></a>
+                <a href="#" class="store-btn"><span style="font-size:26px;">🍎</span><span><small>Bientôt sur</small><strong>App Store</strong></span></a>
             </div>
-
-            <p style="color: #757575; font-size: 14px;">Ou préinscrivez-vous pour être notifié du lancement :</p>
-            <form style="display: flex; gap: 8px; max-width: 400px; margin: 16px auto 0;" onsubmit="event.preventDefault(); alert('Merci ! Nous vous contacterons au lancement.');">
-                <input type="tel" placeholder="Votre numéro (6XXXXXXXX)" style="flex: 1; padding: 14px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 16px;" maxlength="9">
-                <button type="submit" style="padding: 14px 24px; background: #1B5E20; color: #fff; border-radius: 8px; font-weight: 700; font-size: 14px; border: none; cursor: pointer;">OK</button>
+            <p style="color:#6B7B70; font-size:14px;">Ou préinscrivez-vous pour être notifié du lancement :</p>
+            <form style="display:flex; gap:8px; max-width:400px; margin:16px auto 0;" onsubmit="event.preventDefault(); this.reset(); alert('Merci ! Nous vous contacterons au lancement. 🇨🇲');">
+                <input type="tel" placeholder="Votre numéro (6XXXXXXXX)" style="flex:1; padding:14px; border:1px solid #E2EAE4; border-radius:10px; font-size:16px;" maxlength="9" required>
+                <button type="submit" style="padding:14px 24px; background:var(--green); color:#fff; border-radius:10px; font-weight:700; font-size:14px; border:none; cursor:pointer;">OK</button>
             </form>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer style="padding: 40px 20px; background: #212121; color: rgba(255,255,255,0.7); text-align: center;">
-        <div style="max-width: 800px; margin: 0 auto;">
-            <p style="font-size: 24px; font-weight: 900; color: #fff; margin-bottom: 8px;">237GO</p>
-            <p style="margin-bottom: 24px;">On bouge ensemble 🇨🇲</p>
-            <div style="display: flex; gap: 24px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
-                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">Facebook</a>
-                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">Instagram</a>
-                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">Twitter</a>
-                <a href="#" style="color: rgba(255,255,255,0.7); text-decoration: none;">WhatsApp</a>
+    <!-- Concepteur -->
+    <section class="section maker">
+        <div class="container">
+            <h2 class="section-title" style="color:#fff;">Conçu & développé au Cameroun 🇨🇲</h2>
+            <p class="section-sub" style="color:rgba(255,255,255,0.7);">Une solution 100% locale, pensée dans les moindres détails</p>
+            <div class="maker-card">
+                <div class="maker-avatar">👨🏾‍💻</div>
+                <h3 class="maker-name">Germain Gildas AFOUBA</h3>
+                <p class="maker-role">Concepteur & Développeur</p>
+                <p class="maker-bio">
+                    De l'idée à l'application : architecture, développement, design et intégration
+                    de l'intelligence artificielle. Chaque fonctionnalité de 237GO a été pensée
+                    pour les réalités camerounaises. 🇨🇲
+                </p>
+                <div class="maker-tags">
+                    <span class="maker-tag">🎯 Concepteur</span>
+                    <span class="maker-tag">💻 Développeur Full-Stack</span>
+                    <span class="maker-tag">🤖 IA appliquée</span>
+                </div>
             </div>
-            <p style="font-size: 12px; opacity: 0.5;">© 2026 237GO. Tous droits réservés. Made with ❤️ in Cameroun.</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-flag"><div style="flex:1;background:var(--green)"></div><div style="flex:1;background:var(--red)"></div><div style="flex:1;background:var(--yellow)"></div></div>
+        <div class="container" style="max-width:800px; padding-top:16px;">
+            <p class="brand">237<span class="go">GO</span></p>
+            <p style="margin-bottom:20px; font-size:16px;">On bouge ensemble 🇨🇲</p>
+            <div class="footer-socials">
+                <a href="#" title="Facebook">📘</a>
+                <a href="#" title="Instagram">📸</a>
+                <a href="#" title="X / Twitter">🐦</a>
+                <a href="#" title="WhatsApp">💬</a>
+                <a href="#" title="TikTok">🎵</a>
+            </div>
+            <p style="font-size:14px; opacity:0.85; margin-bottom:6px;">Conçu & développé par <strong style="color:#fff;">Germain Gildas AFOUBA</strong></p>
+            <p style="font-size:13px; opacity:0.7; margin-bottom:20px;">🎯 Concepteur · 💻 Développeur Full-Stack · 🤖 IA appliquée</p>
+            <p style="font-size:12px; opacity:0.55;">© 2026 237GO. Tous droits réservés. Made with ❤️ au Cameroun 🇨🇲</p>
         </div>
     </footer>
 </body>

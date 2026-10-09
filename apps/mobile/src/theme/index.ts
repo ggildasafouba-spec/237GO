@@ -1,20 +1,36 @@
 export const colors = {
-  primary: '#1B5E20',        // Vert foncé (Cameroun)
-  primaryLight: '#4CAF50',   // Vert clair
-  secondary: '#FFB300',      // Or/Jaune (énergie)
-  secondaryDark: '#FF8F00',
-  accent: '#E65100',         // Orange accent
-  background: '#F5F5F5',
+  // Vert Cameroun en couleur d'accent, sur base sombre élégante
+  primary: '#1DB954',        // Vert vif (accent principal)
+  primaryLight: '#2EE066',   // Vert clair
+  primaryDark: '#0E7A35',    // Vert foncé
+  secondary: '#FCD116',      // Jaune (étoile du drapeau)
+  secondaryDark: '#E6B800',
+  accent: '#CE1126',         // Rouge Cameroun
+  accentDark: '#A50E1F',
+
+  // Base sombre (Option 2 : anthracite premium)
+  dark: '#121A17',           // Fond sombre principal (vert-nuit)
+  darkElevated: '#1C2621',   // Surfaces sombres surélevées
+  darkBorder: '#2C3A33',
+
+  background: '#F4F7F4',     // Fond clair du contenu
   surface: '#FFFFFF',
-  text: '#212121',
-  textSecondary: '#757575',
-  textLight: '#BDBDBD',
-  error: '#D32F2F',
-  success: '#388E3C',
+  text: '#141A17',
+  textSecondary: '#6B7B70',
+  textLight: '#B0BDB4',
+  error: '#CE1126',
+  success: '#1DB954',
   warning: '#F57C00',
   info: '#1976D2',
-  border: '#E0E0E0',
+  border: '#E2EAE4',
   disabled: '#9E9E9E',
+};
+
+// Dégradés
+export const gradients = {
+  flag: ['#1DB954', '#FCD116', '#CE1126'] as const,          // tricolore
+  dark: ['#0C1310', '#1C2621', '#121A17'] as const,          // anthracite premium (Option 2)
+  green: ['#0E7A35', '#1DB954'] as const,                    // vert
 };
 
 export const spacing = {

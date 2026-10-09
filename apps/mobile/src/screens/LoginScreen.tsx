@@ -11,8 +11,10 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/authStore';
-import { colors, spacing, typography } from '../theme';
+import Logo from '../components/Logo';
+import { colors, spacing, typography, gradients } from '../theme';
 
 export default function LoginScreen({ navigation }: { navigation: any }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -21,6 +23,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { login, register } = useAuthStore();
 
@@ -56,6 +59,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   };
 
   return (
+    <LinearGradient colors={gradients.dark} style={{ flex: 1 }}>
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -63,8 +67,17 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Logo */}
         <View style={styles.logoContainer}>
+          <Logo size={110} variant="light" />
           <Text style={styles.logo}>237GO</Text>
           <Text style={styles.slogan}>On bouge ensemble 🚀</Text>
+          {/* Barre aux couleurs du Cameroun : vert - rouge - jaune (avec étoile) */}
+          <View style={styles.flagBar}>
+            <View style={[styles.flagStripe, { backgroundColor: colors.primary }]} />
+            <View style={[styles.flagStripe, { backgroundColor: colors.accent }]}>
+              <Text style={styles.flagStar}>★</Text>
+            </View>
+            <View style={[styles.flagStripe, { backgroundColor: colors.secondary }]} />
+          </View>
         </View>
 
         {/* Formulaire */}
@@ -108,15 +121,24 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             />
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholderTextColor={colors.textLight}
-            accessibilityLabel="Mot de passe"
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Mot de passe"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              placeholderTextColor={colors.textLight}
+              accessibilityLabel="Mot de passe"
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+              accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.submitButton, isLoading && styles.buttonDisabled]}
@@ -134,6 +156,17 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             )}
           </TouchableOpacity>
 
+          {isLogin && (
+            <TouchableOpacity
+              style={styles.forgotButton}
+              onPress={() => navigation.navigate('ForgotPassword')}
+              accessibilityRole="link"
+              accessibilityLabel="Mot de passe oublié"
+            >
+              <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.switchButton}
             onPress={() => setIsLogin(!isLogin)}
@@ -150,13 +183,14 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.primary,
+    backgroundColor: 'transparent',
   },
   scrollContent: {
     flexGrow: 1,
@@ -166,11 +200,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.xxl,
   },
+  logoFlag: {
+    fontSize: 40,
+    marginBottom: spacing.sm,
+  },
   logo: {
-    fontSize: 48,
+    fontSize: 52,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 2,
+  },
+  flagBar: {
+    flexDirection: 'row',
+    width: 90,
+    height: 30,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  flagStripe: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  flagStar: {
+    color: colors.secondary,
+    fontSize: 16,
   },
   slogan: {
     fontSize: typography.md,
@@ -226,6 +281,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: spacing.md,
+    fontSize: typography.md,
+  },
+  eyeButton: {
+    padding: spacing.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeIcon: {
+    fontSize: 18,
+  },
   submitButton: {
     backgroundColor: colors.primary,
     padding: spacing.md + 2,
@@ -240,6 +317,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: typography.md,
     fontWeight: '700',
+  },
+  forgotButton: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  forgotText: {
+    color: colors.primary,
+    fontSize: typography.sm,
+    fontWeight: '600',
   },
   switchButton: {
     alignItems: 'center',

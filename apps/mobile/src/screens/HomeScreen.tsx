@@ -7,9 +7,11 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/authStore';
 import { useWalletStore } from '../store/walletStore';
-import { colors, spacing, typography } from '../theme';
+import Logo from '../components/Logo';
+import { colors, spacing, typography, gradients } from '../theme';
 
 const { width } = Dimensions.get('window');
 
@@ -97,56 +99,77 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>{getGreeting()},</Text>
-          <Text style={styles.userName}>{user?.firstName} 👋</Text>
+      {/* Header en dégradé sombre premium */}
+      <LinearGradient
+        colors={gradients.dark}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Logo size={44} variant="light" />
+            <View style={{ marginLeft: spacing.sm }}>
+              <Text style={styles.brand}>237GO</Text>
+              <Text style={styles.greeting}>{getGreeting()}, {user?.firstName} 👋</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('Profile')}
+            accessibilityLabel="Voir le profil"
+            accessibilityRole="button"
+          >
+            <Text style={styles.profileInitial}>
+              {user?.firstName?.[0]}{user?.lastName?.[0]}
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Wallet Card dans le header */}
         <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => navigation.navigate('Profile')}
-          accessibilityLabel="Voir le profil"
+          style={styles.walletCard}
+          onPress={() => navigation.navigate('Wallet')}
+          accessibilityLabel={`Solde: ${balance} francs CFA. ${loyaltyPoints} points de fidélité`}
           accessibilityRole="button"
         >
-          <Text style={styles.profileInitial}>
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
-          </Text>
+          <View style={styles.walletTop}>
+            <Text style={styles.walletLabel}>💰 Mon portefeuille</Text>
+            <View style={styles.loyaltyBadge}>
+              <Text style={styles.loyaltyText}>⭐ {loyaltyPoints} pts</Text>
+            </View>
+          </View>
+          <Text style={styles.walletBalance}>{balance.toLocaleString()} XAF</Text>
+          <View style={styles.walletBottom}>
+            <Text style={styles.walletAction}>Recharger →</Text>
+          </View>
         </TouchableOpacity>
+      </LinearGradient>
+
+      {/* Barre aux couleurs du Cameroun : vert - rouge - jaune */}
+      <View style={styles.flagBar}>
+        <View style={[styles.flagStripe, { backgroundColor: colors.primary }]} />
+        <View style={[styles.flagStripe, { backgroundColor: colors.accent }]} />
+        <View style={[styles.flagStripe, { backgroundColor: colors.secondary }]} />
       </View>
 
-      {/* Wallet Card */}
-      <TouchableOpacity
-        style={styles.walletCard}
-        onPress={() => navigation.navigate('Wallet')}
-        accessibilityLabel={`Solde: ${balance} francs CFA. ${loyaltyPoints} points de fidélité`}
-        accessibilityRole="button"
-      >
-        <View style={styles.walletTop}>
-          <Text style={styles.walletLabel}>Mon portefeuille</Text>
-          <Text style={styles.walletBalance}>{balance.toLocaleString()} XAF</Text>
-        </View>
-        <View style={styles.walletBottom}>
-          <View style={styles.loyaltyBadge}>
-            <Text style={styles.loyaltyText}>⭐ {loyaltyPoints} pts</Text>
-          </View>
-          <Text style={styles.walletAction}>Recharger →</Text>
-        </View>
-      </TouchableOpacity>
-
       {/* Services */}
-      <Text style={styles.sectionTitle}>Services</Text>
+      <View style={styles.body}>
+      <Text style={styles.sectionTitle}>Nos services</Text>
       <View style={styles.servicesGrid}>
         {services.map((service) => (
           <TouchableOpacity
             key={service.id}
-            style={[styles.serviceCard, { borderLeftColor: service.color }]}
+            style={styles.serviceCard}
             onPress={() => navigation.navigate(service.screen)}
             accessibilityLabel={`${service.name}: ${service.description}`}
             accessibilityRole="button"
           >
-            <Text style={styles.serviceIcon}>{service.icon}</Text>
+            <View style={[styles.serviceIconWrap, { backgroundColor: service.color + '18' }]}>
+              <Text style={styles.serviceIcon}>{service.icon}</Text>
+            </View>
             <Text style={styles.serviceName}>{service.name}</Text>
             <Text style={styles.serviceDesc}>{service.description}</Text>
           </TouchableOpacity>
@@ -193,9 +216,21 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <Text style={styles.quickActionText}>Marché</Text>
         </TouchableOpacity>
       </View>
+      </View>
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
+
+    {/* Bouton flottant Assistant IA */}
+    <TouchableOpacity
+      style={styles.aiFab}
+      onPress={() => navigation.navigate('Assistant')}
+      accessibilityLabel="Ouvrir l'assistant 237GO"
+      accessibilityRole="button"
+    >
+      <Text style={styles.aiFabIcon}>🤖</Text>
+    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -204,22 +239,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  headerGradient: {
+    paddingTop: spacing.xl + 20,
+    paddingBottom: spacing.lg,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl + 20,
     paddingBottom: spacing.md,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  brand: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 1,
   },
   greeting: {
     fontSize: typography.sm,
-    color: colors.textSecondary,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
   },
-  userName: {
-    fontSize: typography.xl,
-    fontWeight: '700',
-    color: colors.text,
+  flagBar: {
+    flexDirection: 'row',
+    height: 5,
+    marginBottom: spacing.sm,
+  },
+  flagStripe: {
+    flex: 1,
+    height: 5,
+  },
+  body: {
+    paddingBottom: spacing.lg,
   },
   profileButton: {
     width: 48,
@@ -229,6 +287,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  aiFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  aiFabIcon: {
+    fontSize: 28,
+  },
   profileInitial: {
     color: '#fff',
     fontSize: typography.md,
@@ -236,56 +313,57 @@ const styles = StyleSheet.create({
   },
   walletCard: {
     marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     padding: spacing.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 16,
-    elevation: 4,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   walletTop: {
-    marginBottom: spacing.md,
-  },
-  walletLabel: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: typography.sm,
-  },
-  walletBalance: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  walletBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  walletLabel: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: typography.sm,
+    fontWeight: '600',
+  },
+  walletBalance: {
+    color: '#fff',
+    fontSize: 30,
+    fontWeight: '900',
+    marginVertical: 4,
+  },
+  walletBottom: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   loyaltyBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: colors.secondary,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
   loyaltyText: {
-    color: '#fff',
+    color: colors.primaryDark,
     fontSize: typography.xs,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   walletAction: {
     color: '#fff',
     fontSize: typography.sm,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   sectionTitle: {
     fontSize: typography.lg,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
     marginHorizontal: spacing.lg,
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
   servicesGrid: {
@@ -298,21 +376,27 @@ const styles = StyleSheet.create({
     margin: spacing.xs,
     padding: spacing.md,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    borderLeftWidth: 4,
+    borderRadius: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  serviceIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   serviceIcon: {
-    fontSize: 28,
-    marginBottom: spacing.xs,
+    fontSize: 26,
   },
   serviceName: {
     fontSize: typography.md,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
   },
   serviceDesc: {

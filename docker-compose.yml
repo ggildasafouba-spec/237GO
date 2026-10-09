@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Base de données PostgreSQL
   postgres:
@@ -11,7 +9,7 @@ services:
       POSTGRES_USER: go237user
       POSTGRES_PASSWORD: ${DB_PASSWORD:-go237secure2026}
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +26,7 @@ services:
     container_name: 237go-api
     restart: always
     ports:
-      - "3000:3000"
+      - "3002:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -66,7 +64,7 @@ services:
     container_name: 237go-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
 

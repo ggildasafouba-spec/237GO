@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../config/api';
 import { connectSocket, disconnectSocket } from '../config/socket';
+import { registerForPushNotifications } from '../config/notifications';
 
 interface User {
   id: string;
@@ -45,6 +46,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await AsyncStorage.setItem('token', token);
     await AsyncStorage.setItem('user', JSON.stringify(user));
     await connectSocket();
+    registerForPushNotifications();
 
     set({ user, token, isAuthenticated: true });
   },
@@ -56,6 +58,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await AsyncStorage.setItem('token', token);
     await AsyncStorage.setItem('user', JSON.stringify(user));
     await connectSocket();
+    registerForPushNotifications();
 
     set({ user, token, isAuthenticated: true });
   },
@@ -76,6 +79,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (token && userStr) {
         const user = JSON.parse(userStr);
         await connectSocket();
+        registerForPushNotifications();
         set({ user, token, isAuthenticated: true, isLoading: false });
       } else {
         set({ isLoading: false });
