@@ -9,7 +9,7 @@ interface WalletState {
   isLoading: boolean;
 
   fetchBalance: () => Promise<void>;
-  deposit: (amount: number, paymentMethod: string, phone?: string) => Promise<{ newBalance: number; bonus: number }>;
+  deposit: (amount: number, paymentMethod: string, phone?: string) => Promise<{ newBalance: number; bonus: number; paymentUrl?: string | null }>;
   withdraw: (amount: number, paymentMethod: string, phone: string) => Promise<void>;
   fetchLoyalty: () => Promise<void>;
   redeemPoints: (points: number) => Promise<void>;
@@ -32,9 +32,11 @@ export const useWalletStore = create<WalletState>((set) => ({
     set({ isLoading: true });
     try {
       const response = await api.post('/wallet/deposit', { amount, paymentMethod, phone });
-      const { newBalance, bonus } = response.data.data;
-      set({ balance: newBalance, isLoading: false });
-      return { newBalance, bonus };
+      const { newBalance, bonus, paymentUrl } = response.data.data;
+      // On ne met PAS à jour le solde ici : il ne sera crédité qu'après
+      // confirmation du paiement par le webhook NotchPay.
+      set({ isLoading: false });
+      return { newBalance, bonus, paymentUrl };
     } catch (error) {
       set({ isLoading: false });
       throw error;

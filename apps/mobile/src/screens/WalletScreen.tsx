@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useWalletStore } from '../store/walletStore';
 import { colors, spacing, typography } from '../theme';
@@ -55,11 +56,38 @@ export default function WalletScreen() {
     setIsProcessing(true);
     try {
       const result = await deposit(numAmount, selectedProvider, phone);
-      Alert.alert(
-        '✅ Recharge réussie !',
-        `${numAmount.toLocaleString()} XAF ajoutés${result.bonus > 0 ? ` + ${result.bonus.toLocaleString()} XAF bonus 🎉` : ''}`
-      );
-      setAmount('');
+
+      if (result.paymentUrl) {
+        // Ouvrir la page de paiement sécurisée (NotchPay) : l'utilisateur paie
+        // par MoMo / Orange. Le portefeuille est crédité ensuite via le webhook.
+        setAmount('');
+        Alert.alert(
+          'Finalisez votre paiement',
+          `Vous allez être redirigé vers la page de paiement pour régler ${numAmount.toLocaleString()} XAF. Votre solde sera crédité après confirmation.`,
+          [
+            {
+              text: 'Continuer',
+              onPress: async () => {
+                const ok = await Linking.canOpenURL(result.paymentUrl!);
+                if (ok) {
+                  Linking.openURL(result.paymentUrl!);
+                } else {
+                  Alert.alert('Erreur', "Impossible d'ouvrir la page de paiement.");
+                }
+              },
+            },
+            { text: 'Annuler', style: 'cancel' },
+          ]
+        );
+      } else {
+        // Pas d'URL (mode simulation / passerelle directe) : recharge immédiate
+        await fetchBalance();
+        Alert.alert(
+          '✅ Recharge réussie !',
+          `${numAmount.toLocaleString()} XAF ajoutés${result.bonus > 0 ? ` + ${result.bonus.toLocaleString()} XAF bonus 🎉` : ''}`
+        );
+        setAmount('');
+      }
     } catch {
       Alert.alert('Erreur', 'La recharge a échoué. Réessayez.');
     } finally {
