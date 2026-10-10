@@ -32,6 +32,11 @@ let UrlTile: any = null;
 let PROVIDER_DEFAULT: any = undefined;
 let mapsAvailable = false;
 
+// Voir RideMap : la carte native Android exige une clé Google Maps. Tant qu'elle
+// n'est pas configurée, on reste en mode recherche de lieu (sans carte native)
+// pour éviter tout crash.
+const MAPS_ENABLED = false;
+
 if (Platform.OS !== 'web') {
   try {
     const maps = require('react-native-maps');
@@ -190,7 +195,7 @@ export default function DestinationPicker({
 
         {/* Carte avec épingle fixe au centre */}
         <View style={styles.mapArea}>
-          {mapsAvailable && MapView ? (
+          {MAPS_ENABLED && mapsAvailable && MapView ? (
             <>
               <MapView
                 ref={mapRef}

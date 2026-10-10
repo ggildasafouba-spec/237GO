@@ -41,24 +41,54 @@ if (Platform.OS !== 'web') {
   }
 }
 
+/**
+ * ErrorBoundary local : si la MapView native crashe au rendu
+ * (ex: clé Google Maps absente du manifest Android), on affiche le
+ * fallback au lieu de laisser l'écran entier se fermer.
+ */
+class MapErrorBoundary extends React.Component<
+  { fallback: React.ReactNode; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+// La MapView native Android (react-native-maps) exige une clé Google Maps dans
+// le manifest pour s'initialiser, SINON elle crashe au rendu. Tant que la clé
+// n'est pas configurée, on désactive la carte native et on affiche le fallback.
+// Passer à true une fois la clé Google Maps ajoutée dans app.json.
+const MAPS_ENABLED = false;
+
 export default function RideMap({ pickup, dropoff, driver, height = 240 }: RideMapProps) {
   // Point central : priorité au chauffeur, puis au pickup
   const center = driver || pickup || dropoff || { lat: 4.0511, lng: 9.7679 };
 
-  if (!mapsAvailable || !MapView) {
-    // Fallback : représentation schématique quand la carte native est indisponible
-    return (
-      <View style={[styles.fallback, { height }]}>
-        <Text style={styles.fallbackIcon}>🗺️</Text>
-        <Text style={styles.fallbackText}>Carte en direct</Text>
-        {pickup && <Text style={styles.fallbackLine}>🟢 Départ : {pickup.lat.toFixed(4)}, {pickup.lng.toFixed(4)}</Text>}
-        {driver && <Text style={styles.fallbackLine}>🚗 Chauffeur : {driver.lat.toFixed(4)}, {driver.lng.toFixed(4)}</Text>}
-        {dropoff && <Text style={styles.fallbackLine}>🔴 Arrivée : {dropoff.lat.toFixed(4)}, {dropoff.lng.toFixed(4)}</Text>}
-      </View>
-    );
+  const fallback = (
+    <View style={[styles.fallback, { height }]}>
+      <Text style={styles.fallbackIcon}>🗺️</Text>
+      <Text style={styles.fallbackText}>Carte en direct</Text>
+      {pickup && <Text style={styles.fallbackLine}>🟢 Départ : {pickup.lat.toFixed(4)}, {pickup.lng.toFixed(4)}</Text>}
+      {driver && <Text style={styles.fallbackLine}>🚗 Chauffeur : {driver.lat.toFixed(4)}, {driver.lng.toFixed(4)}</Text>}
+      {dropoff && <Text style={styles.fallbackLine}>🔴 Arrivée : {dropoff.lat.toFixed(4)}, {dropoff.lng.toFixed(4)}</Text>}
+    </View>
+  );
+
+  if (!MAPS_ENABLED || !mapsAvailable || !MapView) {
+    return fallback;
   }
 
   return (
+    <MapErrorBoundary fallback={fallback}>
     <View style={[styles.mapWrap, { height }]}>
       <MapView
         style={{ flex: 1 }}
@@ -105,6 +135,7 @@ export default function RideMap({ pickup, dropoff, driver, height = 240 }: RideM
         )}
       </MapView>
     </View>
+    </MapErrorBoundary>
   );
 }
 
