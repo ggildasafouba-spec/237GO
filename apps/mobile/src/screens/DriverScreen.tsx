@@ -8,6 +8,7 @@ import {
   FlatList,
   Alert,
   Vibration,
+  Linking,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { getSocket } from '../config/socket';
@@ -126,13 +127,16 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
   const acceptRide = async (request: RideRequest) => {
     try {
       const response = await api.patch(`/rides/${request.rideId}/accept`);
+      const ride = response.data?.data;
+      const passengerPhone = ride?.passenger?.phone;
       setActiveJob({
         type: 'ride',
         id: request.rideId,
         status: 'ACCEPTED',
-        pickupAddress: request.pickup.address,
-        dropoffAddress: request.dropoff.address,
+        pickupAddress: ride?.pickupAddress || request.pickup.address,
+        dropoffAddress: ride?.dropoffAddress || request.dropoff.address,
         price: request.proposedPrice || request.estimatedPrice,
+        passengerPhone,
       });
       setRideRequests([]);
       Alert.alert('✅ Course acceptée !', `Direction: ${request.pickup.address}`);
@@ -250,6 +254,18 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
               <Text style={styles.routeText}>{activeJob.dropoffAddress}</Text>
             </View>
           </View>
+
+          {/* Contact passager (dernier maillon : l'appel pour affiner le point de prise en charge) */}
+          {activeJob.passengerPhone && (
+            <TouchableOpacity
+              style={styles.callPassenger}
+              onPress={() => Linking.openURL(`tel:${activeJob.passengerPhone}`)}
+              accessibilityRole="button"
+              accessibilityLabel="Appeler le passager"
+            >
+              <Text style={styles.callPassengerText}>📞 Appeler le passager (+237 {activeJob.passengerPhone})</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.statusInfo}>
             <Text style={styles.statusLabel}>Statut actuel</Text>
@@ -479,4 +495,6 @@ const styles = StyleSheet.create({
   nextButtonText: { color: '#fff', fontWeight: '700', fontSize: typography.md },
   gpsButton: { backgroundColor: '#E3F2FD', padding: spacing.sm, borderRadius: 8, alignItems: 'center' },
   gpsButtonText: { color: colors.info, fontWeight: '600' },
+  callPassenger: { backgroundColor: '#E8F5E9', padding: spacing.md, borderRadius: 10, alignItems: 'center', marginBottom: spacing.md },
+  callPassengerText: { color: colors.primaryDark, fontWeight: '700' },
 });

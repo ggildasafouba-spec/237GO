@@ -23,6 +23,8 @@ interface RideMapProps {
  */
 let MapView: any = null;
 let Marker: any = null;
+let UrlTile: any = null;
+let PROVIDER_DEFAULT: any = undefined;
 let mapsAvailable = false;
 
 if (Platform.OS !== 'web') {
@@ -31,6 +33,8 @@ if (Platform.OS !== 'web') {
     const maps = require('react-native-maps');
     MapView = maps.default;
     Marker = maps.Marker;
+    UrlTile = maps.UrlTile;
+    PROVIDER_DEFAULT = maps.PROVIDER_DEFAULT;
     mapsAvailable = !!MapView;
   } catch {
     mapsAvailable = false;
@@ -58,6 +62,7 @@ export default function RideMap({ pickup, dropoff, driver, height = 240 }: RideM
     <View style={[styles.mapWrap, { height }]}>
       <MapView
         style={{ flex: 1 }}
+        provider={PROVIDER_DEFAULT}
         region={{
           latitude: center.lat,
           longitude: center.lng,
@@ -65,7 +70,16 @@ export default function RideMap({ pickup, dropoff, driver, height = 240 }: RideM
           longitudeDelta: 0.02,
         }}
         showsUserLocation
+        mapType={Platform.OS === 'android' ? 'none' : 'standard'}
       >
+        {/* Fond de carte OpenStreetMap (gratuit, sans clé Google) */}
+        {UrlTile && (
+          <UrlTile
+            urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maximumZ={19}
+            flipY={false}
+          />
+        )}
         {pickup && (
           <Marker
             coordinate={{ latitude: pickup.lat, longitude: pickup.lng }}

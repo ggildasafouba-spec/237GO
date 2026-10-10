@@ -196,6 +196,9 @@ router.patch(
           driver: {
             include: { driverProfile: true },
           },
+          passenger: {
+            select: { firstName: true, lastName: true, phone: true },
+          },
         },
       });
 

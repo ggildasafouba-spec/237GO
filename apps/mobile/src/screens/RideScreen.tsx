@@ -14,6 +14,7 @@ import * as Location from 'expo-location';
 import { useRideStore } from '../store/rideStore';
 import { useLocation } from '../hooks/useLocation';
 import RideMap from '../components/RideMap';
+import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { colors, spacing, typography } from '../theme';
 
 type VehicleType = 'MOTO' | 'CAR_ECONOMY' | 'CAR_COMFORT' | 'CAR_VIP';
@@ -45,6 +46,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   const [step, setStep] = useState<'location' | 'vehicle' | 'confirm' | 'waiting' | 'inride'>('location');
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
+  const [landmark, setLandmark] = useState(''); // repère / indication complémentaire
+  const [showDestPicker, setShowDestPicker] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleType>(route?.params?.vehicleType || 'MOTO');
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('ORANGE_MONEY');
   const [proposedPrice, setProposedPrice] = useState('');
@@ -100,21 +103,6 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
       Alert.alert('Localisation', "Impossible d'obtenir votre position. Vérifiez que le GPS est activé.");
     }
     setLocating(false);
-  };
-
-  // Géocoder l'adresse de destination saisie (texte → coordonnées)
-  const geocodeDropoff = async (): Promise<boolean> => {
-    if (!dropoffAddress) return false;
-    try {
-      const results = await Location.geocodeAsync(dropoffAddress);
-      if (results && results.length > 0) {
-        setDropoffCoords({ lat: results[0].latitude, lng: results[0].longitude });
-        return true;
-      }
-    } catch {
-      // géocodage indisponible : on garde le fallback
-    }
-    return false;
   };
 
   const [confirming, setConfirming] = useState(false);
@@ -199,22 +187,36 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     }
   };
 
+  // Destination choisie via la carte (épingle) ou la recherche OSM
+  const onDestinationPicked = (place: PickedPlace) => {
+    setDropoffCoords({ lat: place.lat, lng: place.lng });
+    setDropoffAddress(place.label);
+    setShowDestPicker(false);
+  };
+
   const handleGetEstimates = async () => {
-    if (!pickupAddress || !dropoffAddress) {
-      Alert.alert('Attention', 'Veuillez entrer les adresses de départ et d\'arrivée');
+    if (!pickupAddress) {
+      Alert.alert('Attention', 'Indiquez votre point de départ (ou utilisez votre position).');
       return;
     }
-    // Convertir l'adresse de destination en coordonnées avant l'estimation
-    await geocodeDropoff();
+    if (!dropoffAddress) {
+      Alert.alert('Attention', 'Choisissez votre destination sur la carte.');
+      return;
+    }
+    // La destination vient déjà du sélecteur (coordonnées exactes) : pas de géocodage incertain
     await getAllEstimates(pickup, dropoff);
     setStep('vehicle');
   };
 
   const handleConfirmRide = async () => {
     try {
+      // On joint le repère à l'adresse de destination pour qu'il parvienne au chauffeur
+      const dropoffWithLandmark = landmark.trim()
+        ? `${dropoffAddress} — Repère : ${landmark.trim()}`
+        : dropoffAddress;
       await createRide({
         pickup: { ...pickup, address: pickupAddress },
-        dropoff: { ...dropoff, address: dropoffAddress },
+        dropoff: { ...dropoff, address: dropoffWithLandmark },
         vehicleType: selectedVehicle,
         paymentMethod: selectedPayment,
         proposedPrice: proposedPrice ? parseFloat(proposedPrice) : undefined,
@@ -292,17 +294,30 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           )}
         </TouchableOpacity>
 
+        {/* Destination : choisie sur la carte (pas de saisie d'adresse postale) */}
         <View style={styles.inputContainer}>
           <View style={styles.dotRed} />
-          <TextInput
-            style={styles.input}
-            placeholder="📍 Destination"
-            value={dropoffAddress}
-            onChangeText={setDropoffAddress}
-            placeholderTextColor={colors.textLight}
-            accessibilityLabel="Adresse de destination"
-          />
+          <TouchableOpacity
+            style={styles.destBtn}
+            onPress={() => setShowDestPicker(true)}
+            accessibilityLabel="Choisir la destination sur la carte"
+            accessibilityRole="button"
+          >
+            <Text style={[styles.destBtnText, !dropoffAddress && styles.destBtnPlaceholder]} numberOfLines={1}>
+              {dropoffAddress ? dropoffAddress : '📍 Choisir la destination sur la carte'}
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Repère / indication (adapté au Cameroun) */}
+        <TextInput
+          style={styles.landmarkInput}
+          placeholder="🧭 Repère / indication (ex: portail bleu, après la pharmacie)"
+          value={landmark}
+          onChangeText={setLandmark}
+          placeholderTextColor={colors.textLight}
+          accessibilityLabel="Repère ou indication complémentaire"
+        />
 
         <TouchableOpacity
           style={[styles.button, (!pickupAddress || !dropoffAddress) && styles.buttonDisabled]}
@@ -317,6 +332,14 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             <Text style={styles.buttonText}>Voir les tarifs</Text>
           )}
         </TouchableOpacity>
+
+        {/* Sélecteur de destination plein écran (carte OSM + recherche) */}
+        <DestinationPicker
+          visible={showDestPicker}
+          initialCenter={dropoffCoords}
+          onConfirm={onDestinationPicked}
+          onClose={() => setShowDestPicker(false)}
+        />
       </View>
     );
   }
@@ -766,6 +789,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: colors.error,
+  },
+  destBtn: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  destBtnText: {
+    fontSize: typography.md,
+    color: colors.text,
+  },
+  destBtnPlaceholder: {
+    color: colors.textLight,
+  },
+  landmarkInput: {
+    backgroundColor: '#fff',
+    padding: spacing.md,
+    borderRadius: 12,
+    fontSize: typography.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
   },
   myLocationBtn: {
     flexDirection: 'row',

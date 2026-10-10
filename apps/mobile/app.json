@@ -28,11 +28,6 @@
         "backgroundColor": "#121A17"
       },
       "package": "com.go237.app",
-      "config": {
-        "googleMaps": {
-          "apiKey": "VOTRE_CLE_GOOGLE_MAPS_ANDROID"
-        }
-      },
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
