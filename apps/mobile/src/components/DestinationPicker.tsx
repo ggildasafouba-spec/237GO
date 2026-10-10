@@ -106,11 +106,42 @@ export default function DestinationPicker({
     });
   };
 
-  const confirm = () => {
+  const [confirming, setConfirming] = useState(false);
+
+  // Reverse geocode OSM : transformer un point en libellé lisible (quartier/ville)
+  const reverseLabel = async (lat: number, lng: number): Promise<string> => {
+    try {
+      const url =
+        `https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&lat=${lat}&lon=${lng}`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': '237GO/1.0 (mobility app Cameroon)' },
+      });
+      const data = await res.json();
+      const a = data?.address || {};
+      // Construire un libellé compact : repère/quartier + ville
+      const parts = [
+        a.road || a.neighbourhood || a.suburb || a.hamlet,
+        a.city || a.town || a.village || a.county,
+      ].filter(Boolean);
+      return parts.join(', ') || data?.display_name?.split(',').slice(0, 2).join(',') || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const confirm = async () => {
+    // Si l'utilisateur a tapé une recherche, on garde son libellé.
+    // Sinon (épingle seule), on tente un reverse-geocode pour un texte lisible.
+    let label = query.trim();
+    if (!label) {
+      setConfirming(true);
+      label = await reverseLabel(center.lat, center.lng);
+      setConfirming(false);
+    }
     onConfirm({
       lat: center.lat,
       lng: center.lng,
-      label: query.trim() || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`,
+      label: label || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`,
     });
   };
 
@@ -201,8 +232,12 @@ export default function DestinationPicker({
         {/* Confirmation */}
         <View style={styles.footer}>
           <Text style={styles.footerHint}>Déplacez la carte pour positionner l'épingle sur la destination</Text>
-          <TouchableOpacity style={styles.confirmBtn} onPress={confirm} accessibilityRole="button">
-            <Text style={styles.confirmText}>Confirmer la destination</Text>
+          <TouchableOpacity style={styles.confirmBtn} onPress={confirm} disabled={confirming} accessibilityRole="button">
+            {confirming ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.confirmText}>Confirmer la destination</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>

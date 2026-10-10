@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { getSocket } from '../config/socket';
 import { useLocation } from '../hooks/useLocation';
+import RideMap from '../components/RideMap';
 import api from '../config/api';
 import { colors, spacing, typography } from '../theme';
 
@@ -44,6 +45,8 @@ interface ActiveJob {
   dropoffAddress: string;
   price: number;
   passengerPhone?: string;
+  pickupCoords?: { lat: number; lng: number };
+  dropoffCoords?: { lat: number; lng: number };
 }
 
 export default function DriverScreen({ navigation }: { navigation: any }) {
@@ -137,6 +140,8 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
         dropoffAddress: ride?.dropoffAddress || request.dropoff.address,
         price: request.proposedPrice || request.estimatedPrice,
         passengerPhone,
+        pickupCoords: { lat: request.pickup.lat, lng: request.pickup.lng },
+        dropoffCoords: { lat: request.dropoff.lat, lng: request.dropoff.lng },
       });
       setRideRequests([]);
       Alert.alert('✅ Course acceptée !', `Direction: ${request.pickup.address}`);
@@ -168,6 +173,8 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
         pickupAddress: request.pickup.address,
         dropoffAddress: request.dropoff.address,
         price: request.estimatedPrice,
+        pickupCoords: { lat: request.pickup.lat, lng: request.pickup.lng },
+        dropoffCoords: { lat: request.dropoff.lat, lng: request.dropoff.lng },
       });
       setDeliveryRequests([]);
       Alert.alert('✅ Livraison acceptée !', `Récupération: ${request.pickup.address}`);
@@ -242,6 +249,15 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
             </Text>
             <Text style={styles.jobPrice}>{activeJob.price.toLocaleString()} XAF</Text>
           </View>
+
+          {/* Carte du trajet : point de départ (passager) → destination */}
+          {activeJob.pickupCoords && (
+            <RideMap
+              pickup={activeJob.pickupCoords}
+              dropoff={activeJob.dropoffCoords}
+              height={180}
+            />
+          )}
 
           <View style={styles.jobRoute}>
             <View style={styles.routePoint}>
