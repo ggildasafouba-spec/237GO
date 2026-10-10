@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { getSocket } from '../config/socket';
+import { useLocation } from '../hooks/useLocation';
 import api from '../config/api';
 import { colors, spacing, typography } from '../theme';
 
@@ -53,6 +54,30 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
   const [earnings, setEarnings] = useState({ today: 0, trips: 0 });
 
   const socketRef = useRef(getSocket());
+  const { getCurrentLocation } = useLocation();
+
+  // Envoi automatique de la position GPS réelle quand une course/livraison est active,
+  // pour que le passager voie le chauffeur approcher en temps réel (ETA + marqueur carte).
+  useEffect(() => {
+    if (!activeJob || activeJob.type !== 'ride') return;
+    let cancelled = false;
+
+    const pushLocation = async () => {
+      const loc = await getCurrentLocation();
+      const socket = socketRef.current;
+      if (loc && socket && !cancelled) {
+        socket.emit('driver:location', { lat: loc.latitude, lng: loc.longitude, rideId: activeJob.id });
+      }
+    };
+
+    pushLocation(); // envoi immédiat
+    const interval = setInterval(pushLocation, 8000); // puis toutes les 8s
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeJob?.id]);
 
   useEffect(() => {
     const socket = getSocket();

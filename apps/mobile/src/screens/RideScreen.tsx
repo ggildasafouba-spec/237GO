@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,12 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useRideStore } from '../store/rideStore';
+import { useLocation } from '../hooks/useLocation';
+import RideMap from '../components/RideMap';
 import { colors, spacing, typography } from '../theme';
 
 type VehicleType = 'MOTO' | 'CAR_ECONOMY' | 'CAR_COMFORT' | 'CAR_VIP';
@@ -60,9 +64,58 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     clearRide,
   } = useRideStore();
 
-  // Simulated coordinates (en production: utiliser expo-location)
-  const pickup = { lat: 4.0511, lng: 9.7679, address: pickupAddress }; // Douala
-  const dropoff = { lat: 4.0611, lng: 9.7879, address: dropoffAddress };
+  const { getCurrentLocation, reverseGeocode } = useLocation();
+
+  // Coordonnées réelles (remplies par le GPS / géocodage). Fallback Douala si indispo.
+  const [pickupCoords, setPickupCoords] = useState({ lat: 4.0511, lng: 9.7679 });
+  const [dropoffCoords, setDropoffCoords] = useState({ lat: 4.0611, lng: 9.7879 });
+  const [locating, setLocating] = useState(false);
+
+  const pickup = { lat: pickupCoords.lat, lng: pickupCoords.lng, address: pickupAddress };
+  const dropoff = { lat: dropoffCoords.lat, lng: dropoffCoords.lng, address: dropoffAddress };
+
+  // 1) GÉOLOCALISATION : récupérer la position réelle du passager au démarrage
+  useEffect(() => {
+    (async () => {
+      setLocating(true);
+      const loc = await getCurrentLocation();
+      if (loc) {
+        setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
+        const addr = await reverseGeocode(loc.latitude, loc.longitude);
+        if (addr && !pickupAddress) setPickupAddress(addr);
+      }
+      setLocating(false);
+    })();
+  }, []);
+
+  // Utiliser ma position actuelle pour le départ (bouton)
+  const useMyLocation = async () => {
+    setLocating(true);
+    const loc = await getCurrentLocation();
+    if (loc) {
+      setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
+      const addr = await reverseGeocode(loc.latitude, loc.longitude);
+      setPickupAddress(addr || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+    } else {
+      Alert.alert('Localisation', "Impossible d'obtenir votre position. Vérifiez que le GPS est activé.");
+    }
+    setLocating(false);
+  };
+
+  // Géocoder l'adresse de destination saisie (texte → coordonnées)
+  const geocodeDropoff = async (): Promise<boolean> => {
+    if (!dropoffAddress) return false;
+    try {
+      const results = await Location.geocodeAsync(dropoffAddress);
+      if (results && results.length > 0) {
+        setDropoffCoords({ lat: results[0].latitude, lng: results[0].longitude });
+        return true;
+      }
+    } catch {
+      // géocodage indisponible : on garde le fallback
+    }
+    return false;
+  };
 
   const [confirming, setConfirming] = useState(false);
 
@@ -151,6 +204,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
       Alert.alert('Attention', 'Veuillez entrer les adresses de départ et d\'arrivée');
       return;
     }
+    // Convertir l'adresse de destination en coordonnées avant l'estimation
+    await geocodeDropoff();
     await getAllEstimates(pickup, dropoff);
     setStep('vehicle');
   };
@@ -181,11 +236,35 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
 
   const selectedEstimate = estimates.find((e) => e.vehicleType === selectedVehicle);
 
+  // 3) ETA : estimer le temps d'arrivée du chauffeur à partir de sa position temps réel
+  const haversineKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+    const R = 6371;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const h =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  };
+
+  const driverEta = (): { minutes: number; km: number } | null => {
+    if (!driverLocation) return null;
+    const km = haversineKm(driverLocation, pickupCoords);
+    // Vitesse moyenne en ville ~22 km/h ; minimum 1 min
+    const minutes = Math.max(1, Math.round((km / 22) * 60));
+    return { minutes, km };
+  };
+
+  const eta = driverEta();
+
   // Step: Entrer les adresses
   if (step === 'location') {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Où allez-vous ?</Text>
+
+        {/* Carte avec la position du passager */}
+        <RideMap pickup={pickupCoords} height={180} />
 
         <View style={styles.inputContainer}>
           <View style={styles.dotGreen} />
@@ -198,6 +277,20 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             accessibilityLabel="Adresse de départ"
           />
         </View>
+
+        <TouchableOpacity
+          style={styles.myLocationBtn}
+          onPress={useMyLocation}
+          disabled={locating}
+          accessibilityLabel="Utiliser ma position actuelle"
+          accessibilityRole="button"
+        >
+          {locating ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <Text style={styles.myLocationText}>📍 Utiliser ma position actuelle</Text>
+          )}
+        </TouchableOpacity>
 
         <View style={styles.inputContainer}>
           <View style={styles.dotRed} />
@@ -409,6 +502,30 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Course en cours
   return (
     <View style={styles.container}>
+      {/* Carte temps réel : passager + chauffeur */}
+      <RideMap
+        pickup={pickupCoords}
+        dropoff={currentRide?.status === 'IN_PROGRESS' ? dropoffCoords : null}
+        driver={driverLocation}
+        height={220}
+      />
+
+      {/* Bandeau ETA / temps d'attente du chauffeur */}
+      {(currentRide?.status === 'ACCEPTED' || currentRide?.status === 'DRIVER_ARRIVING') && (
+        <View style={styles.etaBanner}>
+          {eta ? (
+            <>
+              <Text style={styles.etaMinutes}>{eta.minutes} min</Text>
+              <Text style={styles.etaLabel}>
+                Votre chauffeur arrive • {eta.km.toFixed(1)} km
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.etaLabel}>📡 En attente de la position du chauffeur...</Text>
+          )}
+        </View>
+      )}
+
       <View style={styles.rideActiveCard}>
         <Text style={styles.rideStatus}>
           {currentRide?.status === 'ACCEPTED' && '🚗 Chauffeur en route'}
@@ -649,6 +766,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: colors.error,
+  },
+  myLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    marginBottom: spacing.sm,
+  },
+  myLocationText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: typography.sm,
+  },
+  etaBanner: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  etaMinutes: {
+    color: '#fff',
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  etaLabel: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: typography.sm,
+    fontWeight: '600',
+    marginTop: 2,
   },
   rideActiveCard: {
     backgroundColor: '#fff',
