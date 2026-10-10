@@ -1,5 +1,104 @@
 import axios from 'axios';
 
+// ========== NOTCHPAY (Passerelle Mobile Money Cameroun : MoMo + Orange) ==========
+
+const notchPayConfig = {
+  publicKey: process.env.NOTCHPAY_PUBLIC_KEY || '',
+  baseUrl: 'https://api.notchpay.co',
+};
+
+export function isNotchPayConfigured(): boolean {
+  return !!notchPayConfig.publicKey;
+}
+
+/**
+ * Initialise un paiement NotchPay (hébergé). Renvoie une URL de paiement
+ * vers laquelle rediriger l'utilisateur (il y choisit MoMo / Orange / carte).
+ * NotchPay notifie ensuite notre webhook /webhooks/notchpay.
+ */
+export async function initiateNotchPay(data: {
+  amount: number;
+  phone: string;
+  transactionId: string;
+  description: string;
+  customerName: string;
+  callbackUrl: string;
+}): Promise<PaymentResponse> {
+  try {
+    const response = await axios.post(
+      `${notchPayConfig.baseUrl}/payments`,
+      {
+        amount: data.amount,
+        currency: 'XAF',
+        reference: data.transactionId,
+        description: data.description,
+        callback: data.callbackUrl,
+        customer: {
+          name: data.customerName,
+          phone: data.phone,
+        },
+      },
+      {
+        headers: {
+          Authorization: notchPayConfig.publicKey,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    // NotchPay renvoie une authorization_url pour finaliser le paiement
+    const authUrl = response.data?.authorization_url || response.data?.transaction?.authorization_url;
+    const ref = response.data?.transaction?.reference || data.transactionId;
+
+    if (authUrl) {
+      return {
+        success: true,
+        paymentUrl: authUrl,
+        transactionRef: ref,
+        message: 'Paiement initié. Finalisez sur la page sécurisée.',
+      };
+    }
+
+    return { success: false, message: response.data?.message || 'Erreur NotchPay' };
+  } catch (error: any) {
+    console.error('NotchPay Error:', error.response?.data || error.message);
+    return { success: false, message: 'Service de paiement indisponible' };
+  }
+}
+
+/**
+ * Vérifie l'état d'un paiement NotchPay par sa référence.
+ */
+export async function verifyNotchPay(reference: string): Promise<{
+  success: boolean;
+  status: 'COMPLETED' | 'PENDING' | 'FAILED';
+  amount?: number;
+  message: string;
+}> {
+  try {
+    const response = await axios.get(`${notchPayConfig.baseUrl}/payments/${reference}`, {
+      headers: { Authorization: notchPayConfig.publicKey },
+    });
+
+    const status = (response.data?.transaction?.status || '').toLowerCase();
+
+    if (status === 'complete' || status === 'completed' || status === 'successful') {
+      return {
+        success: true,
+        status: 'COMPLETED',
+        amount: response.data?.transaction?.amount,
+        message: 'Paiement confirmé',
+      };
+    }
+    if (status === 'pending' || status === 'processing') {
+      return { success: true, status: 'PENDING', message: 'Paiement en attente' };
+    }
+    return { success: false, status: 'FAILED', message: 'Paiement échoué' };
+  } catch (error: any) {
+    return { success: false, status: 'FAILED', message: error.response?.data?.message || error.message };
+  }
+}
+
 // ========== CINETPAY (Passerelle universelle) ==========
 
 interface CinetPayConfig {
@@ -238,6 +337,19 @@ function getChannel(method: string): string {
 // ========== PAIEMENT UNIFIÉ ==========
 
 export async function processPayment(data: PaymentRequest): Promise<PaymentResponse> {
+  // Passerelle prioritaire : NotchPay (gère MoMo + Orange + carte au Cameroun)
+  if (isNotchPayConfigured()) {
+    const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3002}`;
+    return initiateNotchPay({
+      amount: data.amount,
+      phone: data.customerPhone,
+      transactionId: data.transactionId,
+      description: data.description,
+      customerName: data.customerName,
+      callbackUrl: `${apiBaseUrl}/api/webhooks/return`,
+    });
+  }
+
   switch (data.paymentMethod) {
     case 'MTN_MOMO':
       return initiateMoMoPayment({
