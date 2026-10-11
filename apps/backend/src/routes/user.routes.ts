@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
+import { VEHICLE_CRITERIA, validateVehicleForCategory } from '../services/vehicleCriteria';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -168,6 +169,11 @@ router.patch('/notifications/:id/read', authenticate, async (req: AuthRequest, r
 });
 
 // Devenir chauffeur
+// Exposer les critères par catégorie (pour l'app : afficher les exigences)
+router.get('/vehicle-criteria', (_req, res: Response) => {
+  res.json({ success: true, data: Object.values(VEHICLE_CRITERIA) });
+});
+
 router.post(
   '/become-driver',
   authenticate,
@@ -179,15 +185,36 @@ router.post(
     body('vehiclePlate').trim().notEmpty(),
     body('vehicleBrand').optional().trim(),
     body('vehicleModel').optional().trim(),
+    body('vehicleYear').optional().isInt({ min: 1980, max: new Date().getFullYear() + 1 }),
+    body('hasAirConditioning').optional().isBoolean(),
     body('licensePhoto').optional().isURL(),
     body('cniPhoto').optional().isURL(),
     body('vehiclePhoto').optional().isURL(),
+    body('registrationPhoto').optional().isURL(),
+    body('insurancePhoto').optional().isURL(),
+    body('insuranceExpiry').optional().isISO8601(),
+    body('inspectionPhoto').optional().isURL(),
+    body('inspectionExpiry').optional().isISO8601(),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      // Valider que le véhicule respecte les critères de la catégorie demandée
+      const check = validateVehicleForCategory({
+        vehicleType: req.body.vehicleType,
+        vehicleYear: req.body.vehicleYear ? parseInt(req.body.vehicleYear, 10) : null,
+        hasAirConditioning: req.body.hasAirConditioning === true || req.body.hasAirConditioning === 'true',
+      });
+      if (!check.valid) {
+        return res.status(400).json({
+          success: false,
+          message: check.errors.join(' '),
+          errors: check.errors,
+        });
       }
 
       const existing = await prisma.driverProfile.findUnique({
@@ -208,9 +235,16 @@ router.post(
           vehiclePlate: req.body.vehiclePlate,
           vehicleBrand: req.body.vehicleBrand,
           vehicleModel: req.body.vehicleModel,
+          vehicleYear: req.body.vehicleYear ? parseInt(req.body.vehicleYear, 10) : null,
+          hasAirConditioning: req.body.hasAirConditioning === true || req.body.hasAirConditioning === 'true',
           licensePhoto: req.body.licensePhoto,
           cniPhoto: req.body.cniPhoto,
           vehiclePhoto: req.body.vehiclePhoto,
+          registrationPhoto: req.body.registrationPhoto,
+          insurancePhoto: req.body.insurancePhoto,
+          insuranceExpiry: req.body.insuranceExpiry ? new Date(req.body.insuranceExpiry) : null,
+          inspectionPhoto: req.body.inspectionPhoto,
+          inspectionExpiry: req.body.inspectionExpiry ? new Date(req.body.inspectionExpiry) : null,
           // verificationStatus reste PENDING par défaut
         },
       });

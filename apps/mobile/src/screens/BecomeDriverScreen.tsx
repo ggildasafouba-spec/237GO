@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,30 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
 import { Image } from 'react-native';
 import { colors, spacing, typography } from '../theme';
 
-const VEHICLE_TYPES = [
-  { value: 'MOTO', label: '🏍️ Moto' },
-  { value: 'CAR_ECONOMY', label: '🚗 Éco' },
-  { value: 'CAR_COMFORT', label: '🚙 Confort' },
-  { value: 'CAR_VIP', label: '✨ VIP' },
-  { value: 'TRUCK', label: '🚚 Camion' },
+interface CategoryCriteria {
+  type: string;
+  label: string;
+  icon: string;
+  minYear: number | null;
+  airConditioning: boolean;
+  examples: string;
+  requirements: string[];
+}
+
+// Repli si l'API n'est pas joignable (mêmes libellés que le backend)
+const FALLBACK_CRITERIA: CategoryCriteria[] = [
+  { type: 'MOTO', label: 'Moto', icon: '🏍️', minYear: null, airConditioning: false, examples: 'Honda, Yamaha…', requirements: ['Moto en bon état', 'Casque passager obligatoire', 'Permis + CNI valides'] },
+  { type: 'CAR_ECONOMY', label: 'Éco', icon: '🚗', minYear: 2008, airConditioning: false, examples: 'Toyota Corolla, Hyundai Accent…', requirements: ['Berline 4 portes', 'Année ≥ 2008', 'Permis, CNI, carte grise, assurance, visite technique'] },
+  { type: 'CAR_COMFORT', label: 'Confort', icon: '🚙', minYear: 2014, airConditioning: true, examples: 'Toyota Camry, Hyundai Elantra…', requirements: ['Berline récente', 'Année ≥ 2014', 'Climatisation obligatoire', 'Documents complets'] },
+  { type: 'CAR_VIP', label: 'VIP', icon: '✨', minYear: 2018, airConditioning: true, examples: 'Mercedes, Prado, Lexus…', requirements: ['Véhicule haut de gamme', 'Année ≥ 2018', 'Clim + intérieur premium', 'Chauffeur en tenue', 'Documents complets'] },
+  { type: 'TRUCK', label: 'Camion', icon: '🚚', minYear: 2005, airConditioning: false, examples: 'Camionnettes, fourgons…', requirements: ['Utilitaire en bon état', 'Documents complets'] },
 ];
 
 function UploadBox({ label, uri, loading, onPress }: { label: string; uri: string | null; loading: boolean; onPress: () => void }) {
@@ -49,20 +61,44 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [vehicleBrand, setVehicleBrand] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleYear, setVehicleYear] = useState('');
+  const [hasAirConditioning, setHasAirConditioning] = useState(false);
   const [licensePhoto, setLicensePhoto] = useState<string | null>(null);
   const [cniPhoto, setCniPhoto] = useState<string | null>(null);
   const [vehiclePhoto, setVehiclePhoto] = useState<string | null>(null);
+  const [registrationPhoto, setRegistrationPhoto] = useState<string | null>(null);
+  const [insurancePhoto, setInsurancePhoto] = useState<string | null>(null);
+  const [inspectionPhoto, setInspectionPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [criteria, setCriteria] = useState<CategoryCriteria[]>(FALLBACK_CRITERIA);
 
-  const handleUpload = async (which: 'license' | 'cni' | 'vehicle') => {
+  // Charger les critères depuis le backend (source de vérité)
+  useEffect(() => {
+    api
+      .get('/users/vehicle-criteria')
+      .then((res) => {
+        if (Array.isArray(res.data?.data) && res.data.data.length) setCriteria(res.data.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const selectedCriteria = criteria.find((c) => c.type === vehicleType) || criteria[0];
+  const isCar = vehicleType !== 'MOTO';
+
+  const handleUpload = async (
+    which: 'license' | 'cni' | 'vehicle' | 'registration' | 'insurance' | 'inspection'
+  ) => {
     setUploading(which);
     try {
       const url = await pickAndUploadImage();
       if (url) {
         if (which === 'license') setLicensePhoto(url);
         else if (which === 'cni') setCniPhoto(url);
-        else setVehiclePhoto(url);
+        else if (which === 'vehicle') setVehiclePhoto(url);
+        else if (which === 'registration') setRegistrationPhoto(url);
+        else if (which === 'insurance') setInsurancePhoto(url);
+        else setInspectionPhoto(url);
       }
     } catch (error: any) {
       Alert.alert('Erreur', error?.message || 'Impossible de téléverser l\'image');
@@ -83,6 +119,23 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
       return;
     }
 
+    // Validation des critères de catégorie (année + clim) côté client
+    const year = vehicleYear ? parseInt(vehicleYear, 10) : null;
+    if (selectedCriteria?.minYear) {
+      if (!year) {
+        Alert.alert('Année requise', `L'année du véhicule est requise pour la catégorie ${selectedCriteria.label}.`);
+        return;
+      }
+      if (year < selectedCriteria.minYear) {
+        Alert.alert('Véhicule trop ancien', `Pour la catégorie ${selectedCriteria.label}, le véhicule doit dater de ${selectedCriteria.minYear} ou plus récent.`);
+        return;
+      }
+    }
+    if (selectedCriteria?.airConditioning && !hasAirConditioning) {
+      Alert.alert('Climatisation requise', `La climatisation est obligatoire pour la catégorie ${selectedCriteria.label}.`);
+      return;
+    }
+
     setIsLoading(true);
     try {
       await api.post('/users/become-driver', {
@@ -93,9 +146,14 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
         vehiclePlate,
         vehicleBrand: vehicleBrand || undefined,
         vehicleModel: vehicleModel || undefined,
+        vehicleYear: year || undefined,
+        hasAirConditioning,
         licensePhoto: licensePhoto || undefined,
         cniPhoto: cniPhoto || undefined,
         vehiclePhoto: vehiclePhoto || undefined,
+        registrationPhoto: registrationPhoto || undefined,
+        insurancePhoto: insurancePhoto || undefined,
+        inspectionPhoto: inspectionPhoto || undefined,
       });
 
       Alert.alert(
@@ -155,20 +213,35 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
           <UploadBox label="Véhicule" uri={vehiclePhoto} loading={uploading === 'vehicle'} onPress={() => handleUpload('vehicle')} />
         </View>
 
-        <Text style={styles.label}>Type de véhicule *</Text>
+        <Text style={styles.label}>Catégorie de véhicule *</Text>
         <View style={styles.vehicleGrid}>
-          {VEHICLE_TYPES.map((v) => (
+          {criteria.map((v) => (
             <TouchableOpacity
-              key={v.value}
-              style={[styles.vehicleChip, vehicleType === v.value && styles.vehicleChipActive]}
-              onPress={() => setVehicleType(v.value)}
+              key={v.type}
+              style={[styles.vehicleChip, vehicleType === v.type && styles.vehicleChipActive]}
+              onPress={() => setVehicleType(v.type)}
             >
-              <Text style={[styles.vehicleChipText, vehicleType === v.value && styles.vehicleChipTextActive]}>
-                {v.label}
+              <Text style={[styles.vehicleChipText, vehicleType === v.type && styles.vehicleChipTextActive]}>
+                {v.icon} {v.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Exigences de la catégorie sélectionnée */}
+        {selectedCriteria && (
+          <View style={styles.criteriaBox}>
+            <Text style={styles.criteriaTitle}>
+              {selectedCriteria.icon} Exigences {selectedCriteria.label}
+            </Text>
+            {selectedCriteria.examples ? (
+              <Text style={styles.criteriaExamples}>Ex : {selectedCriteria.examples}</Text>
+            ) : null}
+            {selectedCriteria.requirements.map((r, i) => (
+              <Text key={i} style={styles.criteriaItem}>• {r}</Text>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.label}>Plaque d'immatriculation *</Text>
         <TextInput
@@ -197,6 +270,47 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
           onChangeText={setVehicleModel}
           placeholderTextColor={colors.textLight}
         />
+
+        {/* Champs spécifiques aux voitures */}
+        {isCar && (
+          <>
+            <Text style={styles.label}>
+              Année du véhicule {selectedCriteria?.minYear ? '*' : '(optionnel)'}
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder={selectedCriteria?.minYear ? `Min ${selectedCriteria.minYear}` : 'Ex: 2016'}
+              value={vehicleYear}
+              onChangeText={setVehicleYear}
+              placeholderTextColor={colors.textLight}
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+
+            <View style={styles.acRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.acLabel}>Climatisation</Text>
+                {selectedCriteria?.airConditioning && (
+                  <Text style={styles.acHint}>Obligatoire pour {selectedCriteria.label}</Text>
+                )}
+              </View>
+              <Switch
+                value={hasAirConditioning}
+                onValueChange={setHasAirConditioning}
+                trackColor={{ false: '#ccc', true: colors.primaryLight }}
+                thumbColor={hasAirConditioning ? colors.primary : '#f4f3f4'}
+                accessibilityLabel="Climatisation"
+              />
+            </View>
+
+            <Text style={styles.label}>Documents du véhicule (photos)</Text>
+            <View style={styles.uploadRow}>
+              <UploadBox label="Carte grise" uri={registrationPhoto} loading={uploading === 'registration'} onPress={() => handleUpload('registration')} />
+              <UploadBox label="Assurance" uri={insurancePhoto} loading={uploading === 'insurance'} onPress={() => handleUpload('insurance')} />
+              <UploadBox label="Visite tech." uri={inspectionPhoto} loading={uploading === 'inspection'} onPress={() => handleUpload('inspection')} />
+            </View>
+          </>
+        )}
 
         <TouchableOpacity
           style={[styles.submitButton, isLoading && styles.buttonDisabled]}
@@ -236,6 +350,13 @@ const styles = StyleSheet.create({
   vehicleChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   vehicleChipText: { fontSize: typography.sm, color: colors.text },
   vehicleChipTextActive: { color: '#fff', fontWeight: '700' },
+  criteriaBox: { backgroundColor: '#E8F5E9', borderRadius: 12, padding: spacing.md, marginTop: spacing.md },
+  criteriaTitle: { fontSize: typography.sm, fontWeight: '800', color: colors.primaryDark, marginBottom: 4 },
+  criteriaExamples: { fontSize: typography.xs, color: colors.textSecondary, fontStyle: 'italic', marginBottom: spacing.xs },
+  criteriaItem: { fontSize: typography.xs, color: colors.text, marginTop: 2 },
+  acRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginTop: spacing.md },
+  acLabel: { fontSize: typography.md, color: colors.text, fontWeight: '600' },
+  acHint: { fontSize: typography.xs, color: colors.primary, marginTop: 2 },
   submitButton: { backgroundColor: colors.primary, padding: spacing.md + 2, borderRadius: 12, alignItems: 'center', marginTop: spacing.xl },
   buttonDisabled: { opacity: 0.6 },
   submitButtonText: { color: '#fff', fontSize: typography.md, fontWeight: '700' },

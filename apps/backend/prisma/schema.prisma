@@ -81,6 +81,12 @@ model DriverProfile {
   vehicleBrand       String?
   vehicleModel       String?
   vehicleYear        Int?
+  hasAirConditioning Boolean            @default(false) // requis pour Confort / VIP
+  registrationPhoto  String?            // URL carte grise
+  insurancePhoto     String?            // URL assurance
+  insuranceExpiry    DateTime?          // date d'expiration assurance
+  inspectionPhoto    String?            // URL visite technique
+  inspectionExpiry   DateTime?          // date d'expiration visite technique
   verificationStatus VerificationStatus @default(PENDING)
   isOnline           Boolean            @default(false)
   currentLat         Float?

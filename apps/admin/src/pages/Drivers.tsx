@@ -5,6 +5,10 @@ interface DriverProfile {
   id: string;
   vehicleType: string;
   vehiclePlate: string;
+  vehicleBrand?: string | null;
+  vehicleModel?: string | null;
+  vehicleYear?: number | null;
+  hasAirConditioning?: boolean;
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
   isOnline: boolean;
   totalTrips: number;
@@ -14,8 +18,20 @@ interface DriverProfile {
   licensePhoto?: string | null;
   cniPhoto?: string | null;
   vehiclePhoto?: string | null;
+  registrationPhoto?: string | null;
+  insurancePhoto?: string | null;
+  inspectionPhoto?: string | null;
   user: { firstName: string; lastName: string; phone: string };
 }
+
+// Critères attendus par catégorie (miroir du backend) pour aider l'admin à valider
+const CATEGORY_RULES: Record<string, { label: string; minYear: number | null; ac: boolean }> = {
+  MOTO: { label: 'Moto', minYear: null, ac: false },
+  CAR_ECONOMY: { label: 'Éco', minYear: 2008, ac: false },
+  CAR_COMFORT: { label: 'Confort', minYear: 2014, ac: true },
+  CAR_VIP: { label: 'VIP', minYear: 2018, ac: true },
+  TRUCK: { label: 'Camion', minYear: 2005, ac: false },
+};
 
 export default function Drivers() {
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
@@ -95,35 +111,59 @@ export default function Drivers() {
                   </div>
                   <span style={{ ...styles.onlineDot, backgroundColor: driver.isOnline ? '#388E3C' : '#BDBDBD' }} />
                 </div>
-                <div style={styles.cardDetails}>
-                  <div style={styles.detail}><span style={styles.detailLabel}>Véhicule</span><span>{driver.vehicleType} • {driver.vehiclePlate}</span></div>
-                  <div style={styles.detail}><span style={styles.detailLabel}>Permis</span><span>{driver.licenseNumber}</span></div>
-                  <div style={styles.detail}><span style={styles.detailLabel}>CNI</span><span>{driver.cniNumber}</span></div>
-                  <div style={styles.detail}><span style={styles.detailLabel}>Courses</span><span>{driver.totalTrips}</span></div>
-                  <div style={styles.detail}><span style={styles.detailLabel}>Note</span><span>⭐ {driver.averageRating > 0 ? driver.averageRating.toFixed(1) : 'N/A'}</span></div>
-                </div>
+                {(() => {
+                  const rule = CATEGORY_RULES[driver.vehicleType];
+                  const yearOk = !rule?.minYear || (driver.vehicleYear != null && driver.vehicleYear >= rule.minYear);
+                  const acOk = !rule?.ac || !!driver.hasAirConditioning;
+                  return (
+                    <>
+                      <div style={styles.cardDetails}>
+                        <div style={styles.detail}><span style={styles.detailLabel}>Catégorie</span><span>{rule?.label || driver.vehicleType} • {driver.vehiclePlate}</span></div>
+                        <div style={styles.detail}><span style={styles.detailLabel}>Véhicule</span><span>{[driver.vehicleBrand, driver.vehicleModel].filter(Boolean).join(' ') || '—'}</span></div>
+                        <div style={styles.detail}>
+                          <span style={styles.detailLabel}>Année</span>
+                          <span style={{ color: yearOk ? '#388E3C' : '#D32F2F', fontWeight: 600 }}>
+                            {driver.vehicleYear || '—'}{rule?.minYear ? ` (min ${rule.minYear})` : ''} {yearOk ? '✓' : '✗'}
+                          </span>
+                        </div>
+                        <div style={styles.detail}>
+                          <span style={styles.detailLabel}>Climatisation</span>
+                          <span style={{ color: acOk ? '#388E3C' : '#D32F2F', fontWeight: 600 }}>
+                            {driver.hasAirConditioning ? 'Oui' : 'Non'}{rule?.ac ? ' (requise)' : ''} {acOk ? '✓' : '✗'}
+                          </span>
+                        </div>
+                        <div style={styles.detail}><span style={styles.detailLabel}>Permis</span><span>{driver.licenseNumber}</span></div>
+                        <div style={styles.detail}><span style={styles.detailLabel}>CNI</span><span>{driver.cniNumber}</span></div>
+                        <div style={styles.detail}><span style={styles.detailLabel}>Courses</span><span>{driver.totalTrips}</span></div>
+                        <div style={styles.detail}><span style={styles.detailLabel}>Note</span><span>⭐ {driver.averageRating > 0 ? driver.averageRating.toFixed(1) : 'N/A'}</span></div>
+                      </div>
+                      {driver.verificationStatus === 'PENDING' && (!yearOk || !acOk) && (
+                        <div style={styles.warnBox}>
+                          ⚠️ Le véhicule ne respecte pas tous les critères de la catégorie {rule?.label}.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Documents téléversés */}
-                {(driver.licensePhoto || driver.cniPhoto || driver.vehiclePhoto) && (
+                {(driver.licensePhoto || driver.cniPhoto || driver.vehiclePhoto || driver.registrationPhoto || driver.insurancePhoto || driver.inspectionPhoto) && (
                   <div style={styles.docsRow}>
-                    {driver.licensePhoto && (
-                      <a href={driver.licensePhoto} target="_blank" rel="noreferrer" style={styles.docThumb}>
-                        <img src={driver.licensePhoto} alt="Permis" style={styles.docImg} />
-                        <span style={styles.docCaption}>Permis</span>
-                      </a>
-                    )}
-                    {driver.cniPhoto && (
-                      <a href={driver.cniPhoto} target="_blank" rel="noreferrer" style={styles.docThumb}>
-                        <img src={driver.cniPhoto} alt="CNI" style={styles.docImg} />
-                        <span style={styles.docCaption}>CNI</span>
-                      </a>
-                    )}
-                    {driver.vehiclePhoto && (
-                      <a href={driver.vehiclePhoto} target="_blank" rel="noreferrer" style={styles.docThumb}>
-                        <img src={driver.vehiclePhoto} alt="Véhicule" style={styles.docImg} />
-                        <span style={styles.docCaption}>Véhicule</span>
-                      </a>
-                    )}
+                    {([
+                      ['Permis', driver.licensePhoto],
+                      ['CNI', driver.cniPhoto],
+                      ['Véhicule', driver.vehiclePhoto],
+                      ['Carte grise', driver.registrationPhoto],
+                      ['Assurance', driver.insurancePhoto],
+                      ['Visite tech.', driver.inspectionPhoto],
+                    ] as [string, string | null | undefined][])
+                      .filter(([, url]) => !!url)
+                      .map(([caption, url]) => (
+                        <a key={caption} href={url as string} target="_blank" rel="noreferrer" style={styles.docThumb}>
+                          <img src={url as string} alt={caption} style={styles.docImg} />
+                          <span style={styles.docCaption}>{caption}</span>
+                        </a>
+                      ))}
                   </div>
                 )}
                 <div style={styles.cardActions}>
@@ -166,7 +206,8 @@ const styles: Record<string, React.CSSProperties> = {
   cardDetails: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 },
   detail: { display: 'flex', justifyContent: 'space-between', fontSize: 13 },
   detailLabel: { color: '#757575' },
-  docsRow: { display: 'flex', gap: 8, marginBottom: 12 },
+  docsRow: { display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 },
+  warnBox: { backgroundColor: '#FFF3E0', color: '#E65100', padding: 8, borderRadius: 6, fontSize: 12, marginBottom: 12 },
   docThumb: { display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#757575' },
   docImg: { width: 70, height: 50, objectFit: 'cover', borderRadius: 6, border: '1px solid #e0e0e0' },
   docCaption: { fontSize: 10, marginTop: 2 },
