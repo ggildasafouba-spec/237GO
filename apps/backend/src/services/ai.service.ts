@@ -202,42 +202,62 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
     parts: [{ text: m.content }],
   }));
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-    {
-      systemInstruction: { parts: [{ text: system }] },
-      contents,
-      generationConfig: { maxOutputTokens: maxTokens, temperature },
-    },
-    { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
-  );
+  const response = await geminiPostWithRetry({
+    systemInstruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: { maxOutputTokens: maxTokens, temperature },
+  });
 
-  return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+/**
+ * POST vers l'API Gemini avec réessais automatiques en cas de surcharge
+ * (503 "high demand" ou 429), fréquent sur le niveau gratuit.
+ */
+async function geminiPostWithRetry(payload: any, attempts = 3): Promise<any> {
+  let lastError: any;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+        payload,
+        { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
+      );
+      return res.data;
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.response?.status;
+      // Réessayer uniquement sur surcharge/limite
+      if (status === 503 || status === 429) {
+        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
 }
 
 async function geminiVision(system: string, prompt: string, imageUrl: string, maxTokens: number): Promise<string> {
   // Télécharger et encoder l'image en base64 (inline data)
   const { data, contentType } = await fetchImageBase64(imageUrl);
 
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-    {
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: contentType, data } },
-          ],
-        },
-      ],
-      generationConfig: { maxOutputTokens: maxTokens },
-    },
-    { headers: { 'Content-Type': 'application/json' }, timeout: 40000 }
-  );
+  const response = await geminiPostWithRetry({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: contentType, data } },
+        ],
+      },
+    ],
+    generationConfig: { maxOutputTokens: maxTokens },
+  });
 
-  return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 // ========== HELPERS ==========
