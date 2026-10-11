@@ -2,22 +2,23 @@ import axios from 'axios';
 
 /**
  * Service IA unifié pour 237GO.
- * Supporte OpenAI et Anthropic (Claude), configurable via AI_PROVIDER.
+ * Supporte OpenAI, Anthropic (Claude) et Google (Gemini), configurable via AI_PROVIDER.
  *
  * Variables d'environnement :
- *   AI_PROVIDER   = 'claude' (défaut) | 'openai'
+ *   AI_PROVIDER   = 'gemini' | 'claude' | 'openai'   (défaut : gemini)
  *   AI_API_KEY    = clé API du fournisseur choisi
  *   AI_MODEL      = (optionnel) override du modèle
  */
 
-type AiProvider = 'claude' | 'openai';
+type AiProvider = 'claude' | 'openai' | 'gemini';
 
-const PROVIDER: AiProvider = (process.env.AI_PROVIDER as AiProvider) || 'claude';
+const PROVIDER: AiProvider = (process.env.AI_PROVIDER as AiProvider) || 'gemini';
 const API_KEY = process.env.AI_API_KEY || '';
 
 const DEFAULT_MODELS: Record<AiProvider, string> = {
   claude: 'claude-3-5-sonnet-20241022',
   openai: 'gpt-4o-mini',
+  gemini: 'gemini-1.5-flash',
 };
 
 const MODEL = process.env.AI_MODEL || DEFAULT_MODELS[PROVIDER];
@@ -54,6 +55,9 @@ export async function aiChat(params: {
   if (PROVIDER === 'openai') {
     return openAiChat(system, messages, maxTokens, temperature);
   }
+  if (PROVIDER === 'gemini') {
+    return geminiChat(system, messages, maxTokens, temperature);
+  }
   return claudeChat(system, messages, maxTokens, temperature);
 }
 
@@ -75,6 +79,9 @@ export async function aiVision(params: {
 
   if (PROVIDER === 'openai') {
     return openAiVision(system, prompt, imageUrl, maxTokens);
+  }
+  if (PROVIDER === 'gemini') {
+    return geminiVision(system, prompt, imageUrl, maxTokens);
   }
   return claudeVision(system, prompt, imageUrl, maxTokens);
 }
@@ -184,6 +191,53 @@ async function openAiVision(system: string, prompt: string, imageUrl: string, ma
     }
   );
   return response.data.choices?.[0]?.message?.content || '';
+}
+
+// ========== GEMINI (Google) ==========
+
+async function geminiChat(system: string, messages: AiMessage[], maxTokens: number, temperature: number): Promise<string> {
+  // Gemini : rôles 'user' / 'model' (l'assistant = 'model')
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+    {
+      systemInstruction: { parts: [{ text: system }] },
+      contents,
+      generationConfig: { maxOutputTokens: maxTokens, temperature },
+    },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+  );
+
+  return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+async function geminiVision(system: string, prompt: string, imageUrl: string, maxTokens: number): Promise<string> {
+  // Télécharger et encoder l'image en base64 (inline data)
+  const { data, contentType } = await fetchImageBase64(imageUrl);
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+    {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: contentType, data } },
+          ],
+        },
+      ],
+      generationConfig: { maxOutputTokens: maxTokens },
+    },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 40000 }
+  );
+
+  return response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 // ========== HELPERS ==========
