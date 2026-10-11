@@ -37,6 +37,15 @@
         "android.permission.RECORD_AUDIO"
       ]
     },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "237GO",
+      "shortName": "237GO",
+      "themeColor": "#1DB954",
+      "backgroundColor": "#121A17",
+      "display": "standalone",
+      "bundler": "metro"
+    },
     "plugins": [
       "expo-location",
       "expo-notifications",
