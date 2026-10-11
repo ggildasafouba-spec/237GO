@@ -262,7 +262,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Entrer les adresses
   if (step === 'location') {
     return (
-      <View style={styles.container}>
+      <ScrollView style={styles.scrollBg} contentContainerStyle={styles.confirmScroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Où allez-vous ?</Text>
 
         {/* Carte avec la position du passager */}
@@ -340,7 +340,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           onConfirm={onDestinationPicked}
           onClose={() => setShowDestPicker(false)}
         />
-      </View>
+      </ScrollView>
     );
   }
 
@@ -396,7 +396,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Confirmer et payer
   if (step === 'confirm') {
     return (
-      <View style={styles.container}>
+      <ScrollView style={styles.scrollBg} contentContainerStyle={styles.confirmScroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Confirmer votre course</Text>
 
         {/* Résumé */}
@@ -459,7 +459,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             <Text style={styles.buttonText}>Commander 🚀</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -605,6 +605,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: spacing.lg,
     paddingTop: spacing.xl + 20,
+  },
+  scrollBg: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  confirmScroll: {
+    padding: spacing.lg,
+    paddingTop: spacing.xl + 20,
+    paddingBottom: 140, // marge pour que "Commander" ne passe pas sous la barre système Android
   },
   centerContent: {
     justifyContent: 'center',
