@@ -232,7 +232,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
           {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Créer le compte</Text>}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -313,7 +313,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
           ))}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -381,7 +381,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
         {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Ajouter le membre</Text>}
       </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 }

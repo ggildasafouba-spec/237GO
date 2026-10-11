@@ -343,7 +343,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
           </>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -470,7 +470,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
         {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Confirmer la commande 🛒</Text>}
       </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 }

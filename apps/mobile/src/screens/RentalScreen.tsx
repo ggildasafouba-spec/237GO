@@ -338,7 +338,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           <Text style={styles.buttonText}>Réserver ce véhicule</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -431,7 +431,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           )}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -538,7 +538,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           )}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }

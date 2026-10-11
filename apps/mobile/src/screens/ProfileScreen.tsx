@@ -357,7 +357,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
       </TouchableOpacity>
 
       <Text style={styles.version}>237GO v1.0.0</Text>
-      <View style={{ height: 40 }} />
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 }

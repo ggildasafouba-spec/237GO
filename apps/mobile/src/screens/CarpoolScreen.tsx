@@ -216,7 +216,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
           ))}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -378,7 +378,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
           {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Publier le trajet</Text>}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }

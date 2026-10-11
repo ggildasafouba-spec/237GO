@@ -134,7 +134,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
           <Text style={styles.buttonText}>Continuer</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -199,7 +199,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
           {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Estimer le prix</Text>}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
@@ -264,7 +264,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
           {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Envoyer 📦</Text>}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     );
   }
