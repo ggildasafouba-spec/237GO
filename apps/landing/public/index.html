@@ -135,6 +135,10 @@
         .apk-btn:hover { transform: translateY(-3px); box-shadow: 0 14px 38px rgba(29,185,84,0.5); }
         .apk-btn small { opacity: 0.85; display: block; font-size: 12px; }
         .apk-btn strong { font-size: 18px; }
+        .webapp-btn { display: inline-flex; align-items: center; gap: 14px; background: var(--dark); color: #fff; padding: 18px 36px; border-radius: 14px; text-decoration: none; border: 2px solid var(--yellow); transition: transform 0.2s; }
+        .webapp-btn:hover { transform: translateY(-3px); }
+        .webapp-btn small { opacity: 0.7; display: block; font-size: 12px; color: var(--yellow); }
+        .webapp-btn strong { font-size: 18px; }
 
         footer { position: relative; padding: 0 20px 40px; background: linear-gradient(135deg, #0C1310 0%, #0E7A35 50%, #0C1310 100%); background-size: 200% 200%; animation: gradientShift 16s ease infinite; color: rgba(255,255,255,0.75); text-align: center; }
         footer .brand { font-size: 30px; font-weight: 900; color: #fff; margin-bottom: 6px; letter-spacing: 1px; }
@@ -277,14 +281,20 @@
             <h2 class="section-title">Téléchargez 237GO</h2>
             <p class="section-sub">Disponible maintenant sur Android (APK) · iOS bientôt</p>
 
-            <!-- Bouton principal : téléchargement direct de l'APK Android -->
-            <a href="https://expo.dev/artifacts/eas/NTx6USZ3TdaZiBrRVscthfPZrPWwdd-6olqWYhLbeAc.apk"
-               class="apk-btn" download>
-                <span style="font-size:28px;">📲</span>
-                <span><small>Télécharger maintenant</small><strong>Application Android (APK)</strong></span>
-            </a>
-            <p style="color:#6B7B70; font-size:13px; margin:12px 0 28px;">
-                Après le téléchargement, ouvrez le fichier et autorisez l'installation depuis cette source.
+            <!-- Boutons d'accès : APK Android + App web (iPhone / tous) -->
+            <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+                <a href="https://expo.dev/artifacts/eas/NTx6USZ3TdaZiBrRVscthfPZrPWwdd-6olqWYhLbeAc.apk"
+                   class="apk-btn" download>
+                    <span style="font-size:28px;">📲</span>
+                    <span><small>Télécharger (Android)</small><strong>Application APK</strong></span>
+                </a>
+                <a href="https://app.237go.app" class="webapp-btn">
+                    <span style="font-size:28px;">🌐</span>
+                    <span><small>iPhone · Android · PC</small><strong>Ouvrir dans le navigateur</strong></span>
+                </a>
+            </div>
+            <p style="color:#6B7B70; font-size:13px; margin:14px 0 28px;">
+                Android : téléchargez l'APK et autorisez l'installation. iPhone : ouvrez l'app web, puis « Ajouter à l'écran d'accueil ».
             </p>
 
             <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-bottom:32px;">
