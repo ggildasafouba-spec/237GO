@@ -34,8 +34,6 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -44,9 +42,10 @@
       "expo-notifications",
       "expo-image-picker"
     ],
+    "owner": "afouba",
     "extra": {
       "eas": {
-        "projectId": "5343324b-5143-4bc9-8384-d2950a4f900b"
+        "projectId": "3956a01d-3157-4f9e-9208-b0aaebd62a5d"
       }
     }
   }
