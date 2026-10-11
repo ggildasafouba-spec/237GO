@@ -19,7 +19,6 @@ import { adminRouter } from './routes/admin.routes';
 import { webhookRouter } from './routes/webhook.routes';
 import { uploadRouter, UPLOAD_DIR } from './routes/upload.routes';
 import { aiRouter } from './routes/ai.routes';
-import { setupRouter } from './routes/setup.routes';
 import { setupSocketHandlers } from './socket';
 import { errorHandler } from './middleware/error.middleware';
 
@@ -64,7 +63,6 @@ app.use('/api/admin', adminRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/ai', aiRouter);
-app.use('/api/setup', setupRouter);
 
 // Servir les fichiers téléversés
 app.use('/uploads', express.static(UPLOAD_DIR));
