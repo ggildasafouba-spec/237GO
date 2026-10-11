@@ -22,8 +22,15 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [accountType, setAccountType] = useState<'PASSENGER' | 'DRIVER' | 'MERCHANT'>('PASSENGER');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const accountTypes = [
+    { id: 'PASSENGER' as const, label: 'Passager', icon: '🧍' },
+    { id: 'DRIVER' as const, label: 'Chauffeur', icon: '🚗' },
+    { id: 'MERCHANT' as const, label: 'Marchand', icon: '🏪' },
+  ];
 
   const { login, register } = useAuthStore();
 
@@ -48,7 +55,24 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           setIsLoading(false);
           return;
         }
+        // Le compte est créé en PASSENGER (sécurité). Si l'utilisateur a choisi
+        // Chauffeur ou Marchand, on l'orientera vers le formulaire de demande
+        // (validation par l'admin ensuite).
         await register({ phone, firstName, lastName, password });
+
+        if (accountType === 'DRIVER') {
+          Alert.alert(
+            'Bienvenue sur 237GO ! 🚗',
+            'Votre compte est créé. Pour conduire, complétez votre demande de chauffeur (documents + véhicule). Elle sera vérifiée par notre équipe.',
+            [{ text: 'Compléter ma demande', onPress: () => navigation.navigate('BecomeDriver') }]
+          );
+        } else if (accountType === 'MERCHANT') {
+          Alert.alert(
+            'Bienvenue sur 237GO ! 🏪',
+            'Votre compte est créé. Pour vendre, complétez votre demande de marchand. Elle sera vérifiée par notre équipe.',
+            [{ text: 'Compléter ma demande', onPress: () => navigation.navigate('BecomeMerchant') }]
+          );
+        }
       }
     } catch (error: any) {
       const message = error?.response?.data?.message || 'Une erreur est survenue';
@@ -102,6 +126,31 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
                 placeholderTextColor={colors.textLight}
                 accessibilityLabel="Nom de famille"
               />
+
+              {/* Choix du type de compte */}
+              <Text style={styles.accountTypeLabel}>Je m'inscris en tant que</Text>
+              <View style={styles.accountTypeRow}>
+                {accountTypes.map((t) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[styles.accountTypeChip, accountType === t.id && styles.accountTypeChipActive]}
+                    onPress={() => setAccountType(t.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: accountType === t.id }}
+                    accessibilityLabel={t.label}
+                  >
+                    <Text style={styles.accountTypeIcon}>{t.icon}</Text>
+                    <Text style={[styles.accountTypeText, accountType === t.id && styles.accountTypeTextActive]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {accountType !== 'PASSENGER' && (
+                <Text style={styles.accountTypeHint}>
+                  Une vérification de vos documents sera requise après l'inscription.
+                </Text>
+              )}
             </>
           )}
 
@@ -253,6 +302,49 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  accountTypeLabel: {
+    fontSize: typography.sm,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  accountTypeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  accountTypeChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  accountTypeChipActive: {
+    backgroundColor: '#E8F5E9',
+    borderColor: colors.primary,
+  },
+  accountTypeIcon: {
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  accountTypeText: {
+    fontSize: typography.xs,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  accountTypeTextActive: {
+    color: colors.primary,
+    fontWeight: '800',
+  },
+  accountTypeHint: {
+    fontSize: typography.xs,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+    fontStyle: 'italic',
   },
   phoneContainer: {
     flexDirection: 'row',
