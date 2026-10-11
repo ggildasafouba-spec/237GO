@@ -11,6 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import { useWalletStore } from '../store/walletStore';
+import { useAuthStore } from '../store/authStore';
 import { colors, spacing, typography } from '../theme';
 
 type PaymentProvider = 'ORANGE_MONEY' | 'MTN_MOMO' | 'EXPRESS_UNION';
@@ -24,10 +25,11 @@ const providers: { id: PaymentProvider; name: string; icon: string; color: strin
 const quickAmounts = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 
 export default function WalletScreen() {
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'loyalty'>('deposit');
   const [amount, setAmount] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<PaymentProvider>('ORANGE_MONEY');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(user?.phone || '');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const {
@@ -56,6 +58,10 @@ export default function WalletScreen() {
     }
     if (isNaN(numAmount) || numAmount < 100) {
       Alert.alert('Montant trop faible', 'Le montant minimum de recharge est 100 XAF.');
+      return;
+    }
+    if (!phone.match(/^6[0-9]{8}$/)) {
+      Alert.alert('Numéro requis', 'Entrez un numéro Mobile Money valide (format 6XXXXXXXX) pour la recharge.');
       return;
     }
 
@@ -255,19 +261,20 @@ export default function WalletScreen() {
             </TouchableOpacity>
           ))}
 
-          {/* Phone for withdrawal */}
-          {activeTab === 'withdraw' && (
-            <TextInput
-              style={styles.phoneInput}
-              placeholder="Numéro de téléphone (6XXXXXXXX)"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              maxLength={9}
-              placeholderTextColor={colors.textLight}
-              accessibilityLabel="Numéro pour le retrait"
-            />
-          )}
+          {/* Numéro de téléphone (requis pour MoMo / Orange, dépôt comme retrait) */}
+          <Text style={styles.label}>
+            {activeTab === 'deposit' ? 'Numéro à débiter' : 'Numéro à créditer'}
+          </Text>
+          <TextInput
+            style={styles.phoneInput}
+            placeholder="Numéro Mobile Money (6XXXXXXXX)"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={9}
+            placeholderTextColor={colors.textLight}
+            accessibilityLabel="Numéro de téléphone Mobile Money"
+          />
 
           <TouchableOpacity
             style={[styles.button, isProcessing && styles.buttonDisabled]}
