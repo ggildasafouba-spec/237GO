@@ -47,7 +47,8 @@ export default function AssistantScreen({ navigation }: { navigation: any }) {
     try {
       // On envoie l'historique (sans le message de bienvenue initial)
       const history = newMessages.slice(1).map((m) => ({ role: m.role, content: m.content }));
-      const res = await api.post('/ai/chat', { message: trimmed, history: history.slice(0, -1) });
+      // L'IA (Gemini gratuit) peut être lente : on autorise jusqu'à 90s pour cet appel
+      const res = await api.post('/ai/chat', { message: trimmed, history: history.slice(0, -1) }, { timeout: 90000 });
       const reply = res.data.data.reply as string;
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (error: any) {
