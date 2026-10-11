@@ -84,8 +84,14 @@ router.post(
 
       res.json({ success: true, data: { reply } });
     } catch (error: any) {
-      console.error('AI chat error:', error.message);
-      res.status(500).json({ success: false, message: 'L\'assistant est momentanément indisponible.' });
+      // Remonter le détail de l'erreur du fournisseur IA pour faciliter le diagnostic
+      const detail = error?.response?.data?.error?.message || error?.response?.data || error?.message;
+      console.error('AI chat error:', detail);
+      res.status(500).json({
+        success: false,
+        message: 'L\'assistant est momentanément indisponible.',
+        detail: typeof detail === 'string' ? detail : JSON.stringify(detail),
+      });
     }
   }
 );

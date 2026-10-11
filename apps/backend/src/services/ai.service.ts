@@ -18,7 +18,7 @@ const API_KEY = process.env.AI_API_KEY || '';
 const DEFAULT_MODELS: Record<AiProvider, string> = {
   claude: 'claude-3-5-sonnet-20241022',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-1.5-flash',
+  gemini: 'gemini-flash-latest',
 };
 
 const MODEL = process.env.AI_MODEL || DEFAULT_MODELS[PROVIDER];
