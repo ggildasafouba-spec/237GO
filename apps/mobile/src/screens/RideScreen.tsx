@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  ScrollView,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useRideStore } from '../store/rideStore';
