@@ -21,7 +21,7 @@ const providers: { id: PaymentProvider; name: string; icon: string; color: strin
   { id: 'EXPRESS_UNION', name: 'Express Union', icon: '🔵', color: '#0066CC' },
 ];
 
-const quickAmounts = [1000, 2000, 5000, 10000, 20000, 50000];
+const quickAmounts = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 
 export default function WalletScreen() {
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'loyalty'>('deposit');
@@ -47,9 +47,15 @@ export default function WalletScreen() {
   }, []);
 
   const handleDeposit = async () => {
-    const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount < 100) {
-      Alert.alert('Erreur', 'Montant minimum: 100 XAF');
+    // Nettoyer : ne garder que les chiffres (évite espaces, séparateurs, etc.)
+    const cleaned = (amount || '').replace(/[^0-9]/g, '');
+    const numAmount = parseInt(cleaned, 10);
+    if (!cleaned) {
+      Alert.alert('Montant requis', 'Entrez un montant à recharger (minimum 100 XAF).');
+      return;
+    }
+    if (isNaN(numAmount) || numAmount < 100) {
+      Alert.alert('Montant trop faible', 'Le montant minimum de recharge est 100 XAF.');
       return;
     }
 
