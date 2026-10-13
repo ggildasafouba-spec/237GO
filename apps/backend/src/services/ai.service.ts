@@ -18,7 +18,7 @@ const API_KEY = process.env.AI_API_KEY || '';
 const DEFAULT_MODELS: Record<AiProvider, string> = {
   claude: 'claude-3-5-sonnet-20241022',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-flash-latest',
+  gemini: 'gemini-2.0-flash',
 };
 
 const MODEL = process.env.AI_MODEL || DEFAULT_MODELS[PROVIDER];
@@ -215,26 +215,34 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
  * POST vers l'API Gemini avec réessais automatiques en cas de surcharge
  * (503 "high demand" ou 429), fréquent sur le niveau gratuit.
  */
-async function geminiPostWithRetry(payload: any, attempts = 2): Promise<any> {
+async function geminiPostWithRetry(payload: any): Promise<any> {
+  // Liste de modèles à essayer dans l'ordre (fallback si surcharge Google)
+  const models = [MODEL, 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash']
+    .filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
+
   let lastError: any;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const res = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-        payload,
-        { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
-      );
-      return res.data;
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.response?.status;
-      const isTimeout = err?.code === 'ECONNABORTED';
-      // Réessayer sur surcharge/limite OU timeout (sauf dernière tentative)
-      if ((status === 503 || status === 429 || isTimeout) && i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 1000));
-        continue;
+  for (const model of models) {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const res = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
+          payload,
+          { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
+        );
+        return res.data;
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.response?.status;
+        const isTimeout = err?.code === 'ECONNABORTED';
+        // 503/429 = surcharge → on passe au modèle suivant directement
+        if (status === 503 || status === 429) break;
+        // timeout → une 2e tentative sur le même modèle
+        if (isTimeout && i === 0) {
+          await new Promise((r) => setTimeout(r, 800));
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
   }
   throw lastError;
