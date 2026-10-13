@@ -72,27 +72,24 @@ export default function WalletScreen() {
       const result = await deposit(numAmount, selectedProvider, phone);
 
       if (result.paymentUrl) {
-        // Ouvrir la page de paiement sécurisée (NotchPay) : l'utilisateur paie
-        // par MoMo / Orange. Le portefeuille est crédité ensuite via le webhook.
+        // Ouvrir directement la page de paiement sécurisée (NotchPay) : l'utilisateur
+        // paie par MoMo / Orange. Le portefeuille est crédité ensuite via le webhook.
+        // On n'utilise pas canOpenURL (qui peut renvoyer false à tort sur Android)
+        // et on n'ajoute pas d'alerte intermédiaire qui bloquerait la redirection.
         setAmount('');
-        Alert.alert(
-          'Finalisez votre paiement',
-          `Vous allez être redirigé vers la page de paiement pour régler ${numAmount.toLocaleString()} XAF. Votre solde sera crédité après confirmation.`,
-          [
-            {
-              text: 'Continuer',
-              onPress: async () => {
-                const ok = await Linking.canOpenURL(result.paymentUrl!);
-                if (ok) {
-                  Linking.openURL(result.paymentUrl!);
-                } else {
-                  Alert.alert('Erreur', "Impossible d'ouvrir la page de paiement.");
-                }
-              },
-            },
-            { text: 'Annuler', style: 'cancel' },
-          ]
-        );
+        try {
+          await Linking.openURL(result.paymentUrl);
+        } catch {
+          // Si l'ouverture automatique échoue, on propose le lien manuellement.
+          Alert.alert(
+            'Ouvrir la page de paiement',
+            "Appuyez sur « Ouvrir » pour finaliser votre paiement.",
+            [
+              { text: 'Ouvrir', onPress: () => Linking.openURL(result.paymentUrl!) },
+              { text: 'Annuler', style: 'cancel' },
+            ]
+          );
+        }
       } else {
         // Pas d'URL (mode simulation / passerelle directe) : recharge immédiate
         await fetchBalance();
@@ -102,8 +99,15 @@ export default function WalletScreen() {
         );
         setAmount('');
       }
-    } catch {
-      Alert.alert('Erreur', 'La recharge a échoué. Réessayez.');
+    } catch (err: any) {
+      // Afficher le vrai motif renvoyé par le serveur (numéro refusé, service indispo, etc.)
+      const serverMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.errors?.[0]?.msg ||
+        (err?.message === 'Network Error'
+          ? 'Pas de connexion au serveur. Vérifiez votre réseau.'
+          : null);
+      Alert.alert('Recharge impossible', serverMsg || 'La recharge a échoué. Réessayez.');
     } finally {
       setIsProcessing(false);
     }

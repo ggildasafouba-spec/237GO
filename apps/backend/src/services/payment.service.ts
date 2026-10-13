@@ -43,6 +43,8 @@ export async function initiateNotchPay(data: {
           Authorization: notchPayConfig.publicKey,
           'Content-Type': 'application/json',
         },
+        // Évite qu'une lenteur de NotchPay fasse pendre indéfiniment la requête.
+        timeout: 20000,
       }
     );
 
