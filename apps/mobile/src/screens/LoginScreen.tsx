@@ -75,7 +75,13 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         }
       }
     } catch (error: any) {
-      const message = error?.response?.data?.message || 'Une erreur est survenue';
+      // Afficher le vrai message : message backend, ou 1re erreur de validation, sinon générique
+      const data = error?.response?.data;
+      const message =
+        data?.message ||
+        (Array.isArray(data?.errors) && data.errors[0]?.msg) ||
+        (error?.message === 'Network Error' ? 'Pas de connexion au serveur. Vérifiez votre internet.' : null) ||
+        'Une erreur est survenue';
       Alert.alert('Erreur', message);
     } finally {
       setIsLoading(false);
