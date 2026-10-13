@@ -10,10 +10,42 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useCarpoolStore } from '../store/carpoolStore';
 import { useAuthStore } from '../store/authStore';
 import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
+
+// Coordonnées connues des grandes villes camerounaises (fallback si géocodage indispo)
+const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
+  douala: { lat: 4.0511, lng: 9.7679 },
+  yaounde: { lat: 3.848, lng: 11.5021 },
+  'yaoundé': { lat: 3.848, lng: 11.5021 },
+  bafoussam: { lat: 5.4781, lng: 10.4176 },
+  kribi: { lat: 2.9391, lng: 9.9073 },
+  limbe: { lat: 4.0186, lng: 9.2042 },
+  'limbé': { lat: 4.0186, lng: 9.2042 },
+  bamenda: { lat: 5.9597, lng: 10.1459 },
+  garoua: { lat: 9.3017, lng: 13.3921 },
+  maroua: { lat: 10.591, lng: 14.3159 },
+  ngaoundere: { lat: 7.3167, lng: 13.5833 },
+  bertoua: { lat: 4.5775, lng: 13.6846 },
+  ebolowa: { lat: 2.9, lng: 11.15 },
+  buea: { lat: 4.1537, lng: 9.2920 },
+};
+
+// Résout les coordonnées d'une ville : table locale, sinon géocodage OSM
+async function resolveCity(city: string, fallback: { lat: number; lng: number }): Promise<{ lat: number; lng: number }> {
+  const key = city.trim().toLowerCase();
+  if (CITY_COORDS[key]) return CITY_COORDS[key];
+  try {
+    const r = await Location.geocodeAsync(`${city}, Cameroun`);
+    if (r && r.length) return { lat: r[0].latitude, lng: r[0].longitude };
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
 
 const popularRoutes = [
   { from: 'Douala', to: 'Yaoundé' },
@@ -94,13 +126,16 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
     }
 
     try {
+      // Résoudre les vraies coordonnées des villes de départ et d'arrivée
+      const dep = await resolveCity(pubDeparture, { lat: 4.0511, lng: 9.7679 });
+      const arr = await resolveCity(pubArrival, { lat: 3.848, lng: 11.5021 });
       await createCarpool({
-        departureLat: 4.0511,
-        departureLng: 9.7679,
+        departureLat: dep.lat,
+        departureLng: dep.lng,
         departureCity: pubDeparture,
         departureAddress: pubDepartureAddr || pubDeparture,
-        arrivalLat: 3.8480,
-        arrivalLng: 11.5021,
+        arrivalLat: arr.lat,
+        arrivalLng: arr.lng,
         arrivalCity: pubArrival,
         arrivalAddress: pubArrivalAddr || pubArrival,
         departureTime: `${pubDate}T${pubTime}:00`,

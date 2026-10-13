@@ -11,7 +11,9 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useMarketStore } from '../store/marketStore';
+import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
 
@@ -31,6 +33,9 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [selectedPayment, setSelectedPayment] = useState('ORANGE_MONEY');
+  const [myCoords, setMyCoords] = useState({ lat: 4.0511, lng: 9.7679 });
+  const [deliveryCoords, setDeliveryCoords] = useState({ lat: 4.055, lng: 9.77 });
+  const { getCurrentLocation, reverseGeocode } = useLocation();
 
   const {
     merchants,
@@ -50,7 +55,19 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
   } = useMarketStore();
 
   useEffect(() => {
-    fetchMerchants({ lat: 4.0511, lng: 9.7679 });
+    (async () => {
+      const loc = await getCurrentLocation();
+      if (loc) {
+        setMyCoords({ lat: loc.latitude, lng: loc.longitude });
+        setDeliveryCoords({ lat: loc.latitude, lng: loc.longitude });
+        fetchMerchants({ lat: loc.latitude, lng: loc.longitude });
+        const addr = await reverseGeocode(loc.latitude, loc.longitude);
+        if (addr && !deliveryAddress) setDeliveryAddress(addr);
+      } else {
+        // Fallback Douala si GPS indisponible
+        fetchMerchants({ lat: 4.0511, lng: 9.7679 });
+      }
+    })();
   }, []);
 
   const filteredMerchants = merchants.filter((m) => {
@@ -66,12 +83,21 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     }
     if (!selectedMerchant) return;
 
+    // Géocoder l'adresse de livraison saisie (sinon on garde la position GPS)
+    let coords = deliveryCoords;
+    try {
+      const r = await Location.geocodeAsync(deliveryAddress);
+      if (r && r.length) coords = { lat: r[0].latitude, lng: r[0].longitude };
+    } catch {
+      // géocodage indisponible : on garde deliveryCoords (position GPS)
+    }
+
     try {
       await placeOrder({
         merchantId: selectedMerchant.id,
         deliveryAddress,
-        deliveryLat: 4.055,
-        deliveryLng: 9.77,
+        deliveryLat: coords.lat,
+        deliveryLng: coords.lng,
         paymentMethod: selectedPayment,
       });
       Alert.alert('🎉 Commande passée !', 'Le marchand prépare votre commande.', [

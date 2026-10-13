@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useDeliveryStore } from '../store/deliveryStore';
+import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
 import { colors, spacing, typography } from '../theme';
 
@@ -41,7 +43,52 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   const [dropoffContact, setDropoffContact] = useState('');
   const [selectedPayment, setSelectedPayment] = useState('ORANGE_MONEY');
 
+  // Coordonnées réelles (GPS pour le retrait, géocodage pour la destination). Fallback Douala.
+  const [pickupCoords, setPickupCoords] = useState({ lat: 4.0511, lng: 9.7679 });
+  const [dropoffCoords, setDropoffCoords] = useState({ lat: 4.0611, lng: 9.7879 });
+  const { getCurrentLocation, reverseGeocode } = useLocation();
+
   const { currentDelivery, estimate, isLoading, getEstimate, createDelivery, clearDelivery } = useDeliveryStore();
+
+  // Récupérer la position réelle au démarrage pour pré-remplir le point de retrait
+  useEffect(() => {
+    (async () => {
+      const loc = await getCurrentLocation();
+      if (loc) {
+        setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
+        const addr = await reverseGeocode(loc.latitude, loc.longitude);
+        if (addr && !pickupAddress) setPickupAddress(addr);
+      }
+    })();
+  }, []);
+
+  // Utiliser ma position pour le retrait
+  const useMyLocationForPickup = async () => {
+    const loc = await getCurrentLocation();
+    if (loc) {
+      setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
+      const addr = await reverseGeocode(loc.latitude, loc.longitude);
+      setPickupAddress(addr || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+    } else {
+      Alert.alert('Localisation', "Impossible d'obtenir votre position. Vérifiez le GPS.");
+    }
+  };
+
+  // Géocoder les adresses saisies (texte → coordonnées)
+  const geocodeAddresses = async () => {
+    try {
+      if (pickupAddress) {
+        const r = await Location.geocodeAsync(pickupAddress);
+        if (r && r.length) setPickupCoords({ lat: r[0].latitude, lng: r[0].longitude });
+      }
+      if (dropoffAddress) {
+        const r = await Location.geocodeAsync(dropoffAddress);
+        if (r && r.length) setDropoffCoords({ lat: r[0].latitude, lng: r[0].longitude });
+      }
+    } catch {
+      // géocodage indisponible : on garde les coords actuelles
+    }
+  };
 
   // Note : quand la livraison passe à DELIVERED, l'écran de suivi affiche
   // les actions d'escrow (confirmer réception / litige) au lieu de fermer.
@@ -57,12 +104,12 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
     }
 
     try {
-      // Coordonnées simulées (en prod: geocoding)
+      await geocodeAddresses();
       await getEstimate({
-        pickupLat: 4.0511,
-        pickupLng: 9.7679,
-        dropoffLat: 4.0611,
-        dropoffLng: 9.7879,
+        pickupLat: pickupCoords.lat,
+        pickupLng: pickupCoords.lng,
+        dropoffLat: dropoffCoords.lat,
+        dropoffLng: dropoffCoords.lng,
         packageType: selectedType,
       });
       setStep('confirm');
@@ -74,12 +121,12 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   const handleCreate = async () => {
     try {
       await createDelivery({
-        pickupLat: 4.0511,
-        pickupLng: 9.7679,
+        pickupLat: pickupCoords.lat,
+        pickupLng: pickupCoords.lng,
         pickupAddress,
         pickupContact,
-        dropoffLat: 4.0611,
-        dropoffLng: 9.7879,
+        dropoffLat: dropoffCoords.lat,
+        dropoffLng: dropoffCoords.lng,
         dropoffAddress,
         dropoffContact,
         packageType: selectedType,
@@ -158,6 +205,14 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
           placeholderTextColor={colors.textLight}
           accessibilityLabel="Adresse de retrait du colis"
         />
+        <TouchableOpacity
+          style={styles.myLocationBtn}
+          onPress={useMyLocationForPickup}
+          accessibilityRole="button"
+          accessibilityLabel="Utiliser ma position actuelle pour le retrait"
+        >
+          <Text style={styles.myLocationText}>📍 Utiliser ma position actuelle</Text>
+        </TouchableOpacity>
         <TextInput
           style={styles.input}
           placeholder="Téléphone contact retrait (6XXXXXXXX)"
@@ -381,6 +436,19 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
+  },
+  myLocationBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    marginBottom: spacing.sm,
+  },
+  myLocationText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: typography.sm,
   },
   typeGrid: {
     flexDirection: 'row',

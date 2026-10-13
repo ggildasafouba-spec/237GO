@@ -23,6 +23,7 @@ interface ServiceItem {
   screen: string;
   color: string;
   phase: number;
+  comingSoon?: boolean;
 }
 
 const services: ServiceItem[] = [
@@ -78,6 +79,7 @@ const services: ServiceItem[] = [
     description: 'Entreprises',
     screen: 'Business',
     color: colors.dark, // anthracite
+    comingSoon: true,
     phase: 3,
   },
 ];
@@ -162,12 +164,22 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {services.map((service) => (
           <TouchableOpacity
             key={service.id}
-            style={styles.serviceCard}
-            onPress={() => navigation.navigate(service.screen)}
-            accessibilityLabel={`${service.name}: ${service.description}`}
+            style={[styles.serviceCard, service.comingSoon && styles.serviceCardSoon]}
+            onPress={() => {
+              if (service.comingSoon) return;
+              navigation.navigate(service.screen);
+            }}
+            activeOpacity={service.comingSoon ? 1 : 0.6}
+            accessibilityLabel={`${service.name}: ${service.description}${service.comingSoon ? ' (bientôt disponible)' : ''}`}
             accessibilityRole="button"
+            accessibilityState={{ disabled: !!service.comingSoon }}
           >
-            <View style={[styles.serviceIconWrap, { backgroundColor: service.color + '18' }]}>
+            {service.comingSoon && (
+              <View style={styles.soonBadge}>
+                <Text style={styles.soonBadgeText}>Bientôt</Text>
+              </View>
+            )}
+            <View style={[styles.serviceIconWrap, { backgroundColor: service.color + '18' }, service.comingSoon && styles.serviceIconWrapSoon]}>
               <Text style={styles.serviceIcon}>{service.icon}</Text>
             </View>
             <Text style={styles.serviceName}>{service.name}</Text>
@@ -382,6 +394,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
+  },
+  serviceCardSoon: {
+    opacity: 0.6,
+  },
+  serviceIconWrapSoon: {
+    opacity: 0.7,
+  },
+  soonBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: colors.secondary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  soonBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primaryDark,
   },
   serviceIconWrap: {
     width: 48,
