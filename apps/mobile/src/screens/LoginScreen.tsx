@@ -23,6 +23,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [accountType, setAccountType] = useState<'PASSENGER' | 'DRIVER' | 'MERCHANT'>('PASSENGER');
+  const [isInternational, setIsInternational] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -40,8 +41,9 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       return;
     }
 
-    if (!phone.match(/^6[0-9]{8}$/)) {
-      Alert.alert('Erreur', 'Numéro de téléphone invalide. Format: 6XXXXXXXX');
+    // Accepte le format camerounais (6XXXXXXXX) ou international (+indicatif...)
+    if (!phone.match(/^(6[0-9]{8}|\+[1-9][0-9]{6,14})$/)) {
+      Alert.alert('Erreur', 'Numéro invalide. Format camerounais 6XXXXXXXX, ou international avec l\'indicatif (ex: +33...).');
       return;
     }
 
@@ -161,20 +163,31 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           )}
 
           <View style={styles.phoneContainer}>
-            <View style={styles.phonePrefix}>
-              <Text style={styles.phonePrefixText}>🇨🇲 +237</Text>
-            </View>
+            {!isInternational && (
+              <View style={styles.phonePrefix}>
+                <Text style={styles.phonePrefixText}>🇨🇲 +237</Text>
+              </View>
+            )}
             <TextInput
               style={styles.phoneInput}
-              placeholder="6XXXXXXXX"
+              placeholder={isInternational ? '+33 6 12 34 56 78' : '6XXXXXXXX'}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
-              maxLength={9}
+              maxLength={isInternational ? 16 : 9}
               placeholderTextColor={colors.textLight}
               accessibilityLabel="Numéro de téléphone"
             />
           </View>
+          <TouchableOpacity
+            onPress={() => { setIsInternational(!isInternational); setPhone(''); }}
+            style={styles.intlToggle}
+            accessibilityRole="button"
+          >
+            <Text style={styles.intlToggleText}>
+              {isInternational ? '🇨🇲 J\'ai un numéro camerounais' : '🌍 Je suis à l\'étranger (numéro international)'}
+            </Text>
+          </TouchableOpacity>
 
           <View style={styles.passwordContainer}>
             <TextInput
@@ -354,7 +367,16 @@ const styles = StyleSheet.create({
   },
   phoneContainer: {
     flexDirection: 'row',
+    marginBottom: spacing.xs,
+  },
+  intlToggle: {
     marginBottom: spacing.md,
+    paddingVertical: 2,
+  },
+  intlToggleText: {
+    fontSize: typography.xs,
+    color: colors.primary,
+    fontWeight: '600',
   },
   phonePrefix: {
     backgroundColor: colors.background,

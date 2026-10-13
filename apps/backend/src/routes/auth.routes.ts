@@ -14,7 +14,8 @@ const prisma = new PrismaClient();
 router.post(
   '/register',
   [
-    body('phone').matches(/^6[0-9]{8}$/).withMessage('Numéro camerounais invalide (ex: 6XXXXXXXX)'),
+    // Accepte un numéro camerounais (6XXXXXXXX) OU un numéro international (+indicatif...)
+    body('phone').matches(/^(6[0-9]{8}|\+[1-9][0-9]{6,14})$/).withMessage('Numéro invalide. Format camerounais 6XXXXXXXX ou international +...'),
     body('firstName').trim().notEmpty().withMessage('Prénom requis'),
     body('lastName').trim().notEmpty().withMessage('Nom requis'),
     body('password').isLength({ min: 6 }).withMessage('Mot de passe minimum 6 caractères'),
@@ -82,7 +83,7 @@ router.post(
 router.post(
   '/login',
   [
-    body('phone').matches(/^6[0-9]{8}$/).withMessage('Numéro camerounais invalide'),
+    body('phone').matches(/^(6[0-9]{8}|\+[1-9][0-9]{6,14})$/).withMessage('Numéro invalide'),
     body('password').notEmpty().withMessage('Mot de passe requis'),
   ],
   async (req: Request, res: Response) => {

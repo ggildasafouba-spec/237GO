@@ -52,6 +52,8 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   const [pubPrice, setPubPrice] = useState('');
   const [pubAddress, setPubAddress] = useState('');
   const [pubWithDriver, setPubWithDriver] = useState(false);
+  const [localContactName, setLocalContactName] = useState('');
+  const [localContactPhone, setLocalContactPhone] = useState('');
   const [vehiclePhoto, setVehiclePhoto] = useState<string | null>(null);
   const [registrationPhoto, setRegistrationPhoto] = useState<string | null>(null);
   const [insurancePhoto, setInsurancePhoto] = useState<string | null>(null);
@@ -154,6 +156,11 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
       return;
     }
 
+    if (!localContactName || !localContactPhone.match(/^6[0-9]{8}$/)) {
+      Alert.alert('Contact local requis', 'Indiquez le nom et le numéro camerounais (6XXXXXXXX) de la personne qui gère le véhicule au Cameroun (remise des clés).');
+      return;
+    }
+
     try {
       await publishVehicle({
         type: pubType,
@@ -170,6 +177,8 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
         registrationPhoto,
         insurancePhoto,
         ownerIdPhoto,
+        localContactName,
+        localContactPhone,
       });
       Alert.alert('✅ Véhicule soumis à vérification', 'Votre véhicule est en attente de validation par l’équipe. Il apparaîtra après approbation.');
       setView('search');
@@ -578,6 +587,28 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           placeholderTextColor={colors.textLight}
         />
 
+        {/* Contact local au Cameroun (indispensable, surtout pour la diaspora) */}
+        <Text style={styles.sectionLabel}>Contact local au Cameroun 🇨🇲</Text>
+        <Text style={styles.helperText}>
+          La personne qui gère le véhicule sur place (remise des clés au locataire). Obligatoire, même si vous êtes à l'étranger.
+        </Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nom du contact local"
+          value={localContactName}
+          onChangeText={setLocalContactName}
+          placeholderTextColor={colors.textLight}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Numéro camerounais du contact (6XXXXXXXX)"
+          value={localContactPhone}
+          onChangeText={setLocalContactPhone}
+          keyboardType="phone-pad"
+          maxLength={9}
+          placeholderTextColor={colors.textLight}
+        />
+
         <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={handlePublish}
@@ -758,6 +789,7 @@ const styles = StyleSheet.create({
   pricingValue: { fontSize: typography.sm, fontWeight: '700', color: colors.text },
   // Book
   sectionLabel: { fontSize: typography.md, fontWeight: '600', color: colors.text, marginTop: spacing.lg, marginBottom: spacing.sm },
+  helperText: { fontSize: typography.xs, color: colors.textSecondary, marginBottom: spacing.sm, fontStyle: 'italic' },
   input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
   row: { flexDirection: 'row' },
   driverOption: {

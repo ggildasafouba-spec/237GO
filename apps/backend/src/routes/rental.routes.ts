@@ -91,6 +91,8 @@ router.post(
     body('registrationPhoto').optional().isURL(),
     body('insurancePhoto').optional().isURL(),
     body('ownerIdPhoto').optional().isURL(),
+    body('localContactName').trim().notEmpty().withMessage('Nom du contact local requis'),
+    body('localContactPhone').matches(/^6[0-9]{8}$/).withMessage('Numéro camerounais du contact local requis (6XXXXXXXX)'),
   ],
   async (req: AuthRequest, res: Response) => {
     try {

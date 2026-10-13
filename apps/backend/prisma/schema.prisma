@@ -433,6 +433,8 @@ model Vehicle {
   registrationPhoto String?
   insurancePhoto    String?
   ownerIdPhoto      String?
+  localContactName  String?            // mandataire local (diaspora) : qui remet les clés au Cameroun
+  localContactPhone String?            // numéro camerounais du mandataire
   verificationStatus VerificationStatus @default(PENDING)
   rejectionReason   String?
   bookings          RentalBooking[]
