@@ -80,7 +80,7 @@ router.post(
         { role: 'user', content: message },
       ];
 
-      const reply = await aiChat({ system, messages, maxTokens: 600, temperature: 0.6 });
+      const reply = await aiChat({ system, messages, maxTokens: 400, temperature: 0.6 });
 
       res.json({ success: true, data: { reply } });
     } catch (error: any) {

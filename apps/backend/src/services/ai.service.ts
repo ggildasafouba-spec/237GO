@@ -215,22 +215,23 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
  * POST vers l'API Gemini avec réessais automatiques en cas de surcharge
  * (503 "high demand" ou 429), fréquent sur le niveau gratuit.
  */
-async function geminiPostWithRetry(payload: any, attempts = 3): Promise<any> {
+async function geminiPostWithRetry(payload: any, attempts = 2): Promise<any> {
   let lastError: any;
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await axios.post(
         `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
         payload,
-        { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
+        { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
       );
       return res.data;
     } catch (err: any) {
       lastError = err;
       const status = err?.response?.status;
-      // Réessayer uniquement sur surcharge/limite
-      if (status === 503 || status === 429) {
-        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+      const isTimeout = err?.code === 'ECONNABORTED';
+      // Réessayer sur surcharge/limite OU timeout (sauf dernière tentative)
+      if ((status === 503 || status === 429 || isTimeout) && i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 1000));
         continue;
       }
       throw err;

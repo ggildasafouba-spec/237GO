@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../config/api';
 import { colors, spacing, typography } from '../theme';
 
@@ -32,6 +33,7 @@ export default function AssistantScreen({ navigation }: { navigation: any }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -109,7 +111,7 @@ export default function AssistantScreen({ navigation }: { navigation: any }) {
         )}
       </ScrollView>
 
-      <View style={styles.inputBar}>
+      <View style={[styles.inputBar, { paddingBottom: spacing.sm + insets.bottom }]}>
         <TextInput
           style={styles.input}
           placeholder="Écrivez votre message..."
