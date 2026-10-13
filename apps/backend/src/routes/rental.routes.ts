@@ -116,6 +116,7 @@ router.post(
           ownerId: req.user!.id,
           verificationStatus: 'PENDING',
           ...req.body,
+          withDriver: true, // 237GO : location avec chauffeur uniquement (sécurité)
         },
       });
 

@@ -9,7 +9,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Switch,
 } from 'react-native';
 import { useRentalStore } from '../store/rentalStore';
 import EscrowActions from '../components/EscrowActions';
@@ -37,10 +36,8 @@ const paymentMethods = [
 export default function RentalScreen({ navigation }: { navigation: any }) {
   const [view, setView] = useState<ViewMode>('search');
   const [filterType, setFilterType] = useState('all');
-  const [withDriverFilter, setWithDriverFilter] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [withDriver, setWithDriver] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('ORANGE_MONEY');
 
   // Publish form
@@ -51,7 +48,6 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   const [pubType, setPubType] = useState('CAR_ECONOMY');
   const [pubPrice, setPubPrice] = useState('');
   const [pubAddress, setPubAddress] = useState('');
-  const [pubWithDriver, setPubWithDriver] = useState(false);
   const [localContactName, setLocalContactName] = useState('');
   const [localContactPhone, setLocalContactPhone] = useState('');
   const [vehiclePhoto, setVehiclePhoto] = useState<string | null>(null);
@@ -80,7 +76,6 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
 
   const filteredVehicles = vehicles.filter((v) => {
     if (filterType !== 'all' && v.type !== filterType) return false;
-    if (withDriverFilter && !v.withDriver) return false;
     return true;
   });
 
@@ -98,12 +93,11 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     }
 
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    let totalPrice = days * selectedVehicle.pricePerDay;
-    if (withDriver && selectedVehicle.withDriver) totalPrice += days * 10000;
+    const totalPrice = days * selectedVehicle.pricePerDay;
 
     Alert.alert(
       'Confirmer la réservation',
-      `${days} jour(s) × ${selectedVehicle.pricePerDay.toLocaleString()} XAF${withDriver ? ' + chauffeur' : ''}\n\nTotal: ${totalPrice.toLocaleString()} XAF`,
+      `${days} jour(s) × ${selectedVehicle.pricePerDay.toLocaleString()} XAF (chauffeur inclus)\n\nTotal: ${totalPrice.toLocaleString()} XAF`,
       [
         { text: 'Annuler' },
         {
@@ -114,7 +108,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
                 vehicleId: selectedVehicle.id,
                 startDate,
                 endDate,
-                withDriver,
+                withDriver: true,
                 paymentMethod: selectedPayment,
               });
               Alert.alert('✅ Réservation confirmée !', `Véhicule réservé pour ${days} jour(s).`);
@@ -169,7 +163,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
         year: parseInt(pubYear),
         plate: pubPlate,
         pricePerDay: parseFloat(pubPrice),
-        withDriver: pubWithDriver,
+        withDriver: true,
         locationLat: 4.0511,
         locationLng: 9.7679,
         locationAddress: pubAddress,
@@ -244,14 +238,10 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           ))}
         </ScrollView>
 
-        <View style={styles.driverFilterRow}>
-          <Text style={styles.driverFilterLabel}>Avec chauffeur uniquement</Text>
-          <Switch
-            value={withDriverFilter}
-            onValueChange={setWithDriverFilter}
-            trackColor={{ false: '#ccc', true: colors.primaryLight }}
-            thumbColor={withDriverFilter ? colors.primary : '#f4f3f4'}
-          />
+        <View style={styles.driverInfoBox}>
+          <Text style={styles.driverInfoText}>
+            👨‍✈️ Toutes les locations se font avec chauffeur, pour votre sécurité et celle du véhicule.
+          </Text>
         </View>
 
         {/* Liste */}
@@ -340,8 +330,8 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
             <Text style={styles.detailValue}>{selectedVehicle.locationAddress}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Chauffeur disponible</Text>
-            <Text style={styles.detailValue}>{selectedVehicle.withDriver ? '✅ Oui' : '❌ Non'}</Text>
+            <Text style={styles.detailLabel}>Chauffeur</Text>
+            <Text style={styles.detailValue}>✅ Inclus</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Propriétaire</Text>
@@ -363,12 +353,10 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
               <Text style={styles.pricingValue}>{selectedVehicle.pricePerHour.toLocaleString()} XAF</Text>
             </View>
           )}
-          {selectedVehicle.withDriver && (
-            <View style={styles.pricingRow}>
-              <Text style={styles.pricingLabel}>Chauffeur/jour</Text>
-              <Text style={styles.pricingValue}>10,000 XAF</Text>
-            </View>
-          )}
+          <View style={styles.pricingRow}>
+            <Text style={styles.pricingLabel}>Chauffeur</Text>
+            <Text style={styles.pricingValue}>Inclus</Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -408,9 +396,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     const days = startDate && endDate
       ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))
       : 0;
-    const totalPrice = days > 0
-      ? days * selectedVehicle.pricePerDay + (withDriver ? days * 10000 : 0)
-      : 0;
+    const totalPrice = days > 0 ? days * selectedVehicle.pricePerDay : 0;
 
     return (
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -441,20 +427,11 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           accessibilityLabel="Date de fin de location"
         />
 
-        {selectedVehicle.withDriver && (
-          <View style={styles.driverOption}>
-            <View>
-              <Text style={styles.driverOptionLabel}>Avec chauffeur</Text>
-              <Text style={styles.driverOptionPrice}>+10,000 XAF/jour</Text>
-            </View>
-            <Switch
-              value={withDriver}
-              onValueChange={setWithDriver}
-              trackColor={{ false: '#ccc', true: colors.primaryLight }}
-              thumbColor={withDriver ? colors.primary : '#f4f3f4'}
-            />
-          </View>
-        )}
+        <View style={styles.driverInfoBox}>
+          <Text style={styles.driverInfoText}>
+            👨‍✈️ Location avec chauffeur : un chauffeur conduit le véhicule pour vous. Chauffeur inclus dans le prix.
+          </Text>
+        </View>
 
         {days > 0 && (
           <View style={styles.totalCard}>
@@ -566,14 +543,10 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           placeholderTextColor={colors.textLight}
         />
 
-        <View style={styles.driverOption}>
-          <Text style={styles.driverOptionLabel}>Je propose un chauffeur</Text>
-          <Switch
-            value={pubWithDriver}
-            onValueChange={setPubWithDriver}
-            trackColor={{ false: '#ccc', true: colors.primaryLight }}
-            thumbColor={pubWithDriver ? colors.primary : '#f4f3f4'}
-          />
+        <View style={styles.driverInfoBox}>
+          <Text style={styles.driverInfoText}>
+            👨‍✈️ Sur 237GO, la location se fait avec chauffeur. Vous (ou votre contact local) fournissez un chauffeur. Le locataire ne conduit pas lui-même — c'est plus sûr pour votre véhicule.
+          </Text>
         </View>
 
         <Text style={styles.sectionLabel}>Documents requis</Text>
@@ -775,11 +748,11 @@ const styles = StyleSheet.create({
   filterIcon: { fontSize: 16, marginRight: 4 },
   filterText: { fontSize: typography.xs, color: colors.text, fontWeight: '500' },
   filterTextActive: { color: '#fff' },
-  driverFilterRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#fff', padding: spacing.md, borderRadius: 10, marginBottom: spacing.md,
+  driverInfoBox: {
+    backgroundColor: '#E8F5E9', padding: spacing.md, borderRadius: 10, marginBottom: spacing.md,
+    borderLeftWidth: 3, borderLeftColor: colors.primary,
   },
-  driverFilterLabel: { fontSize: typography.sm, color: colors.text },
+  driverInfoText: { fontSize: typography.xs, color: colors.text, lineHeight: 18 },
   vehicleCard: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: 12, marginBottom: spacing.sm, elevation: 2 },
   vehicleCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
   vehicleEmoji: { fontSize: 36, marginRight: spacing.md },
@@ -813,12 +786,6 @@ const styles = StyleSheet.create({
   chatButtonText: { color: colors.primary, fontWeight: '700', fontSize: typography.md },
   input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
   row: { flexDirection: 'row' },
-  driverOption: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, marginBottom: spacing.md,
-  },
-  driverOptionLabel: { fontSize: typography.sm, color: colors.text, fontWeight: '500' },
-  driverOptionPrice: { fontSize: typography.xs, color: colors.textSecondary },
   totalCard: {
     backgroundColor: '#E8F5E9', padding: spacing.lg, borderRadius: 12, alignItems: 'center', marginBottom: spacing.md,
   },
