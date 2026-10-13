@@ -34,3 +34,5 @@ coverage/
 
 # Fichiers téléversés (uploads locaux)
 apps/backend/uploads/
+.vercel
+.env*
