@@ -9,6 +9,7 @@ const navItems = [
   { path: '/deliveries', label: 'Livraisons', icon: '📦' },
   { path: '/drivers', label: 'Chauffeurs', icon: '🚕' },
   { path: '/merchants', label: 'Marchands', icon: '🏪' },
+  { path: '/vehicles', label: 'Locations', icon: '🔑' },
   { path: '/finance', label: 'Finance', icon: '💰' },
   { path: '/disputes', label: 'Litiges', icon: '⚖️' },
   { path: '/settings', label: 'Paramètres', icon: '⚙️' },

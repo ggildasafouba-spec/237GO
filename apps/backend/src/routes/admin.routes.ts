@@ -117,6 +117,25 @@ router.patch('/users/:id/toggle', async (req: AuthRequest, res: Response) => {
 });
 
 // Véhicules de location en attente de vérification
+// Liste des véhicules de location (filtrable par statut de vérification)
+router.get('/vehicles', async (req: AuthRequest, res: Response) => {
+  try {
+    const { status } = req.query;
+    const where: Record<string, unknown> = {};
+    if (status) where.verificationStatus = status;
+
+    const vehicles = await prisma.vehicle.findMany({
+      where,
+      include: { owner: { select: { firstName: true, lastName: true, phone: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, data: vehicles });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 router.get('/vehicles/pending', async (_req: AuthRequest, res: Response) => {
   try {
     const vehicles = await prisma.vehicle.findMany({

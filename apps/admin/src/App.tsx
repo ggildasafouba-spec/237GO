@@ -7,6 +7,7 @@ import Rides from './pages/Rides';
 import Deliveries from './pages/Deliveries';
 import Drivers from './pages/Drivers';
 import Merchants from './pages/Merchants';
+import Vehicles from './pages/Vehicles';
 import Finance from './pages/Finance';
 import Disputes from './pages/Disputes';
 import Settings from './pages/Settings';
@@ -35,6 +36,7 @@ export default function App() {
                   <Route path="/deliveries" element={<Deliveries />} />
                   <Route path="/drivers" element={<Drivers />} />
                   <Route path="/merchants" element={<Merchants />} />
+                  <Route path="/vehicles" element={<Vehicles />} />
                   <Route path="/finance" element={<Finance />} />
                   <Route path="/disputes" element={<Disputes />} />
                   <Route path="/settings" element={<Settings />} />
