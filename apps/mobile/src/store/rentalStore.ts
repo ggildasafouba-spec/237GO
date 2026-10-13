@@ -19,6 +19,11 @@ interface Vehicle {
   locationLat: number;
   locationLng: number;
   locationAddress: string;
+  vehiclePhoto?: string;
+  registrationPhoto?: string;
+  insurancePhoto?: string;
+  ownerIdPhoto?: string;
+  verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
   owner: { firstName: string; lastName: string };
   bookings?: { startDate: string; endDate: string }[];
 }
@@ -66,6 +71,10 @@ interface RentalState {
     locationLat: number;
     locationLng: number;
     locationAddress: string;
+    vehiclePhoto?: string;
+    registrationPhoto?: string;
+    insurancePhoto?: string;
+    ownerIdPhoto?: string;
   }) => Promise<void>;
 
   bookVehicle: (data: {

@@ -72,6 +72,22 @@ export default function Disputes() {
     }
   };
 
+  // Suggestion IA de résolution du litige
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, any>>({});
+  const [aiLoadingId, setAiLoadingId] = useState<string | null>(null);
+
+  const askAI = async (id: string) => {
+    setAiLoadingId(id);
+    try {
+      const res = await api.post(`/admin/escrows/${id}/ai-suggest`, {}, { timeout: 90000 });
+      setAiSuggestions((prev) => ({ ...prev, [id]: res.data.data }));
+    } catch (err: any) {
+      alert(err.response?.data?.message || "L'analyse IA a échoué");
+    } finally {
+      setAiLoadingId(null);
+    }
+  };
+
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'HELD': return { bg: '#FFF8E1', color: '#F57C00', label: '🔒 Bloqué' };
@@ -154,7 +170,7 @@ export default function Disputes() {
                     {status.label}
                   </span>
                 </span>
-                <span style={{ ...styles.cell, flex: 1.5, gap: 8 }}>
+                <span style={{ ...styles.cell, flex: 1.5, gap: 8, flexWrap: 'wrap' }}>
                   {canAct ? (
                     <>
                       <button
@@ -173,6 +189,16 @@ export default function Disputes() {
                       >
                         Rembourser
                       </button>
+                      {e.status === 'DISPUTED' && (
+                        <button
+                          onClick={() => askAI(e.id)}
+                          disabled={aiLoadingId === e.id}
+                          style={styles.aiBtn}
+                          title="Demander l'avis de l'IA"
+                        >
+                          {aiLoadingId === e.id ? '🤖…' : '🤖 Avis IA'}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <span style={{ fontSize: 12, color: '#999' }}>Traité</span>
@@ -195,6 +221,28 @@ export default function Disputes() {
           ))}
         </div>
       )}
+
+      {/* Suggestions IA */}
+      {Object.keys(aiSuggestions).length > 0 && (
+        <div style={styles.disputeDetails}>
+          <h3 style={{ marginBottom: 12 }}>🤖 Suggestions de l'IA</h3>
+          {Object.entries(aiSuggestions).map(([id, s]: [string, any]) => {
+            const esc = escrows.find((e) => e.id === id);
+            const sug = (s.suggestion || '').toUpperCase();
+            const color = sug === 'RELEASE' ? '#388E3C' : sug === 'REFUND' ? '#1976D2' : '#F57C00';
+            const label = sug === 'RELEASE' ? 'Libérer (prestataire)' : sug === 'REFUND' ? 'Rembourser (client)' : 'Partager / examiner';
+            return (
+              <div key={id} style={styles.disputeItem}>
+                <strong>{esc ? `${SERVICE_LABELS[esc.serviceType]} — ${esc.payer.firstName} ${esc.payer.lastName}` : id} :</strong>{' '}
+                <span style={{ color, fontWeight: 700 }}>{label}</span>
+                {typeof s.confidence === 'number' ? ` (confiance ${s.confidence}%)` : ''}
+                {s.reasoning ? <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{s.reasoning}</div> : null}
+                <div style={{ fontSize: 11, color: '#9E9E9E', marginTop: 4, fontStyle: 'italic' }}>Avis IA — la décision finale reste la vôtre.</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -215,6 +263,7 @@ const styles: Record<string, React.CSSProperties> = {
   cell: { flex: 1, display: 'flex', alignItems: 'center' },
   releaseBtn: { padding: '6px 12px', borderRadius: 6, backgroundColor: '#388E3C', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
   refundBtn: { padding: '6px 12px', borderRadius: 6, backgroundColor: '#D32F2F', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
+  aiBtn: { padding: '6px 12px', borderRadius: 6, backgroundColor: '#EDE7F6', color: '#5E35B1', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
   disputeDetails: { backgroundColor: '#fff', borderRadius: 12, padding: 20, marginTop: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
   disputeItem: { padding: '10px 0', borderBottom: '1px solid #f5f5f5', fontSize: 14 },
 };

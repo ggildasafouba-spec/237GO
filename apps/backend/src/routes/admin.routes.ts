@@ -116,6 +116,48 @@ router.patch('/users/:id/toggle', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Véhicules de location en attente de vérification
+router.get('/vehicles/pending', async (_req: AuthRequest, res: Response) => {
+  try {
+    const vehicles = await prisma.vehicle.findMany({
+      where: { verificationStatus: 'PENDING' },
+      include: { owner: { select: { firstName: true, lastName: true, phone: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, data: vehicles });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+router.patch('/vehicles/:id/verify', async (req: AuthRequest, res: Response) => {
+  try {
+    const { status, reason } = req.body;
+    if (!['VERIFIED', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Statut invalide' });
+    }
+
+    const vehicle = await prisma.vehicle.update({
+      where: { id: req.params.id },
+      data: {
+        verificationStatus: status,
+        rejectionReason: reason || null,
+        isAvailable: status === 'VERIFIED',
+      },
+      include: { owner: { select: { firstName: true, lastName: true, phone: true } } },
+    });
+
+    res.json({
+      success: true,
+      message: `Véhicule ${status === 'VERIFIED' ? 'approuvé' : 'rejeté'}`,
+      data: vehicle,
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // Chauffeurs en attente de vérification
 router.get('/drivers/pending', async (_req: AuthRequest, res: Response) => {
   try {

@@ -72,6 +72,22 @@ export default function Drivers() {
     }
   };
 
+  // Analyse IA des documents (permis / CNI)
+  const [aiResults, setAiResults] = useState<Record<string, any>>({});
+  const [aiLoadingId, setAiLoadingId] = useState<string | null>(null);
+
+  const analyzeWithAI = async (id: string) => {
+    setAiLoadingId(id);
+    try {
+      const res = await api.post(`/admin/drivers/${id}/ai-verify`, {}, { timeout: 90000 });
+      setAiResults((prev) => ({ ...prev, [id]: res.data.data }));
+    } catch (err: any) {
+      alert(err.response?.data?.message || "L'analyse IA a échoué");
+    } finally {
+      setAiLoadingId(null);
+    }
+  };
+
   const onlineCount = drivers.filter((d) => d.isOnline).length;
 
   return (
@@ -166,6 +182,43 @@ export default function Drivers() {
                       ))}
                   </div>
                 )}
+                {/* Analyse IA des documents */}
+                {(driver.licensePhoto || driver.cniPhoto) && (
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      style={styles.aiBtn}
+                      onClick={() => analyzeWithAI(driver.id)}
+                      disabled={aiLoadingId === driver.id}
+                    >
+                      {aiLoadingId === driver.id ? '🤖 Analyse en cours…' : '🤖 Analyser les documents avec l\'IA'}
+                    </button>
+                    {aiResults[driver.id] && (
+                      <div style={styles.aiResult}>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                          Recommandation IA :{' '}
+                          <span style={{ color: aiResults[driver.id].recommendation === 'APPROVE' ? '#388E3C' : '#F57C00' }}>
+                            {aiResults[driver.id].recommendation === 'APPROVE' ? '✅ Approuver' : '🔍 À examiner'}
+                          </span>
+                          {' '}(confiance {aiResults[driver.id].meanConfidence}%)
+                        </div>
+                        {aiResults[driver.id].analyses?.license && (
+                          <div style={styles.aiLine}>
+                            Permis : {aiResults[driver.id].analyses.license.readable === false ? 'illisible' : 'lisible'}
+                            {aiResults[driver.id].analyses.license.concerns ? ` — ${aiResults[driver.id].analyses.license.concerns}` : ''}
+                          </div>
+                        )}
+                        {aiResults[driver.id].analyses?.cni && (
+                          <div style={styles.aiLine}>
+                            CNI : {aiResults[driver.id].analyses.cni.readable === false ? 'illisible' : 'lisible'}
+                            {aiResults[driver.id].analyses.cni.concerns ? ` — ${aiResults[driver.id].analyses.cni.concerns}` : ''}
+                          </div>
+                        )}
+                        <div style={styles.aiNote}>Avis IA — la décision finale reste la vôtre.</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={styles.cardActions}>
                   {driver.verificationStatus === 'PENDING' ? (
                     <>
@@ -208,6 +261,10 @@ const styles: Record<string, React.CSSProperties> = {
   detailLabel: { color: '#757575' },
   docsRow: { display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 },
   warnBox: { backgroundColor: '#FFF3E0', color: '#E65100', padding: 8, borderRadius: 6, fontSize: 12, marginBottom: 12 },
+  aiBtn: { width: '100%', padding: 10, backgroundColor: '#EDE7F6', color: '#5E35B1', borderRadius: 6, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' },
+  aiResult: { marginTop: 10, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12, fontSize: 13 },
+  aiLine: { color: '#424242', marginTop: 2 },
+  aiNote: { fontSize: 11, color: '#9E9E9E', marginTop: 6, fontStyle: 'italic' },
   docThumb: { display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#757575' },
   docImg: { width: 70, height: 50, objectFit: 'cover', borderRadius: 6, border: '1px solid #e0e0e0' },
   docCaption: { fontSize: 10, marginTop: 2 },

@@ -48,6 +48,7 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
 function PassengerTabs() {
   return (
     <Tab.Navigator
+      id="PassengerTabs"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
@@ -83,6 +84,7 @@ function PassengerTabs() {
 function DriverTabs() {
   return (
     <Tab.Navigator
+      id="DriverTabs"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
@@ -118,6 +120,7 @@ function DriverTabs() {
 function MerchantTabs() {
   return (
     <Tab.Navigator
+      id="MerchantTabs"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
@@ -174,7 +177,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator id="AppStack" screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />

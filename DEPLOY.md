@@ -197,6 +197,28 @@ railway up                   # redéployer manuellement
 
 ---
 
+## Déploiement automatique GitHub Actions
+
+Le dépôt contient maintenant un workflow GitHub Actions dans `.github/workflows/deploy.yml`.
+
+Il se déclenche automatiquement sur chaque push vers `main` ou `develop`, puis :
+
+- valide le build admin
+- valide le build backend
+- valide le TypeScript mobile
+- déploie le backend sur Railway
+- déploie l’admin sur Vercel
+
+À ajouter dans les secrets GitHub :
+
+- `RAILWAY_TOKEN`
+- `RAILWAY_PROJECT_ID`
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+> Le mobile ne passe pas par un déploiement automatique complet car il dépend d’EAS / Android et de secrets de build, mais le workflow valide son compilage au moins à chaque modification.
+
 ## Checklist avant la vraie mise en production
 
 - [ ] `JWT_SECRET` fort et unique (pas la valeur par défaut)

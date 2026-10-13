@@ -13,7 +13,7 @@ router.get('/vehicles', authenticate, async (req: AuthRequest, res: Response) =>
   try {
     const { type, minPrice, maxPrice, withDriver, lat, lng, radius = '10' } = req.query;
 
-    const where: Record<string, unknown> = { isAvailable: true };
+    const where: Record<string, unknown> = { isAvailable: true, verificationStatus: 'VERIFIED' };
     if (type) where.type = type;
     if (withDriver) where.withDriver = withDriver === 'true';
     if (minPrice || maxPrice) {
@@ -60,6 +60,9 @@ router.get('/vehicles/:id', authenticate, async (req: AuthRequest, res: Response
     });
 
     if (!vehicle) throw new AppError('Véhicule non trouvé', 404);
+    if (vehicle.verificationStatus !== 'VERIFIED') {
+      throw new AppError('Ce véhicule n’est pas encore vérifié', 403);
+    }
 
     res.json({ success: true, data: vehicle });
   } catch (error) {
@@ -84,6 +87,10 @@ router.post(
     body('locationLat').isFloat(),
     body('locationLng').isFloat(),
     body('locationAddress').trim().notEmpty(),
+    body('vehiclePhoto').optional().isURL(),
+    body('registrationPhoto').optional().isURL(),
+    body('insurancePhoto').optional().isURL(),
+    body('ownerIdPhoto').optional().isURL(),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
@@ -92,16 +99,27 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
+      const requiredDocs = ['vehiclePhoto', 'registrationPhoto', 'insurancePhoto', 'ownerIdPhoto'];
+      const missingDocs = requiredDocs.filter((field) => !req.body[field]);
+      if (missingDocs.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tous les documents requis doivent être téléversés : photo du véhicule, carte grise, assurance et pièce d’identité.',
+          missing: missingDocs,
+        });
+      }
+
       const vehicle = await prisma.vehicle.create({
         data: {
           ownerId: req.user!.id,
+          verificationStatus: 'PENDING',
           ...req.body,
         },
       });
 
       res.status(201).json({
         success: true,
-        message: 'Véhicule publié sur GO Fleet !',
+        message: 'Véhicule soumis à vérification. Il apparaîtra après validation de l’équipe.',
         data: vehicle,
       });
     } catch {
@@ -133,6 +151,9 @@ router.post(
       const vehicle = await prisma.vehicle.findUnique({ where: { id } });
       if (!vehicle || !vehicle.isAvailable) {
         throw new AppError('Véhicule non disponible', 400);
+      }
+      if (vehicle.verificationStatus !== 'VERIFIED') {
+        throw new AppError('Ce véhicule n’est pas encore vérifié', 403);
       }
 
       if (vehicle.ownerId === req.user!.id) {

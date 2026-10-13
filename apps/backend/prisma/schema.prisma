@@ -405,28 +405,34 @@ enum CarpoolBookingStatus {
 // ========== PHASE 3: GO RENT ==========
 
 model Vehicle {
-  id           String          @id @default(uuid())
-  ownerId      String
-  owner        User            @relation(fields: [ownerId], references: [id])
-  type         VehicleType
-  brand        String
-  model        String
-  year         Int
-  plate        String
-  color        String?
-  seats        Int?
-  images       String[]
-  pricePerDay  Float
-  pricePerHour Float?
-  currency     String          @default("XAF")
-  withDriver   Boolean         @default(false)
-  isAvailable  Boolean         @default(true)
-  locationLat  Float
-  locationLng  Float
-  locationAddress String
-  bookings     RentalBooking[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                String             @id @default(uuid())
+  ownerId           String
+  owner             User               @relation(fields: [ownerId], references: [id])
+  type              VehicleType
+  brand             String
+  model             String
+  year              Int
+  plate             String
+  color             String?
+  seats             Int?
+  images            String[]
+  pricePerDay       Float
+  pricePerHour      Float?
+  currency          String             @default("XAF")
+  withDriver        Boolean            @default(false)
+  isAvailable       Boolean            @default(true)
+  locationLat       Float
+  locationLng       Float
+  locationAddress  String
+  vehiclePhoto      String?
+  registrationPhoto String?
+  insurancePhoto    String?
+  ownerIdPhoto      String?
+  verificationStatus VerificationStatus @default(PENDING)
+  rejectionReason   String?
+  bookings          RentalBooking[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@map("vehicles")
 }

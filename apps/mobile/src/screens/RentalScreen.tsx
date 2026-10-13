@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRentalStore } from '../store/rentalStore';
 import EscrowActions from '../components/EscrowActions';
+import { pickAndUploadImage } from '../config/upload';
 import { colors, spacing, typography } from '../theme';
 
 type ViewMode = 'search' | 'detail' | 'book' | 'publish' | 'my-vehicles' | 'my-bookings';
@@ -51,6 +52,11 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   const [pubPrice, setPubPrice] = useState('');
   const [pubAddress, setPubAddress] = useState('');
   const [pubWithDriver, setPubWithDriver] = useState(false);
+  const [vehiclePhoto, setVehiclePhoto] = useState<string | null>(null);
+  const [registrationPhoto, setRegistrationPhoto] = useState<string | null>(null);
+  const [insurancePhoto, setInsurancePhoto] = useState<string | null>(null);
+  const [ownerIdPhoto, setOwnerIdPhoto] = useState<string | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   const {
     vehicles,
@@ -120,9 +126,31 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     );
   };
 
+  const handleUploadDocument = async (field: 'vehiclePhoto' | 'registrationPhoto' | 'insurancePhoto' | 'ownerIdPhoto') => {
+    setUploadingDoc(field);
+    try {
+      const url = await pickAndUploadImage();
+      if (!url) return;
+
+      if (field === 'vehiclePhoto') setVehiclePhoto(url);
+      if (field === 'registrationPhoto') setRegistrationPhoto(url);
+      if (field === 'insurancePhoto') setInsurancePhoto(url);
+      if (field === 'ownerIdPhoto') setOwnerIdPhoto(url);
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.message || 'Impossible de téléverser le document');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
   const handlePublish = async () => {
     if (!pubBrand || !pubModel || !pubYear || !pubPlate || !pubPrice || !pubAddress) {
       Alert.alert('Attention', 'Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    if (!vehiclePhoto || !registrationPhoto || !insurancePhoto || !ownerIdPhoto) {
+      Alert.alert('Documents requis', 'Téléversez la photo du véhicule, la carte grise, l’assurance et votre pièce d’identité pour publier votre voiture.');
       return;
     }
 
@@ -138,8 +166,12 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
         locationLat: 4.0511,
         locationLng: 9.7679,
         locationAddress: pubAddress,
+        vehiclePhoto,
+        registrationPhoto,
+        insurancePhoto,
+        ownerIdPhoto,
       });
-      Alert.alert('✅ Véhicule publié !', 'Votre véhicule est maintenant visible sur GO Rent.');
+      Alert.alert('✅ Véhicule soumis à vérification', 'Votre véhicule est en attente de validation par l’équipe. Il apparaîtra après approbation.');
       setView('search');
     } catch {
       Alert.alert('Erreur', 'Impossible de publier le véhicule');
@@ -516,6 +548,27 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           />
         </View>
 
+        <Text style={styles.sectionLabel}>Documents requis</Text>
+        <View style={styles.documentGrid}>
+          {[ 
+            { key: 'vehiclePhoto', label: 'Photo du véhicule' },
+            { key: 'registrationPhoto', label: 'Carte grise' },
+            { key: 'insurancePhoto', label: 'Assurance' },
+            { key: 'ownerIdPhoto', label: 'Pièce d’identité' },
+          ].map((doc) => (
+            <TouchableOpacity
+              key={doc.key}
+              style={[styles.documentBox, uploadingDoc === doc.key && styles.documentBoxLoading]}
+              onPress={() => handleUploadDocument(doc.key as 'vehiclePhoto' | 'registrationPhoto' | 'insurancePhoto' | 'ownerIdPhoto')}
+              disabled={isLoading || uploadingDoc !== null}
+            >
+              <Text style={styles.documentBoxText}>
+                {uploadingDoc === doc.key ? 'Téléversement...' : doc.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <Text style={styles.sectionLabel}>Localisation du véhicule</Text>
         <TextInput
           style={styles.input}
@@ -726,6 +779,13 @@ const styles = StyleSheet.create({
   paymentIcon: { fontSize: 20, marginRight: spacing.sm },
   paymentName: { flex: 1, fontSize: typography.sm, color: colors.text },
   checkmark: { fontSize: typography.md, color: colors.primary, fontWeight: '700' },
+  documentGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.md },
+  documentBox: {
+    flexBasis: '48%', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1,
+    borderColor: colors.border, padding: spacing.md, marginRight: '2%', marginBottom: spacing.sm,
+  },
+  documentBoxLoading: { opacity: 0.7 },
+  documentBoxText: { fontSize: typography.sm, color: colors.text, fontWeight: '600' },
   button: { backgroundColor: colors.primary, padding: spacing.md, borderRadius: 12, alignItems: 'center', marginTop: spacing.lg },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontSize: typography.md, fontWeight: '700' },
