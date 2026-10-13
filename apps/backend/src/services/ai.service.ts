@@ -18,7 +18,7 @@ const API_KEY = process.env.AI_API_KEY || '';
 const DEFAULT_MODELS: Record<AiProvider, string> = {
   claude: 'claude-3-5-sonnet-20241022',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-3.8-flash',
 };
 
 const MODEL = process.env.AI_MODEL || DEFAULT_MODELS[PROVIDER];
@@ -217,7 +217,7 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
  */
 async function geminiPostWithRetry(payload: any): Promise<any> {
   // Liste de modèles à essayer dans l'ordre (fallback si surcharge Google)
-  const models = [MODEL, 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash']
+  const models = [MODEL, 'gemini-3.8-flash', 'gemini-flash-latest']
     .filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
 
   let lastError: any;
