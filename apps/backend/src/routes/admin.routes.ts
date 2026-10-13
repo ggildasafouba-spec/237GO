@@ -335,6 +335,57 @@ router.get('/merchants', async (_req: AuthRequest, res: Response) => {
   }
 });
 
+// Approuver / Rejeter un marchand
+router.patch('/merchants/:id/verify', async (req: AuthRequest, res: Response) => {
+  try {
+    const { status, reason } = req.body; // 'VERIFIED' ou 'REJECTED'
+    if (!['VERIFIED', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Statut invalide' });
+    }
+
+    const merchant = await prisma.merchantProfile.update({
+      where: { id: req.params.id },
+      data: {
+        verificationStatus: status,
+        rejectionReason: reason || null,
+        isOpen: status === 'VERIFIED',
+      },
+    });
+
+    const io = req.app.get('io');
+    if (status === 'VERIFIED') {
+      // Attribuer le rôle MERCHANT à l'approbation
+      await prisma.user.update({
+        where: { id: merchant.userId },
+        data: { role: 'MERCHANT' },
+      });
+      io.to(`user:${merchant.userId}`).emit('merchant_verified', { status: 'VERIFIED' });
+      await sendPushNotification({
+        userId: merchant.userId,
+        title: '✅ Boutique approuvée !',
+        body: 'Votre boutique est validée. Vous pouvez maintenant vendre sur 237GO.',
+        type: 'merchant',
+      }).catch(() => {});
+    } else {
+      await prisma.user.update({
+        where: { id: merchant.userId },
+        data: { role: 'PASSENGER' },
+      }).catch(() => {});
+      io.to(`user:${merchant.userId}`).emit('merchant_verified', { status: 'REJECTED' });
+      await sendPushNotification({
+        userId: merchant.userId,
+        title: 'Demande marchand refusée',
+        body: 'Votre demande n\'a pas été approuvée. Contactez le support pour plus d\'informations.',
+        type: 'merchant',
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, message: `Marchand ${status === 'VERIFIED' ? 'approuvé' : 'rejeté'}`, data: merchant });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // Revenus par période
 router.get('/finance/summary', async (req: AuthRequest, res: Response) => {
   try {

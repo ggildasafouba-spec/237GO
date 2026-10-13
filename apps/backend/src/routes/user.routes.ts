@@ -277,12 +277,26 @@ router.post(
     body('shopLat').isFloat(),
     body('shopLng').isFloat(),
     body('category').trim().notEmpty(),
+    body('ownerIdPhoto').optional().isURL(),
+    body('shopPhoto').optional().isURL(),
+    body('businessRegPhoto').optional().isURL(),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      // Documents obligatoires : pièce d'identité du gérant + photo de la boutique
+      const requiredDocs = ['ownerIdPhoto', 'shopPhoto'];
+      const missingDocs = requiredDocs.filter((field) => !req.body[field]);
+      if (missingDocs.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Documents requis : pièce d\'identité du gérant et photo de la boutique. Le registre de commerce est optionnel.',
+          missing: missingDocs,
+        });
       }
 
       const existing = await prisma.merchantProfile.findUnique({
@@ -302,17 +316,20 @@ router.post(
           shopLng: req.body.shopLng,
           category: req.body.category,
           description: req.body.description,
+          ownerIdPhoto: req.body.ownerIdPhoto,
+          shopPhoto: req.body.shopPhoto,
+          businessRegPhoto: req.body.businessRegPhoto,
+          isOpen: false, // fermée tant que non vérifiée
+          // verificationStatus reste PENDING par défaut
         },
       });
 
-      await prisma.user.update({
-        where: { id: req.user!.id },
-        data: { role: 'MERCHANT' },
-      });
+      // IMPORTANT : le rôle NE passe PAS à MERCHANT ici.
+      // Il sera attribué par l'admin lors de l'approbation (verificationStatus = VERIFIED).
 
       res.status(201).json({
         success: true,
-        message: 'Profil marchand créé ! Vous pouvez maintenant ajouter vos produits.',
+        message: 'Demande de marchand soumise ! En attente de vérification par notre équipe.',
         data: profile,
       });
     } catch (error) {

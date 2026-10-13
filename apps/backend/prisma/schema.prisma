@@ -275,6 +275,11 @@ model MerchantProfile {
   description   String?
   isOpen        Boolean  @default(true)
   openingHours  Json?
+  ownerIdPhoto       String?            // pièce d'identité du gérant (requis)
+  shopPhoto          String?            // photo de la boutique/local (requis)
+  businessRegPhoto   String?            // registre de commerce (optionnel)
+  verificationStatus VerificationStatus @default(PENDING)
+  rejectionReason    String?
   products      Product[]
   orders        MarketOrder[]
   createdAt     DateTime @default(now())

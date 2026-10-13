@@ -13,7 +13,7 @@ router.get('/merchants', authenticate, async (req: AuthRequest, res: Response) =
   try {
     const { lat, lng, radius = '5', category } = req.query;
 
-    const where: Record<string, unknown> = { isOpen: true };
+    const where: Record<string, unknown> = { isOpen: true, verificationStatus: 'VERIFIED' };
     if (category) {
       where.category = category as string;
     }

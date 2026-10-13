@@ -23,6 +23,7 @@ import RentalScreen from '../screens/RentalScreen';
 import BusinessScreen from '../screens/BusinessScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import BecomeDriverScreen from '../screens/BecomeDriverScreen';
+import BecomeMerchantScreen from '../screens/BecomeMerchantScreen';
 import AssistantScreen from '../screens/AssistantScreen';
 import MerchantScreen from '../screens/MerchantScreen';
 
@@ -201,7 +202,7 @@ export default function AppNavigator() {
             <Stack.Screen name="History" component={HistoryScreen} />
             <Stack.Screen name="BecomeDriver" component={BecomeDriverScreen} />
             <Stack.Screen name="Assistant" component={AssistantScreen} />
-            <Stack.Screen name="BecomeMerchant" component={PlaceholderScreen} />
+            <Stack.Screen name="BecomeMerchant" component={BecomeMerchantScreen} />
             <Stack.Screen name="Wallet" component={WalletScreen} />
           </>
         )}
