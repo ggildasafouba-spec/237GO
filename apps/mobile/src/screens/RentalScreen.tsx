@@ -379,6 +379,25 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           <Text style={styles.buttonText}>Réserver ce véhicule</Text>
         </TouchableOpacity>
 
+        {/* Contacter le propriétaire par chat (gratuit, utile pour la diaspora) */}
+        {(selectedVehicle.owner as any)?.id && (
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() => navigation.navigate('Chat', {
+              serviceType: 'RENTAL',
+              serviceId: selectedVehicle.id,
+              interlocutor: {
+                id: (selectedVehicle.owner as any).id,
+                firstName: selectedVehicle.owner.firstName,
+                lastName: selectedVehicle.owner.lastName,
+              },
+            })}
+            accessibilityRole="button"
+          >
+            <Text style={styles.chatButtonText}>💬 Contacter le propriétaire</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={{ height: 100 }} />
       </ScrollView>
     );
@@ -790,6 +809,8 @@ const styles = StyleSheet.create({
   // Book
   sectionLabel: { fontSize: typography.md, fontWeight: '600', color: colors.text, marginTop: spacing.lg, marginBottom: spacing.sm },
   helperText: { fontSize: typography.xs, color: colors.textSecondary, marginBottom: spacing.sm, fontStyle: 'italic' },
+  chatButton: { marginTop: spacing.sm, padding: spacing.md, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.primary, backgroundColor: '#E8F5E9' },
+  chatButtonText: { color: colors.primary, fontWeight: '700', fontSize: typography.md },
   input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
   row: { flexDirection: 'row' },
   driverOption: {

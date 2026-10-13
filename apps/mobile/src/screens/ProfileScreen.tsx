@@ -322,6 +322,16 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
           </>
         )}
 
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={() => navigation.navigate('Messages')}
+          accessibilityRole="button"
+        >
+          <Text style={styles.actionIcon}>💬</Text>
+          <Text style={styles.actionText}>Mes messages</Text>
+          <Text style={styles.actionArrow}>→</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.actionItem} accessibilityRole="button">
           <Text style={styles.actionIcon}>📋</Text>
           <Text style={styles.actionText}>Historique des courses</Text>

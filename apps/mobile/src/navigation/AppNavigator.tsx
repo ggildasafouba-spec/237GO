@@ -26,6 +26,8 @@ import BecomeDriverScreen from '../screens/BecomeDriverScreen';
 import BecomeMerchantScreen from '../screens/BecomeMerchantScreen';
 import AssistantScreen from '../screens/AssistantScreen';
 import MerchantScreen from '../screens/MerchantScreen';
+import MessagesScreen from '../screens/MessagesScreen';
+import ChatScreen from '../screens/ChatScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -202,6 +204,8 @@ export default function AppNavigator() {
             <Stack.Screen name="History" component={HistoryScreen} />
             <Stack.Screen name="BecomeDriver" component={BecomeDriverScreen} />
             <Stack.Screen name="Assistant" component={AssistantScreen} />
+            <Stack.Screen name="Messages" component={MessagesScreen} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="BecomeMerchant" component={BecomeMerchantScreen} />
             <Stack.Screen name="Wallet" component={WalletScreen} />
           </>

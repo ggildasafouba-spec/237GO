@@ -62,6 +62,8 @@ model User {
   businessMembers   BusinessMember[]
   escrowsAsPayer    Escrow[]           @relation("EscrowPayer")
   escrowsAsPayee    Escrow[]           @relation("EscrowPayee")
+  messagesSent      Message[]          @relation("MessagesSent")
+  messagesReceived  Message[]          @relation("MessagesReceived")
 
   @@map("users")
 }
@@ -569,6 +571,27 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@map("notifications")
+}
+
+// ========== CHAT INTERNE ==========
+
+model Message {
+  id          String   @id @default(uuid())
+  // Conversation identifiée par le service concerné (course, location, etc.)
+  serviceType String   // RIDE | DELIVERY | CARPOOL | RENTAL | MARKET | DIRECT
+  serviceId   String   // id de la course/réservation/commande (ou "direct" pour un échange libre)
+  senderId    String
+  sender      User     @relation("MessagesSent", fields: [senderId], references: [id])
+  receiverId  String
+  receiver    User     @relation("MessagesReceived", fields: [receiverId], references: [id])
+  content     String?  // texte (optionnel si image)
+  imageUrl    String?  // photo jointe (optionnel)
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([serviceType, serviceId])
+  @@index([receiverId, isRead])
+  @@map("messages")
 }
 
 // ========== ESCROW (Séquestre de paiement) ==========

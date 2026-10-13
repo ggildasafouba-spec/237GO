@@ -54,7 +54,7 @@ router.get('/vehicles/:id', authenticate, async (req: AuthRequest, res: Response
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: req.params.id },
       include: {
-        owner: { select: { firstName: true, lastName: true, phone: true } },
+        owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
         bookings: { where: { status: { in: ['CONFIRMED', 'ACTIVE'] } }, select: { startDate: true, endDate: true } },
       },
     });
