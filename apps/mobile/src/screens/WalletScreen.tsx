@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWalletStore } from '../store/walletStore';
 import { useAuthStore } from '../store/authStore';
 import { colors, spacing, typography } from '../theme';
@@ -26,6 +27,7 @@ const quickAmounts = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 
 export default function WalletScreen() {
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'loyalty'>('deposit');
   const [amount, setAmount] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<PaymentProvider>('ORANGE_MONEY');
@@ -167,7 +169,7 @@ export default function WalletScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 160 + insets.bottom }} showsVerticalScrollIndicator={false}>
       {/* Balance Card */}
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Solde disponible</Text>
