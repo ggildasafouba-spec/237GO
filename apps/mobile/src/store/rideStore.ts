@@ -25,6 +25,7 @@ interface Ride {
   finalPrice?: number;
   vehicleType: string;
   driver?: {
+    id?: string;
     firstName: string;
     lastName: string;
     phone: string;

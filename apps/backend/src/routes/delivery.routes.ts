@@ -194,10 +194,17 @@ router.patch(
         serviceId: id,
       });
 
+      // Infos du livreur pour le passager (affichage + chat)
+      const driverUser = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      });
+
       const io = req.app.get('io');
       io.to(`user:${delivery.senderId}`).emit('delivery_accepted', {
         deliveryId: id,
         driverId: req.user!.id,
+        driver: driverUser,
       });
       await sendPushNotification({
         userId: delivery.senderId,

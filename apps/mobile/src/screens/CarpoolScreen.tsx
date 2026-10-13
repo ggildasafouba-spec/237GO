@@ -315,6 +315,20 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
               >
                 <Text style={styles.bookButtonText}>Réserver {parseInt(seats)} place(s)</Text>
               </TouchableOpacity>
+
+              {item.driver?.id && (
+                <TouchableOpacity
+                  style={styles.chatButton}
+                  onPress={() => navigation.navigate('Chat', {
+                    serviceType: 'CARPOOL',
+                    serviceId: item.id,
+                    interlocutor: { id: item.driver.id, firstName: item.driver.firstName, lastName: item.driver.lastName },
+                  })}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.chatButtonText}>💬 Contacter le conducteur</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         />
@@ -510,6 +524,8 @@ const styles = StyleSheet.create({
   resultDesc: { fontSize: typography.sm, color: colors.textSecondary, fontStyle: 'italic', marginTop: spacing.sm },
   bookButton: { backgroundColor: colors.primary, padding: spacing.sm + 2, borderRadius: 10, alignItems: 'center', marginTop: spacing.md },
   bookButtonText: { color: '#fff', fontWeight: '700' },
+  chatButton: { paddingVertical: spacing.sm, borderRadius: 10, alignItems: 'center', marginTop: spacing.sm, borderWidth: 1, borderColor: colors.primary, backgroundColor: '#E8F5E9' },
+  chatButtonText: { color: colors.primary, fontWeight: '700', fontSize: typography.sm },
   emptyState: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyText: { fontSize: typography.md, color: colors.textSecondary },

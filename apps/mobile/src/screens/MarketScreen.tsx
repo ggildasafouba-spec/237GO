@@ -229,6 +229,23 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
               <Text style={styles.merchantDetailName}>{selectedMerchant.shopName}</Text>
               <Text style={styles.merchantDetailAddress}>{selectedMerchant.shopAddress}</Text>
               <Text style={styles.merchantDetailCategory}>{selectedMerchant.category}</Text>
+              {(selectedMerchant.user as any)?.id && (
+                <TouchableOpacity
+                  style={styles.chatButton}
+                  onPress={() => navigation.navigate('Chat', {
+                    serviceType: 'MARKET',
+                    serviceId: selectedMerchant.id,
+                    interlocutor: {
+                      id: (selectedMerchant.user as any).id,
+                      firstName: (selectedMerchant.user as any).firstName,
+                      lastName: (selectedMerchant.user as any).lastName,
+                    },
+                  })}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.chatButtonText}>💬 Contacter le marchand</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <Text style={styles.productsTitle}>Produits disponibles</Text>
@@ -565,6 +582,8 @@ const styles = StyleSheet.create({
   merchantDetailName: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   merchantDetailAddress: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 4 },
   merchantDetailCategory: { fontSize: typography.xs, color: colors.primary, marginTop: 4, textTransform: 'capitalize' },
+  chatButton: { marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.primary, backgroundColor: '#E8F5E9', alignSelf: 'flex-start' },
+  chatButtonText: { color: colors.primary, fontWeight: '700', fontSize: typography.sm },
   productsTitle: { fontSize: typography.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
   productCard: {
     flexDirection: 'row',

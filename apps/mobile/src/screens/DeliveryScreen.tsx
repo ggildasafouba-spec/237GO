@@ -379,6 +379,23 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
             >
               <Text style={styles.callButtonText}>📞 Appeler</Text>
             </TouchableOpacity>
+            {currentDelivery.driver.id && currentDelivery.id && (
+              <TouchableOpacity
+                style={styles.chatButton}
+                onPress={() => navigation.navigate('Chat', {
+                  serviceType: 'DELIVERY',
+                  serviceId: currentDelivery.id,
+                  interlocutor: {
+                    id: currentDelivery.driver!.id,
+                    firstName: currentDelivery.driver!.firstName,
+                    lastName: currentDelivery.driver!.lastName,
+                  },
+                })}
+                accessibilityRole="button"
+              >
+                <Text style={styles.chatButtonText}>💬 Contacter le livreur</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
@@ -650,5 +667,18 @@ const styles = StyleSheet.create({
   callButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  chatButton: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  chatButtonText: {
+    color: colors.primary,
+    fontWeight: '700',
   },
 });

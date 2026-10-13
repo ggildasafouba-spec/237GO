@@ -19,6 +19,7 @@ interface Delivery {
   estimatedPrice: number;
   finalPrice?: number;
   driver?: {
+    id?: string;
     firstName: string;
     lastName: string;
     phone: string;
@@ -96,7 +97,7 @@ export const useDeliveryStore = create<DeliveryState>((set, get) => ({
     socket.on('delivery_accepted', (data) => {
       set((state) => ({
         currentDelivery: state.currentDelivery
-          ? { ...state.currentDelivery, status: 'ACCEPTED', driver: data }
+          ? { ...state.currentDelivery, status: 'ACCEPTED', driver: data.driver || data }
           : null,
       }));
     });

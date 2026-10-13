@@ -33,7 +33,7 @@ router.get('/search', authenticate, async (req: AuthRequest, res: Response) => {
       orderBy: { departureTime: 'asc' },
       include: {
         driver: {
-          select: { firstName: true, lastName: true, driverProfile: { select: { averageRating: true, totalTrips: true } } },
+          select: { id: true, firstName: true, lastName: true, driverProfile: { select: { averageRating: true, totalTrips: true } } },
         },
       },
     });

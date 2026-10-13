@@ -595,6 +595,25 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             <Text style={styles.shareText}>📤 Partager</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Contacter le chauffeur par chat */}
+        {currentRide?.driver?.id && currentRide.id && (
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() => navigation.navigate('Chat', {
+              serviceType: 'RIDE',
+              serviceId: currentRide.id,
+              interlocutor: {
+                id: currentRide.driver!.id,
+                firstName: currentRide.driver!.firstName,
+                lastName: currentRide.driver!.lastName,
+              },
+            })}
+            accessibilityRole="button"
+          >
+            <Text style={styles.chatButtonText}>💬 Contacter le chauffeur</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -909,5 +928,19 @@ const styles = StyleSheet.create({
   shareText: {
     color: colors.info,
     fontWeight: '700',
+  },
+  chatButton: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  chatButtonText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: typography.md,
   },
 });

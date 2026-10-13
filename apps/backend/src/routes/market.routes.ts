@@ -53,7 +53,7 @@ router.get('/merchants/:id', authenticate, async (req: AuthRequest, res: Respons
     const merchant = await prisma.merchantProfile.findUnique({
       where: { id },
       include: {
-        user: { select: { firstName: true, lastName: true, phone: true } },
+        user: { select: { id: true, firstName: true, lastName: true, phone: true } },
         products: { where: { isAvailable: true }, orderBy: { category: 'asc' } },
       },
     });
