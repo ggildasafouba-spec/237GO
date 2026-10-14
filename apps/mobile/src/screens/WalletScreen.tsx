@@ -33,6 +33,9 @@ export default function WalletScreen() {
   const [selectedProvider, setSelectedProvider] = useState<PaymentProvider>('ORANGE_MONEY');
   const [phone, setPhone] = useState(user?.phone || '');
   const [isProcessing, setIsProcessing] = useState(false);
+  // URL de paiement NotchPay en attente : affichée comme bouton de secours
+  // si l'ouverture automatique du navigateur échoue.
+  const [pendingPaymentUrl, setPendingPaymentUrl] = useState<string | null>(null);
 
   const {
     balance,
@@ -49,6 +52,23 @@ export default function WalletScreen() {
     fetchBalance();
     fetchLoyalty();
   }, []);
+
+  // Ouvre la page de paiement NotchPay de façon robuste.
+  // Essaie Linking.openURL ; si ça échoue, propose un bouton de secours.
+  const openPaymentPage = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        'Finaliser le paiement',
+        "Impossible d'ouvrir automatiquement la page de paiement. Appuyez sur « Ouvrir » pour continuer, ou utilisez le bouton « Payer maintenant » qui reste affiché.",
+        [
+          { text: 'Ouvrir', onPress: () => Linking.openURL(url).catch(() => {}) },
+          { text: 'Plus tard', style: 'cancel' },
+        ]
+      );
+    }
+  };
 
   const handleDeposit = async () => {
     // Nettoyer : ne garder que les chiffres (évite espaces, séparateurs, etc.)
@@ -72,24 +92,13 @@ export default function WalletScreen() {
       const result = await deposit(numAmount, selectedProvider, phone);
 
       if (result.paymentUrl) {
-        // Ouvrir directement la page de paiement sécurisée (NotchPay) : l'utilisateur
-        // paie par MoMo / Orange. Le portefeuille est crédité ensuite via le webhook.
-        // On n'utilise pas canOpenURL (qui peut renvoyer false à tort sur Android)
-        // et on n'ajoute pas d'alerte intermédiaire qui bloquerait la redirection.
+        // Ouvrir la page de paiement sécurisée (NotchPay) : l'utilisateur paie
+        // par MoMo / Orange. Le portefeuille est crédité ensuite via le webhook.
+        // On garde l'URL en mémoire pour afficher un bouton de secours à l'écran :
+        // ainsi, même si l'ouverture auto échoue, l'utilisateur peut toujours payer.
         setAmount('');
-        try {
-          await Linking.openURL(result.paymentUrl);
-        } catch {
-          // Si l'ouverture automatique échoue, on propose le lien manuellement.
-          Alert.alert(
-            'Ouvrir la page de paiement',
-            "Appuyez sur « Ouvrir » pour finaliser votre paiement.",
-            [
-              { text: 'Ouvrir', onPress: () => Linking.openURL(result.paymentUrl!) },
-              { text: 'Annuler', style: 'cancel' },
-            ]
-          );
-        }
+        setPendingPaymentUrl(result.paymentUrl);
+        await openPaymentPage(result.paymentUrl);
       } else {
         // Pas d'URL (mode simulation / passerelle directe) : recharge immédiate
         await fetchBalance();
@@ -297,6 +306,19 @@ export default function WalletScreen() {
               </Text>
             )}
           </TouchableOpacity>
+
+          {/* Bouton de secours : si l'ouverture auto de NotchPay a échoué,
+              l'utilisateur garde un accès direct à sa page de paiement. */}
+          {activeTab === 'deposit' && pendingPaymentUrl && (
+            <TouchableOpacity
+              style={styles.payNowButton}
+              onPress={() => openPaymentPage(pendingPaymentUrl)}
+              accessibilityRole="button"
+              accessibilityLabel="Ouvrir la page de paiement"
+            >
+              <Text style={styles.payNowText}>💳 Payer maintenant</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -512,6 +534,18 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   buttonText: {
+    color: '#fff',
+    fontSize: typography.md,
+    fontWeight: '700',
+  },
+  payNowButton: {
+    backgroundColor: '#FF6600',
+    padding: spacing.md,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  payNowText: {
     color: '#fff',
     fontSize: typography.md,
     fontWeight: '700',
