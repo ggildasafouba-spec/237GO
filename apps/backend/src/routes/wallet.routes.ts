@@ -36,8 +36,11 @@ router.post('/verify/:transactionId', authenticate, async (req: AuthRequest, res
       });
     }
 
-    // Interroger NotchPay sur l'état réel du paiement
-    const check = await verifyNotchPay(transaction.reference || transaction.id);
+    // Interroger NotchPay : la référence qu'il comprend est la ref NotchPay (trx.xxx)
+    // mémorisée dans metadata.notchRef, sinon on retombe sur notre référence.
+    const meta = (transaction.metadata as { notchRef?: string }) || {};
+    const notchRef = meta.notchRef;
+    const check = await verifyNotchPay(notchRef || transaction.reference || transaction.id);
 
     if (check.status === 'COMPLETED') {
       await confirmDeposit(transaction.reference || transaction.id);
@@ -164,6 +167,17 @@ router.post(
           data: { status: 'FAILED' },
         });
         throw new AppError(payment.message || 'Échec de l\'initiation du paiement', 502);
+      }
+
+      // Mémoriser la référence NotchPay (trx.xxx) pour retrouver la transaction
+      // lorsque le webhook arrive avec cette référence.
+      if (payment.transactionRef) {
+        await prisma.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            metadata: { bonus, originalAmount: amount, notchRef: payment.transactionRef },
+          },
+        });
       }
 
       res.json({

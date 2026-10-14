@@ -39,7 +39,14 @@ const io = new SocketServer(httpServer, {
 // Middleware globaux
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+// Conserver le corps brut (nécessaire pour vérifier la signature des webhooks NotchPay)
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf.toString('utf8');
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting

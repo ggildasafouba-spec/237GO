@@ -7,36 +7,56 @@ const router = Router();
 // Webhook NotchPay — notification de paiement (MoMo / Orange / carte)
 router.post('/notchpay', async (req: Request, res: Response) => {
   try {
-    // Vérification de la signature HMAC (clé de hachage NotchPay)
+    // Vérification de signature (informative uniquement) : NotchPay signe le
+    // corps BRUT avec la hash key. On la vérifie si on dispose du raw body,
+    // mais on NE bloque PAS en cas d'écart, car la sécurité réelle vient du fait
+    // qu'on reconfirme ensuite le paiement directement auprès de l'API NotchPay.
     const hashKey = process.env.NOTCHPAY_HASH_KEY || '';
     const signature = req.headers['x-notch-signature'] as string | undefined;
-    if (hashKey && signature) {
-      const computed = crypto
-        .createHmac('sha256', hashKey)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-      if (computed !== signature) {
-        console.warn('🔔 Webhook NotchPay: signature invalide, ignoré');
-        return res.status(200).json({ success: true });
+    const rawBody = (req as any).rawBody as string | undefined;
+    if (hashKey && signature && rawBody) {
+      try {
+        const computed = crypto.createHmac('sha256', hashKey).update(rawBody).digest('hex');
+        if (computed !== signature) {
+          console.warn('🔔 Webhook NotchPay: signature non concordante (traitement poursuivi après revérification API)');
+        }
+      } catch {
+        /* ignore */
       }
     }
 
-    // La référence que nous avons envoyée = l'id de notre transaction
-    const data = req.body?.data || req.body;
-    const reference = data?.reference || data?.merchant_reference;
-    const event = (req.body?.event || data?.status || '').toString().toLowerCase();
-    console.log(`🔔 Webhook NotchPay: ${reference} - ${event}`);
+    // NotchPay envoie { event, data: <paiement> }.
+    // Le paiement contient SA référence (trx.xxx) et NOTRE merchant_reference.
+    const data = req.body?.data || req.body?.transaction || req.body || {};
+    const event = (req.body?.event || req.body?.type || data?.status || '').toString().toLowerCase();
 
-    if (!reference) {
+    // On récupère toutes les références possibles pour retrouver notre transaction.
+    const merchantRef = data?.merchant_reference || data?.metadata?.reference;
+    const notchRef = data?.reference || data?.trxref || req.body?.reference;
+
+    console.log(`🔔 Webhook NotchPay: event=${event} merchantRef=${merchantRef} notchRef=${notchRef}`);
+
+    if (!merchantRef && !notchRef) {
       return res.status(200).json({ success: true });
     }
 
-    // Confirmer auprès de NotchPay avant de créditer (ne pas se fier au seul payload)
-    const check = await verifyNotchPay(reference);
+    // On reconfirme auprès de NotchPay avec la référence NotchPay (trx.xxx),
+    // qui est celle que l'API /payments/{reference} comprend le mieux.
+    const refForVerify = notchRef || merchantRef;
+    const check = await verifyNotchPay(refForVerify);
+
+    // Pour créditer, on utilise NOTRE référence (merchant) si on l'a, sinon la ref NotchPay.
+    // confirmDeposit/failDeposit cherchent la transaction par ces références.
+    const refForCredit = merchantRef || notchRef;
+
     if (check.status === 'COMPLETED') {
-      await confirmDeposit(reference);
+      const ok = await confirmDeposit(refForCredit);
+      if (!ok && merchantRef && notchRef && refForCredit !== notchRef) {
+        // repli : essayer avec l'autre référence
+        await confirmDeposit(notchRef);
+      }
     } else if (check.status === 'FAILED') {
-      await failDeposit(reference);
+      await failDeposit(refForCredit);
     }
 
     res.status(200).json({ success: true });

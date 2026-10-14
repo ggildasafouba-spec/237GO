@@ -398,9 +398,13 @@ const prisma = new PrismaClient();
  * @param reference  La référence de la transaction (= son id)
  */
 export async function confirmDeposit(reference: string): Promise<boolean> {
-  const transaction = await prisma.transaction.findFirst({
-    where: { reference },
-  });
+  // On cherche la transaction par NOTRE référence OU par la référence NotchPay
+  // (trx.xxx) mémorisée dans metadata.notchRef lors de la création.
+  const transaction =
+    (await prisma.transaction.findFirst({ where: { reference } })) ||
+    (await prisma.transaction.findFirst({
+      where: { metadata: { path: ['notchRef'], equals: reference } },
+    }));
 
   if (!transaction) {
     console.warn(`confirmDeposit: transaction introuvable pour la référence ${reference}`);
@@ -446,8 +450,17 @@ export async function confirmDeposit(reference: string): Promise<boolean> {
  * Marque un dépôt comme échoué.
  */
 export async function failDeposit(reference: string): Promise<void> {
-  await prisma.transaction.updateMany({
+  // Essayer par notre référence, sinon par la référence NotchPay (metadata.notchRef)
+  const byRef = await prisma.transaction.updateMany({
     where: { reference, status: 'PENDING' },
     data: { status: 'FAILED' },
   });
+  if (byRef.count === 0) {
+    const tx = await prisma.transaction.findFirst({
+      where: { metadata: { path: ['notchRef'], equals: reference }, status: 'PENDING' },
+    });
+    if (tx) {
+      await prisma.transaction.update({ where: { id: tx.id }, data: { status: 'FAILED' } });
+    }
+  }
 }
