@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Fond transparent : Android applique backgroundColor (#121A17) autour.
+       Le logo est centré dans la zone de sécurité (~66% au centre). -->
+  <g transform="translate(512 512) scale(7.2) translate(-50 -50)">
+    <path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56"
+          stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <text x="50" y="40" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">237</text>
+    <text x="50" y="82" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text>
+  </g>
+</svg>

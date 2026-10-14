@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2EE066"/>
+      <stop offset="1" stop-color="#1DB954"/>
+    </linearGradient>
+  </defs>
+  <!-- Fond carré arrondi vert -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+
+  <!-- Logo officiel 237GO (cercle de l'app, agrandi et centré) -->
+  <g transform="translate(512 512) scale(8.2) translate(-50 -50)">
+    <path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56"
+          stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <text x="50" y="40" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">237</text>
+    <text x="50" y="82" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text>
+  </g>
+
+  <!-- Liseré drapeau Cameroun en bas -->
+  <g transform="translate(272 904)">
+    <rect x="0"   y="0" width="160" height="28" rx="14" fill="#007A5E"/>
+    <rect x="160" y="0" width="160" height="28" fill="#CE1126"/>
+    <rect x="320" y="0" width="160" height="28" rx="14" fill="#FCD116"/>
+  </g>
+</svg>

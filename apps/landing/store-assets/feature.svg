@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0C1310"/>
+      <stop offset="0.55" stop-color="#0E7A35"/>
+      <stop offset="1" stop-color="#0C1310"/>
+    </linearGradient>
+    <linearGradient id="circle" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2EE066"/>
+      <stop offset="1" stop-color="#1DB954"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bg)"/>
+
+  <!-- Logo officiel 237GO (cercle) à gauche -->
+  <g transform="translate(165 250) scale(2.4) translate(-50 -50)">
+    <circle cx="50" cy="50" r="48" fill="url(#circle)"/>
+    <path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56"
+          stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <text x="50" y="40" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">237</text>
+    <text x="50" y="82" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text>
+  </g>
+
+  <!-- Texte à droite du logo -->
+  <g transform="translate(400 0)">
+    <text x="0" y="215" font-family="Arial, Helvetica, sans-serif" font-size="104" font-weight="800"
+          fill="#ffffff" letter-spacing="-2">237<tspan fill="#FCD116">GO</tspan></text>
+    <text x="4" y="268" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700"
+          fill="rgba(255,255,255,0.95)">On bouge ensemble</text>
+    <text x="4" y="305" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="600"
+          fill="#FCD116">We move together</text>
+    <text x="4" y="340" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="400"
+          fill="rgba(255,255,255,0.65)">La super-app de mobilité camerounaise</text>
+    <!-- Barre drapeau Cameroun -->
+    <g transform="translate(4 362)">
+      <rect x="0"   y="0" width="70" height="12" rx="6" fill="#007A5E"/>
+      <rect x="70"  y="0" width="70" height="12" fill="#CE1126"/>
+      <rect x="140" y="0" width="70" height="12" rx="6" fill="#FCD116"/>
+    </g>
+  </g>
+</svg>
