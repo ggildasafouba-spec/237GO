@@ -116,6 +116,53 @@ router.patch('/users/:id/toggle', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Supprimer définitivement un utilisateur (nettoie d'abord ses données liées).
+// Protégé : on ne supprime pas un ADMIN, ni soi-même.
+router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+
+    if (user.role === 'ADMIN') {
+      return res.status(400).json({ success: false, message: 'Impossible de supprimer un administrateur' });
+    }
+    if (req.user!.id === userId) {
+      return res.status(400).json({ success: false, message: 'Vous ne pouvez pas supprimer votre propre compte' });
+    }
+
+    // Récupérer le wallet pour effacer ses transactions
+    const wallet = await prisma.wallet.findUnique({ where: { userId } });
+
+    // Nettoyer les données liées puis supprimer l'utilisateur, en une transaction.
+    await prisma.$transaction(async (tx) => {
+      if (wallet) {
+        await tx.transaction.deleteMany({ where: { walletId: wallet.id } });
+        await tx.wallet.delete({ where: { id: wallet.id } });
+      }
+      await tx.loyaltyPoints.deleteMany({ where: { userId } });
+      await tx.notification.deleteMany({ where: { userId } });
+      await tx.emergencyContact.deleteMany({ where: { userId } });
+      await tx.message.deleteMany({
+        where: { OR: [{ senderId: userId }, { receiverId: userId }] },
+      });
+      await tx.rating.deleteMany({
+        where: { OR: [{ raterId: userId }, { ratedId: userId }] },
+      });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    res.json({ success: true, message: `Compte "${user.firstName} ${user.lastName}" supprimé` });
+  } catch (error: any) {
+    // Souvent une contrainte de clé étrangère (l'utilisateur a des courses, véhicules, etc.)
+    console.error('Suppression utilisateur:', error?.message || error);
+    res.status(409).json({
+      success: false,
+      message: "Impossible de supprimer : ce compte a des activités liées (courses, véhicules...). Désactivez-le plutôt.",
+    });
+  }
+});
+
 // Véhicules de location en attente de vérification
 // Liste des véhicules de location (filtrable par statut de vérification)
 router.get('/vehicles', async (req: AuthRequest, res: Response) => {

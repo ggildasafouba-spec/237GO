@@ -51,6 +51,19 @@ export default function Users() {
     }
   };
 
+  const deleteUser = async (user: User) => {
+    const ok = window.confirm(
+      `Supprimer définitivement le compte "${user.firstName} ${user.lastName}" (${user.phone}) ?\n\nCette action est irréversible.`
+    );
+    if (!ok) return;
+    try {
+      await api.delete(`/admin/users/${user.id}`);
+      await loadUsers();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Suppression impossible');
+    }
+  };
+
   const getRoleBadge = (role: string) => {
     const badges: Record<string, { bg: string; color: string }> = {
       PASSENGER: { bg: '#E3F2FD', color: '#1976D2' },
@@ -132,6 +145,15 @@ export default function Users() {
                   >
                     {user.isActive ? '🔒' : '🔓'}
                   </button>
+                  {user.role !== 'ADMIN' && (
+                    <button
+                      style={{ ...styles.actionBtn, color: '#D32F2F' }}
+                      onClick={() => deleteUser(user)}
+                      title="Supprimer définitivement"
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </span>
               </div>
             );
