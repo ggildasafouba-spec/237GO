@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Linking,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWalletStore } from '../store/walletStore';
@@ -36,6 +37,9 @@ export default function WalletScreen() {
   // URL de paiement NotchPay en attente : affichée comme bouton de secours
   // si l'ouverture automatique du navigateur échoue.
   const [pendingPaymentUrl, setPendingPaymentUrl] = useState<string | null>(null);
+  // Transaction de recharge en attente de confirmation de paiement.
+  const [pendingTxId, setPendingTxId] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const {
     balance,
@@ -44,6 +48,7 @@ export default function WalletScreen() {
     fetchBalance,
     fetchLoyalty,
     deposit,
+    verifyDeposit,
     withdraw,
     redeemPoints,
   } = useWalletStore();
@@ -52,6 +57,40 @@ export default function WalletScreen() {
     fetchBalance();
     fetchLoyalty();
   }, []);
+
+  // Vérifie l'état du paiement en attente et crédite le solde si confirmé.
+  const checkPendingPayment = async (txId: string, silent = false) => {
+    setIsVerifying(true);
+    try {
+      const { status } = await verifyDeposit(txId);
+      if (status === 'COMPLETED') {
+        setPendingTxId(null);
+        setPendingPaymentUrl(null);
+        Alert.alert('✅ Recharge confirmée !', 'Votre portefeuille a été crédité.');
+      } else if (status === 'FAILED') {
+        setPendingTxId(null);
+        setPendingPaymentUrl(null);
+        if (!silent) Alert.alert('Paiement non abouti', 'Le paiement a échoué ou a été annulé.');
+      } else if (!silent) {
+        Alert.alert('Paiement en attente', "Le paiement n'est pas encore confirmé. Si vous venez de payer, patientez quelques instants puis réessayez.");
+      }
+    } catch {
+      if (!silent) Alert.alert('Erreur', 'Impossible de vérifier le paiement pour le moment.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // Quand l'utilisateur revient dans l'app (après avoir payé sur NotchPay),
+  // on vérifie automatiquement l'état du paiement en attente.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && pendingTxId) {
+        checkPendingPayment(pendingTxId, true);
+      }
+    });
+    return () => sub.remove();
+  }, [pendingTxId]);
 
   // Ouvre la page de paiement NotchPay de façon robuste.
   // Essaie Linking.openURL ; si ça échoue, propose un bouton de secours.
@@ -98,6 +137,7 @@ export default function WalletScreen() {
         // ainsi, même si l'ouverture auto échoue, l'utilisateur peut toujours payer.
         setAmount('');
         setPendingPaymentUrl(result.paymentUrl);
+        if (result.transactionId) setPendingTxId(result.transactionId);
         await openPaymentPage(result.paymentUrl);
       } else {
         // Pas d'URL (mode simulation / passerelle directe) : recharge immédiate
@@ -317,6 +357,23 @@ export default function WalletScreen() {
               accessibilityLabel="Ouvrir la page de paiement"
             >
               <Text style={styles.payNowText}>💳 Payer maintenant</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Après paiement : vérifier et créditer le portefeuille */}
+          {activeTab === 'deposit' && pendingTxId && (
+            <TouchableOpacity
+              style={styles.verifyButton}
+              onPress={() => checkPendingPayment(pendingTxId)}
+              disabled={isVerifying}
+              accessibilityRole="button"
+              accessibilityLabel="J'ai payé, vérifier le paiement"
+            >
+              {isVerifying ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Text style={styles.verifyButtonText}>✅ J'ai payé, vérifier</Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -547,6 +604,20 @@ const styles = StyleSheet.create({
   },
   payNowText: {
     color: '#fff',
+    fontSize: typography.md,
+    fontWeight: '700',
+  },
+  verifyButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  verifyButtonText: {
+    color: colors.primary,
     fontSize: typography.md,
     fontWeight: '700',
   },

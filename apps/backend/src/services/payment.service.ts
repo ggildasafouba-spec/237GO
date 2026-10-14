@@ -80,24 +80,31 @@ export async function verifyNotchPay(reference: string): Promise<{
   try {
     const response = await axios.get(`${notchPayConfig.baseUrl}/payments/${reference}`, {
       headers: { Authorization: notchPayConfig.publicKey },
+      timeout: 20000,
     });
 
-    const status = (response.data?.transaction?.status || '').toLowerCase();
+    // Selon l'endpoint, NotchPay renvoie le statut sous transaction.status ou status.
+    const tx = response.data?.transaction || response.data?.data || response.data || {};
+    const status = (tx.status || response.data?.status || '').toString().toLowerCase();
 
-    if (status === 'complete' || status === 'completed' || status === 'successful') {
+    if (status === 'complete' || status === 'completed' || status === 'successful' || status === 'success') {
       return {
         success: true,
         status: 'COMPLETED',
-        amount: response.data?.transaction?.amount,
+        amount: tx.amount,
         message: 'Paiement confirmé',
       };
     }
-    if (status === 'pending' || status === 'processing') {
+    if (status === 'pending' || status === 'processing' || status === 'initialized' || status === '') {
+      // Statut vide = encore en cours de traitement : NE PAS marquer échoué.
       return { success: true, status: 'PENDING', message: 'Paiement en attente' };
     }
-    return { success: false, status: 'FAILED', message: 'Paiement échoué' };
+    // canceled, failed, rejected, expired...
+    return { success: false, status: 'FAILED', message: `Paiement ${status}` };
   } catch (error: any) {
-    return { success: false, status: 'FAILED', message: error.response?.data?.message || error.message };
+    // Erreur réseau/temporaire : on reste en PENDING pour ne pas annuler à tort un paiement en cours.
+    console.error('verifyNotchPay error:', error.response?.data || error.message);
+    return { success: true, status: 'PENDING', message: 'Vérification temporairement indisponible' };
   }
 }
 

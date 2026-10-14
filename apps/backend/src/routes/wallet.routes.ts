@@ -3,11 +3,64 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { processPayment } from '../services/payment.service';
+import { processPayment, verifyNotchPay, confirmDeposit } from '../services/payment.service';
 import { redeemLoyaltyPoints, computeTier } from '../services/loyalty.service';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Vérifier manuellement l'état d'un paiement et créditer si confirmé.
+// Appelé par l'app après le retour de la page de paiement (ne dépend pas du webhook).
+router.post('/verify/:transactionId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { transactionId } = req.params;
+
+    // La transaction doit appartenir au portefeuille de l'utilisateur connecté
+    const wallet = await prisma.wallet.findUnique({ where: { userId: req.user!.id } });
+    if (!wallet) {
+      throw new AppError('Portefeuille non trouvé', 404);
+    }
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { id: transactionId, walletId: wallet.id, type: 'DEPOSIT' },
+    });
+    if (!transaction) {
+      throw new AppError('Transaction introuvable', 404);
+    }
+
+    // Déjà créditée : renvoyer l'état courant (idempotent)
+    if (transaction.status === 'COMPLETED') {
+      return res.json({
+        success: true,
+        data: { status: 'COMPLETED', balance: wallet.balance },
+      });
+    }
+
+    // Interroger NotchPay sur l'état réel du paiement
+    const check = await verifyNotchPay(transaction.reference || transaction.id);
+
+    if (check.status === 'COMPLETED') {
+      await confirmDeposit(transaction.reference || transaction.id);
+      const updated = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+      return res.json({
+        success: true,
+        data: { status: 'COMPLETED', balance: updated?.balance ?? wallet.balance },
+      });
+    }
+
+    if (check.status === 'FAILED') {
+      return res.json({ success: true, data: { status: 'FAILED', balance: wallet.balance } });
+    }
+
+    // Encore en attente côté NotchPay
+    return res.json({ success: true, data: { status: 'PENDING', balance: wallet.balance } });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur de vérification du paiement' });
+  }
+});
 
 // Consulter le solde
 router.get('/balance', authenticate, async (req: AuthRequest, res: Response) => {
