@@ -1,0 +1,69 @@
+name: Build APK (Android)
+
+# Construit automatiquement un APK installable via EAS.
+# Déclencheurs :
+#   - à chaque push sur main qui modifie l'app mobile
+#   - manuellement depuis l'onglet "Actions" (workflow_dispatch)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profil EAS à utiliser"
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+
+concurrency:
+  # Évite deux builds en parallèle pour le même déclencheur ; annule l'ancien.
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: EAS Build Android
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installer EAS CLI + se connecter à Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Installer les dépendances
+        # npm install (et non npm ci) car il n'y a pas de package-lock.json dans apps/mobile
+        run: npm install
+
+      - name: Lancer le build EAS (APK)
+        # --non-interactive : indispensable en CI (aucune question posée)
+        # --no-wait : ne bloque pas le runner ; le build se poursuit côté Expo
+        run: |
+          eas build \
+            --platform android \
+            --profile "${{ github.event.inputs.profile || 'preview' }}" \
+            --non-interactive \
+            --no-wait
+
+      - name: Où trouver l'APK
+        run: |
+          echo "Build lancé sur EAS."
+          echo "Récupérez l'APK (lien + QR code) sur :"
+          echo "https://expo.dev/accounts/afouba/projects/237go/builds"
