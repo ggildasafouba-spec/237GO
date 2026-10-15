@@ -58,7 +58,7 @@
       "expo-notifications",
       "expo-image-picker"
     ],
-    "owner": "afouba",
+    "owner": "ggildas",
     "extra": {
       "eas": {
         "projectId": "3956a01d-3157-4f9e-9208-b0aaebd62a5d"
