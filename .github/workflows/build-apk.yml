@@ -1,6 +1,10 @@
 name: Build APK (Android)
 
 # Construit automatiquement un APK installable via EAS.
+# Le repo est un monorepo npm workspaces : les dépendances s'installent à la
+# RACINE (où vit le package-lock.json et la config workspaces), puis le build
+# EAS est lancé depuis apps/mobile.
+#
 # Déclencheurs :
 #   - à chaque push sur main qui modifie l'app mobile
 #   - manuellement depuis l'onglet "Actions" (workflow_dispatch)
@@ -30,9 +34,6 @@ jobs:
   build:
     name: EAS Build Android
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/mobile
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
@@ -50,13 +51,16 @@ jobs:
           # Le projet utilise npm : sans ça l'action utilise yarn par défaut et échoue.
           packager: npm
 
-      - name: Installer les dépendances
-        # npm install (et non npm ci) car il n'y a pas de package-lock.json dans apps/mobile
-        run: npm install
+      - name: Installer les dépendances (racine du monorepo)
+        # Monorepo npm workspaces : on installe depuis la racine avec le
+        # package-lock.json racine pour que les workspaces se résolvent bien.
+        run: npm ci
 
       - name: Lancer le build EAS (APK)
+        # Lancé depuis apps/mobile (où vit app.json / eas.json).
         # --non-interactive : indispensable en CI (aucune question posée)
         # --no-wait : ne bloque pas le runner ; le build se poursuit côté Expo
+        working-directory: apps/mobile
         run: |
           eas build \
             --platform android \
@@ -68,4 +72,4 @@ jobs:
         run: |
           echo "Build lancé sur EAS."
           echo "Récupérez l'APK (lien + QR code) sur :"
-          echo "https://expo.dev/accounts/afouba/projects/237go/builds"
+          echo "https://expo.dev/accounts/ggildas/projects/237go/builds"
