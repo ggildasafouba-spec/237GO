@@ -7,7 +7,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/3956a01d-3157-4f9e-9208-b0aaebd62a5d",
+      "url": "https://u.expo.dev/5343324b-5143-4bc9-8384-d2950a4f900b",
       "fallbackToCacheTimeout": 0
     },
     "orientation": "portrait",
@@ -61,7 +61,7 @@
     "owner": "ggildas",
     "extra": {
       "eas": {
-        "projectId": "3956a01d-3157-4f9e-9208-b0aaebd62a5d"
+        "projectId": "5343324b-5143-4bc9-8384-d2950a4f900b"
       }
     }
   }
