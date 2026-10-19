@@ -64,6 +64,7 @@ model User {
   escrowsAsPayee    Escrow[]           @relation("EscrowPayee")
   messagesSent      Message[]          @relation("MessagesSent")
   messagesReceived  Message[]          @relation("MessagesReceived")
+  sosAlerts         SosAlert[]
 
   @@map("users")
 }
@@ -637,4 +638,43 @@ enum EscrowStatus {
   RELEASED  // argent versé au prestataire
   REFUNDED  // argent remboursé au client
   DISPUTED  // litige en cours, décision admin requise
+}
+
+// ========== ALERTES SOS ==========
+
+model SosAlert {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  lat       Float
+  lng       Float
+  rideId    String?        // course associée, le cas échéant
+  status    SosAlertStatus @default(ACTIVE)
+  resolvedBy String?       // id de l'admin qui a traité l'alerte
+  resolvedAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status])
+  @@index([userId])
+  @@map("sos_alerts")
+}
+
+enum SosAlertStatus {
+  ACTIVE     // alerte en cours, non traitée
+  RESOLVED   // traitée par un admin
+}
+
+// ========== PARAMÈTRES DE L'APPLICATION (clé-valeur) ==========
+// Stocke les réglages configurables depuis l'admin (tarifs, commission,
+// fidélité, SMS...). Une seule ligne par clé, valeur en JSON.
+
+model AppSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("app_settings")
 }

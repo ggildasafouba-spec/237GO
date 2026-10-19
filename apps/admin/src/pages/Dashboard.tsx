@@ -12,6 +12,15 @@ interface Stats {
   todayRides: number;
 }
 
+interface SosAlert {
+  id: string;
+  lat: number;
+  lng: number;
+  rideId: string | null;
+  createdAt: string;
+  user?: { firstName: string; lastName: string; phone: string };
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0, totalDrivers: 0, totalRides: 0,
@@ -20,13 +29,28 @@ export default function Dashboard() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [sosAlerts, setSosAlerts] = useState<SosAlert[]>([]);
 
   useEffect(() => {
     api.get('/admin/stats')
       .then((res) => setStats(res.data.data))
       .catch((err) => setError(err.response?.data?.message || 'Erreur de chargement'))
       .finally(() => setIsLoading(false));
+
+    // Charger les alertes SOS actives
+    api.get('/admin/sos-alerts?status=ACTIVE')
+      .then((res) => setSosAlerts(res.data.data || []))
+      .catch(() => { /* non bloquant */ });
   }, []);
+
+  const resolveSos = async (id: string) => {
+    try {
+      await api.patch(`/admin/sos-alerts/${id}/resolve`);
+      setSosAlerts((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      alert("Impossible de marquer l'alerte comme traitée.");
+    }
+  };
 
   const cards = [
     { label: 'Utilisateurs', value: stats.totalUsers.toLocaleString(), icon: '👥', color: '#1976D2' },
@@ -62,6 +86,34 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+
+          {/* Alertes SOS actives (urgences) */}
+          {sosAlerts.length > 0 && (
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>🚨 Alertes SOS actives</h2>
+              <div style={styles.alertList}>
+                {sosAlerts.map((a) => (
+                  <div key={a.id} style={{ ...styles.alert, borderLeftColor: '#D32F2F', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <div>
+                      <strong>
+                        {a.user ? `${a.user.firstName} ${a.user.lastName}` : 'Utilisateur'}
+                        {a.user?.phone ? ` (${a.user.phone})` : ''}
+                      </strong>
+                      {' — '}
+                      <a href={`https://maps.google.com/?q=${a.lat},${a.lng}`} target="_blank" rel="noreferrer" style={{ color: '#1976D2' }}>
+                        voir la position
+                      </a>
+                      {a.rideId ? ` • Course #${a.rideId.substring(0, 8)}` : ''}
+                      <div style={{ color: '#757575', fontSize: 12, marginTop: 2 }}>
+                        {new Date(a.createdAt).toLocaleString('fr-FR')}
+                      </div>
+                    </div>
+                    <button onClick={() => resolveSos(a.id)} style={styles.resolveBtn}>Marquer traitée</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Alertes */}
           <div style={styles.section}>
@@ -104,4 +156,5 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitle: { fontSize: 20, fontWeight: 700, marginBottom: 16 },
   alertList: { display: 'flex', flexDirection: 'column', gap: 12 },
   alert: { backgroundColor: '#fff', padding: 16, borderRadius: 8, borderLeft: '4px solid #ccc', fontSize: 14 },
+  resolveBtn: { padding: '8px 14px', backgroundColor: '#1DB954', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' },
 };

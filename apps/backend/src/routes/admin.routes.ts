@@ -496,10 +496,113 @@ router.get('/finance/summary', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Alertes SOS actives
-router.get('/sos-alerts', async (_req: AuthRequest, res: Response) => {
-  // TODO: Implémenter un modèle SOSAlert
-  res.json({ success: true, data: [] });
+// Alertes SOS (par défaut les actives ; ?status=RESOLVED pour l'historique)
+router.get('/sos-alerts', async (req: AuthRequest, res: Response) => {
+  try {
+    const { status = 'ACTIVE' } = req.query;
+    const where: Record<string, unknown> = {};
+    if (status && status !== 'ALL') where.status = status;
+
+    const alerts = await prisma.sosAlert.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        user: { select: { firstName: true, lastName: true, phone: true } },
+      },
+    });
+
+    res.json({ success: true, data: alerts });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Marquer une alerte SOS comme traitée
+router.patch('/sos-alerts/:id/resolve', async (req: AuthRequest, res: Response) => {
+  try {
+    const alert = await prisma.sosAlert.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'RESOLVED',
+        resolvedBy: req.user!.id,
+        resolvedAt: new Date(),
+      },
+    });
+    res.json({ success: true, message: 'Alerte marquée comme traitée', data: alert });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// ========== PARAMÈTRES DE L'APPLICATION ==========
+
+// Valeurs par défaut si aucun paramètre n'a encore été enregistré.
+const DEFAULT_SETTINGS = {
+  pricing: {
+    motoBase: 200, motoPerKm: 150,
+    ecoBase: 500, ecoPerKm: 300,
+    comfortBase: 1000, comfortPerKm: 450,
+    vipBase: 2000, vipPerKm: 700,
+    commissionRate: 15,
+    loyaltyPointsPerXAF: 100,
+    bonusRechargeThreshold: 5000,
+    bonusRechargePercent: 5,
+  },
+  sms: {
+    provider: 'africas_talking',
+    senderId: '237GO',
+    enabled: true,
+  },
+};
+
+// Lire les paramètres (fusionne les valeurs enregistrées avec les défauts)
+router.get('/settings', async (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = await prisma.appSetting.findMany();
+    const stored = rows.reduce((acc, row) => {
+      acc[row.key] = row.value;
+      return acc;
+    }, {} as Record<string, unknown>);
+
+    res.json({
+      success: true,
+      data: {
+        pricing: { ...DEFAULT_SETTINGS.pricing, ...(stored.pricing as object || {}) },
+        sms: { ...DEFAULT_SETTINGS.sms, ...(stored.sms as object || {}) },
+      },
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Enregistrer les paramètres (upsert par clé : pricing, sms)
+router.put('/settings', async (req: AuthRequest, res: Response) => {
+  try {
+    const { pricing, sms } = req.body || {};
+    const entries: { key: string; value: unknown }[] = [];
+    if (pricing && typeof pricing === 'object') entries.push({ key: 'pricing', value: pricing });
+    if (sms && typeof sms === 'object') entries.push({ key: 'sms', value: sms });
+
+    if (entries.length === 0) {
+      return res.status(400).json({ success: false, message: 'Aucun paramètre fourni' });
+    }
+
+    await prisma.$transaction(
+      entries.map((e) =>
+        prisma.appSetting.upsert({
+          where: { key: e.key },
+          create: { key: e.key, value: e.value as any },
+          update: { value: e.value as any },
+        })
+      )
+    );
+
+    res.json({ success: true, message: 'Paramètres enregistrés' });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
 });
 
 // ========== GESTION DES ESCROWS ==========

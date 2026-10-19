@@ -1,32 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../config/api';
+
+const DEFAULT_PRICING = {
+  motoBase: 200, motoPerKm: 150,
+  ecoBase: 500, ecoPerKm: 300,
+  comfortBase: 1000, comfortPerKm: 450,
+  vipBase: 2000, vipPerKm: 700,
+  commissionRate: 15,
+  loyaltyPointsPerXAF: 100,
+  bonusRechargeThreshold: 5000,
+  bonusRechargePercent: 5,
+};
+
+const DEFAULT_SMS = {
+  provider: 'africas_talking',
+  senderId: '237GO',
+  enabled: true,
+};
 
 export default function Settings() {
-  const [pricing, setPricing] = useState({
-    motoBase: 200, motoPerKm: 150,
-    ecoBase: 500, ecoPerKm: 300,
-    comfortBase: 1000, comfortPerKm: 450,
-    vipBase: 2000, vipPerKm: 700,
-    commissionRate: 15,
-    loyaltyPointsPerXAF: 100,
-    bonusRechargeThreshold: 5000,
-    bonusRechargePercent: 5,
-  });
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [smsConfig, setSmsConfig] = useState(DEFAULT_SMS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [smsConfig, setSmsConfig] = useState({
-    provider: 'africas_talking',
-    senderId: '237GO',
-    enabled: true,
-  });
+  // Charger les paramètres enregistrés au montage
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/admin/settings');
+        const data = res.data?.data;
+        if (data?.pricing) setPricing({ ...DEFAULT_PRICING, ...data.pricing });
+        if (data?.sms) setSmsConfig({ ...DEFAULT_SMS, ...data.sms });
+      } catch {
+        // En cas d'erreur, on garde les valeurs par défaut
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  const handleSave = () => {
-    alert('Paramètres sauvegardés !');
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put('/admin/settings', { pricing, sms: smsConfig });
+      alert('Paramètres enregistrés !');
+    } catch {
+      alert("Échec de l'enregistrement. Réessayez.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return <div style={{ padding: 24 }}>Chargement des paramètres…</div>;
+  }
 
   return (
     <div>
       <div style={styles.header}>
         <h1 style={styles.title}>Paramètres</h1>
-        <button onClick={handleSave} style={styles.saveBtn}>💾 Sauvegarder</button>
+        <button onClick={handleSave} disabled={saving} style={{ ...styles.saveBtn, opacity: saving ? 0.6 : 1 }}>
+          {saving ? 'Enregistrement…' : '💾 Sauvegarder'}
+        </button>
       </div>
 
       {/* Tarification */}

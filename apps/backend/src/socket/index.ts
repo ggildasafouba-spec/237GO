@@ -120,14 +120,26 @@ export function setupSocketHandlers(io: Server) {
 
         const userName = user ? `${user.firstName} ${user.lastName}` : 'Un utilisateur';
 
+        // Persister l'alerte pour qu'un admin non connecté au moment du SOS
+        // puisse la retrouver (tableau de bord).
+        const alert = await prisma.sosAlert.create({
+          data: {
+            userId: socket.userId!,
+            lat: data.lat,
+            lng: data.lng,
+            rideId: data.rideId || null,
+          },
+        });
+
         // Notifier les admins en temps réel
         io.to('admins').emit('sos_alert', {
+          id: alert.id,
           userId: socket.userId,
           userName,
           lat: data.lat,
           lng: data.lng,
           rideId: data.rideId,
-          timestamp: new Date().toISOString(),
+          timestamp: alert.createdAt.toISOString(),
         });
 
         // Envoyer un SMS d'alerte aux contacts d'urgence
