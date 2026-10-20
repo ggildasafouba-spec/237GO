@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 type HistoryTab = 'rides' | 'deliveries' | 'orders';
@@ -39,6 +40,7 @@ export default function HistoryScreen({ navigation }: { navigation: any }) {
   const [rides, setRides] = useState<RideHistory[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryHistory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const safe = useSafeScreen();
 
   useEffect(() => {
     fetchData();
@@ -80,7 +82,7 @@ export default function HistoryScreen({ navigation }: { navigation: any }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, safe.topBottom]}>
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
         <Text style={styles.backText}>← Retour</Text>
       </TouchableOpacity>
@@ -192,7 +194,7 @@ export default function HistoryScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl + 20 },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   backBtn: { marginBottom: spacing.md },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text, marginBottom: spacing.md },

@@ -12,9 +12,11 @@ import {
   Platform,
 } from 'react-native';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 export default function ForgotPasswordScreen({ navigation }: { navigation: any }) {
+  const safe = useSafeScreen();
   const [step, setStep] = useState<'phone' | 'reset'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -63,7 +65,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: safe.insets.top + spacing.xl, paddingBottom: safe.insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled">
         <Text style={styles.icon}>🔑</Text>
         <Text style={styles.title}>Mot de passe oublié</Text>
 
@@ -152,7 +154,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.primary },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   icon: { fontSize: 56, textAlign: 'center', marginBottom: spacing.sm },
   title: { fontSize: typography.xxl, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: spacing.sm },
   subtitle: { fontSize: typography.sm, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: spacing.lg, lineHeight: 20 },

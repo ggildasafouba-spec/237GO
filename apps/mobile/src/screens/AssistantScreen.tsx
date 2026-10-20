@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 interface Msg {
@@ -34,6 +35,7 @@ export default function AssistantScreen({ navigation }: { navigation: any }) {
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
+  const safe = useSafeScreen();
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -68,7 +70,7 @@ export default function AssistantScreen({ navigation }: { navigation: any }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, safe.top]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
@@ -137,7 +139,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: spacing.xl + 10, paddingBottom: spacing.md, paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md, paddingHorizontal: spacing.md,
     backgroundColor: colors.primary,
   },
   backText: { color: '#fff', fontSize: 26, fontWeight: '700' },

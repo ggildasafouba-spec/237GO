@@ -15,6 +15,7 @@ import * as Location from 'expo-location';
 import { useMarketStore } from '../store/marketStore';
 import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 const categories = [
@@ -53,6 +54,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     placeOrder,
     fetchOrders,
   } = useMarketStore();
+  const safe = useSafeScreen();
 
   useEffect(() => {
     (async () => {
@@ -111,7 +113,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
   // Vue: Liste des marchands
   if (view === 'merchants') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -218,7 +220,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
   // Vue: Détail marchand + produits
   if (view === 'merchant-detail') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => setView('merchants')} style={styles.backBtn}>
           <Text style={styles.backText}>← Marchands</Text>
         </TouchableOpacity>
@@ -323,7 +325,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
   // Vue: Panier
   if (view === 'cart') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('merchant-detail')} style={styles.backBtn}>
           <Text style={styles.backText}>← Continuer les achats</Text>
         </TouchableOpacity>
@@ -403,7 +405,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     };
 
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => setView('merchants')} style={styles.backBtn}>
           <Text style={styles.backText}>← Marchands</Text>
         </TouchableOpacity>
@@ -452,7 +454,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
 
   // Vue: Checkout
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <TouchableOpacity onPress={() => setView('cart')} style={styles.backBtn}>
         <Text style={styles.backText}>← Panier</Text>
       </TouchableOpacity>
@@ -522,8 +524,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: spacing.lg,
-    paddingTop: spacing.xl + 20,
+    paddingHorizontal: spacing.lg,
   },
   backBtn: { marginBottom: spacing.md },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },

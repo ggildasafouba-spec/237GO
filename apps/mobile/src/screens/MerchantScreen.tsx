@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 interface Product {
@@ -76,6 +77,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
   const [shop, setShop] = useState<Shop | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const safe = useSafeScreen();
 
   // Formulaire d'ajout de produit
   const [showAddForm, setShowAddForm] = useState(false);
@@ -187,7 +189,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
   if (!shop) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, safe.top]}>
           <TouchableOpacity
             style={styles.avatar}
             onPress={() => navigation.navigate('Profile')}
@@ -217,7 +219,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
   return (
     <View style={styles.container}>
       {/* Header boutique */}
-      <View style={styles.header}>
+      <View style={[styles.header, safe.top]}>
         <TouchableOpacity
           style={styles.avatar}
           onPress={() => navigation.navigate('Profile')}
@@ -264,7 +266,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
         <FlatList
           data={orders}
           keyExtractor={(o) => o.id}
-          contentContainerStyle={{ padding: spacing.lg }}
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: safe.insets.bottom + 16 }}
           onRefresh={loadOrders}
           refreshing={false}
           ListEmptyComponent={
@@ -308,7 +310,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
           }}
         />
       ) : (
-        <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
+        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: safe.insets.bottom + 16 }} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => setShowAddForm(!showAddForm)}
@@ -370,7 +372,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: typography.md, color: colors.textSecondary, textAlign: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', padding: spacing.lg, paddingTop: spacing.xl + 20,
+    backgroundColor: '#fff', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg,
   },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#fff', fontSize: typography.md, fontWeight: '800' },

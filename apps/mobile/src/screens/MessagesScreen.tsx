@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useChatStore } from '../store/chatStore';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -21,6 +22,7 @@ const SERVICE_LABELS: Record<string, string> = {
 
 export default function MessagesScreen({ navigation }: { navigation: any }) {
   const { conversations, isLoading, fetchConversations } = useChatStore();
+  const safe = useSafeScreen();
 
   useEffect(() => {
     fetchConversations();
@@ -30,7 +32,7 @@ export default function MessagesScreen({ navigation }: { navigation: any }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, safe.top]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.back}>← Retour</Text>
         </TouchableOpacity>
@@ -45,7 +47,7 @@ export default function MessagesScreen({ navigation }: { navigation: any }) {
           keyExtractor={(c, i) => `${c.serviceType}:${c.serviceId}:${c.interlocutor.id}:${i}`}
           onRefresh={fetchConversations}
           refreshing={isLoading}
-          contentContainerStyle={{ padding: spacing.md }}
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: safe.insets.bottom + 16 }}
           ListEmptyComponent={
             <View style={styles.center}>
               <Text style={styles.emptyIcon}>💬</Text>
@@ -89,7 +91,7 @@ export default function MessagesScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { padding: spacing.lg, paddingTop: spacing.xl + 20, backgroundColor: '#fff' },
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, backgroundColor: '#fff' },
   back: { color: colors.primary, fontSize: typography.md, fontWeight: '600', marginBottom: spacing.sm },
   title: { fontSize: typography.xl, fontWeight: '800', color: colors.text },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl },

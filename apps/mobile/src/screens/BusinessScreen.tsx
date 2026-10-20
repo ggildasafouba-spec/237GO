@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useBusinessStore } from '../store/businessStore';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 type ViewMode = 'list' | 'create' | 'dashboard' | 'add-member';
@@ -35,6 +36,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
     fetchDashboard,
     addMember,
   } = useBusinessStore();
+  const safe = useSafeScreen();
 
   useEffect(() => {
     fetchMyAccounts();
@@ -92,7 +94,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
   // Vue: Liste des comptes
   if (view === 'list') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -156,7 +158,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
   // Vue: Créer un compte
   if (view === 'create') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('list')} style={styles.backBtn}>
           <Text style={styles.backText}>← Mes comptes</Text>
         </TouchableOpacity>
@@ -240,7 +242,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
   // Vue: Dashboard
   if (view === 'dashboard' && currentAccount) {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('list')} style={styles.backBtn}>
           <Text style={styles.backText}>← Mes comptes</Text>
         </TouchableOpacity>
@@ -320,7 +322,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
 
   // Vue: Ajouter un membre
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <TouchableOpacity onPress={() => setView('dashboard')} style={styles.backBtn}>
         <Text style={styles.backText}>← Dashboard</Text>
       </TouchableOpacity>
@@ -387,7 +389,7 @@ export default function BusinessScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl + 20 },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   backBtn: { marginBottom: spacing.md },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text },

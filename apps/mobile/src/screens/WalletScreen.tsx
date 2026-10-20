@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWalletStore } from '../store/walletStore';
 import { useAuthStore } from '../store/authStore';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 type PaymentProvider = 'ORANGE_MONEY' | 'MTN_MOMO' | 'EXPRESS_UNION';
@@ -52,6 +53,7 @@ export default function WalletScreen() {
     withdraw,
     redeemPoints,
   } = useWalletStore();
+  const safe = useSafeScreen();
 
   useEffect(() => {
     fetchBalance();
@@ -222,7 +224,7 @@ export default function WalletScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 160 + insets.bottom }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={[safe.top, { paddingBottom: 160 + insets.bottom }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       {/* Balance Card */}
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Solde disponible</Text>
@@ -420,7 +422,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: spacing.xl + 20,
   },
   balanceCard: {
     marginHorizontal: spacing.lg,

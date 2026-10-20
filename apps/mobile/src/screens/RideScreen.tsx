@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRideStore } from '../store/rideStore';
 import { useLocation } from '../hooks/useLocation';
 import RideMap from '../components/RideMap';
@@ -69,6 +70,10 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   } = useRideStore();
 
   const { getCurrentLocation, reverseGeocode } = useLocation();
+  const insets = useSafeAreaInsets();
+  // Marges de sécurité adaptatives (encoche en haut, barre gestuelle en bas)
+  const safeTop = { paddingTop: insets.top + spacing.md };
+  const safeScroll = { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 120 };
 
   // Coordonnées réelles (remplies par le GPS / géocodage). Fallback Douala si indispo.
   const [pickupCoords, setPickupCoords] = useState({ lat: 4.0511, lng: 9.7679 });
@@ -263,7 +268,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Entrer les adresses
   if (step === 'location') {
     return (
-      <ScrollView style={styles.scrollBg} contentContainerStyle={styles.confirmScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollBg} contentContainerStyle={[styles.confirmScroll, safeScroll]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Où allez-vous ?</Text>
 
         {/* Carte avec la position du passager */}
@@ -348,7 +353,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Choisir le véhicule
   if (step === 'vehicle') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safeTop, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.title}>Choisir votre véhicule</Text>
 
         <FlatList
@@ -397,7 +402,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Confirmer et payer
   if (step === 'confirm') {
     return (
-      <ScrollView style={styles.scrollBg} contentContainerStyle={styles.confirmScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollBg} contentContainerStyle={[styles.confirmScroll, safeScroll]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Confirmer votre course</Text>
 
         {/* Résumé */}
@@ -467,7 +472,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: En attente d'un chauffeur
   if (step === 'waiting' || currentRide?.status === 'PENDING') {
     return (
-      <View style={[styles.container, styles.centerContent]}>
+      <View style={[styles.container, styles.centerContent, safeTop, { paddingBottom: insets.bottom + spacing.md }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.waitingTitle}>Recherche d'un chauffeur...</Text>
         <Text style={styles.waitingSubtitle}>Veuillez patienter</Text>
@@ -487,7 +492,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: Course terminée → confirmation d'arrivée (escrow)
   if (currentRide?.status === 'COMPLETED') {
     return (
-      <View style={[styles.container, styles.centerContent]}>
+      <View style={[styles.container, styles.centerContent, safeTop, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={{ fontSize: 56, marginBottom: spacing.md }}>🏁</Text>
         <Text style={styles.waitingTitle}>Course terminée</Text>
         <Text style={styles.waitingSubtitle}>
@@ -525,7 +530,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
 
   // Step: Course en cours
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, safeTop, { paddingBottom: insets.bottom + spacing.md }]}>
       {/* Carte temps réel : passager + chauffeur */}
       <RideMap
         pickup={pickupCoords}
@@ -623,17 +628,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: spacing.lg,
-    paddingTop: spacing.xl + 20,
+    paddingHorizontal: spacing.lg,
+    // paddingTop / paddingBottom appliqués dynamiquement via les insets
   },
   scrollBg: {
     flex: 1,
     backgroundColor: colors.background,
   },
   confirmScroll: {
-    padding: spacing.lg,
-    paddingTop: spacing.xl + 20,
-    paddingBottom: 140, // marge pour que "Commander" ne passe pas sous la barre système Android
+    paddingHorizontal: spacing.lg,
+    // paddingTop / paddingBottom appliqués dynamiquement via les insets (safeScroll)
   },
   centerContent: {
     justifyContent: 'center',

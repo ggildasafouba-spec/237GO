@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useWalletStore } from '../store/walletStore';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 interface EmergencyContact {
@@ -25,6 +26,7 @@ interface EmergencyContact {
 export default function ProfileScreen({ navigation }: { navigation: any }) {
   const { user, logout } = useAuthStore();
   const { balance, loyaltyPoints, loyaltyTier } = useWalletStore();
+  const safe = useSafeScreen();
 
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(user?.firstName || '');
@@ -122,7 +124,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
   ];
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
         <Text style={styles.backText}>← Retour</Text>
       </TouchableOpacity>
@@ -373,7 +375,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl + 20 },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   backBtn: { marginBottom: spacing.md },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
   profileHeader: { alignItems: 'center', marginBottom: spacing.lg },

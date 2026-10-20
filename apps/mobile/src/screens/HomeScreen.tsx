@@ -8,6 +8,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useWalletStore } from '../store/walletStore';
 import Logo from '../components/Logo';
@@ -87,6 +88,7 @@ const services: ServiceItem[] = [
 export default function HomeScreen({ navigation }: { navigation: any }) {
   const { user } = useAuthStore();
   const { balance, loyaltyPoints, fetchBalance, fetchLoyalty } = useWalletStore();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     fetchBalance();
@@ -108,7 +110,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         colors={gradients.dark}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
+        style={[styles.headerGradient, { paddingTop: insets.top + spacing.sm }]}
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -235,7 +237,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
     {/* Bouton flottant Assistant IA */}
     <TouchableOpacity
-      style={styles.aiFab}
+      style={[styles.aiFab, { bottom: insets.bottom + 24 }]}
       onPress={() => navigation.navigate('Assistant')}
       accessibilityLabel="Ouvrir l'assistant 237GO"
       accessibilityRole="button"
@@ -252,7 +254,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   headerGradient: {
-    paddingTop: spacing.xl + 20,
+    // paddingTop appliqué dynamiquement via les insets de zone sûre
     paddingBottom: spacing.lg,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
