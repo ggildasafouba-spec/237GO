@@ -4,6 +4,7 @@ import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { submitRating, RatingError } from '../services/rating.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -288,5 +289,69 @@ router.get('/:id/escrow', authenticate, async (req: AuthRequest, res: Response) 
     res.status(500).json({ success: false, message: 'Erreur' });
   }
 });
+
+// Noter un covoiturage — bidirectionnel : passager <-> chauffeur.
+// Clé = id de la réservation (un trajet a plusieurs passagers).
+router.post(
+  '/bookings/:bookingId/rate',
+  authenticate,
+  [
+    body('score').isInt({ min: 1, max: 5 }).withMessage('Note entre 1 et 5'),
+    body('comment').optional().trim(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      const { bookingId } = req.params;
+      const { score, comment } = req.body;
+      const userId = req.user!.id;
+
+      const booking = await prisma.carpoolBooking.findUnique({
+        where: { id: bookingId },
+        include: { carpool: { select: { driverId: true } } },
+      });
+      if (!booking) {
+        throw new AppError('Réservation non trouvée', 404);
+      }
+
+      const driverId = booking.carpool.driverId;
+      let ratedId: string | null = null;
+      if (userId === booking.passengerId) {
+        ratedId = driverId; // le passager note le chauffeur
+      } else if (userId === driverId) {
+        ratedId = booking.passengerId; // le chauffeur note le passager
+      } else {
+        throw new AppError('Vous n\'avez pas participé à ce trajet', 403);
+      }
+
+      const result = await submitRating({
+        serviceType: 'CARPOOL',
+        serviceId: bookingId,
+        raterId: userId,
+        ratedId,
+        score,
+        comment,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Merci pour votre évaluation !',
+        data: { rating: result.rating, average: result.average, totalRatings: result.totalRatings },
+      });
+    } catch (error) {
+      if (error instanceof RatingError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur lors de la notation' });
+    }
+  }
+);
 
 export { router as carpoolRouter };

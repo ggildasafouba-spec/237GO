@@ -195,7 +195,7 @@ model Ride {
   completedAt     DateTime?
   cancelledAt     DateTime?
   cancelReason    String?
-  rating          Rating?
+  ratings         Rating[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -515,17 +515,25 @@ enum BusinessRole {
 // ========== COMMUN ==========
 
 model Rating {
-  id        String   @id @default(uuid())
-  rideId    String?  @unique
-  ride      Ride?    @relation(fields: [rideId], references: [id])
-  raterId   String
-  rater     User     @relation("RaterRatings", fields: [raterId], references: [id])
-  ratedId   String
-  rated     User     @relation("RatedRatings", fields: [ratedId], references: [id])
-  score     Int      // 1-5
-  comment   String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  // Prestation notée, générique : RIDE | DELIVERY | CARPOOL | RENTAL
+  serviceType String
+  serviceId   String   // id de la course / livraison / réservation concernée
+  // Compatibilité historique (anciennes notes de courses) — non unique désormais
+  rideId      String?
+  ride        Ride?    @relation(fields: [rideId], references: [id])
+  raterId     String
+  rater       User     @relation("RaterRatings", fields: [raterId], references: [id])
+  ratedId     String
+  rated       User     @relation("RatedRatings", fields: [ratedId], references: [id])
+  score       Int      // 1-5
+  comment     String?
+  createdAt   DateTime @default(now())
 
+  // Une personne ne note qu'une fois une prestation donnée ; les DEUX parties peuvent la noter
+  @@unique([serviceType, serviceId, raterId])
+  @@index([ratedId])
+  @@index([serviceType, serviceId])
   @@map("ratings")
 }
 

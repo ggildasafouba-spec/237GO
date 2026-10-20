@@ -8,22 +8,47 @@ import {
   Alert,
 } from 'react-native';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
+// Construit l'URL de notation selon le type de service.
+function rateUrl(serviceType: string, serviceId: string): string {
+  switch (serviceType) {
+    case 'DELIVERY':
+      return `/deliveries/${serviceId}/rate`;
+    case 'CARPOOL':
+      return `/carpools/bookings/${serviceId}/rate`;
+    case 'RENTAL':
+      return `/rentals/bookings/${serviceId}/rate`;
+    case 'RIDE':
+    default:
+      return `/rides/${serviceId}/rate`;
+  }
+}
+
 export default function RatingScreen({ navigation, route }: { navigation: any; route: any }) {
-  const { rideId, driverId, driverName } = route.params || {};
+  // Rétrocompat : si on reçoit encore rideId/driverName, on les mappe sur le format générique.
+  const params = route.params || {};
+  const serviceType: string = params.serviceType || 'RIDE';
+  const serviceId: string = params.serviceId || params.rideId;
+  // Nom de la personne à évaluer (chauffeur, passager, livreur, propriétaire...)
+  const ratedName: string | undefined = params.ratedName || params.driverName;
+  // Libellé de l'action (ex: "course", "livraison", "trajet", "location")
+  const serviceLabel: string = params.serviceLabel || 'prestation';
+
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const safe = useSafeScreen();
 
   const handleSubmit = async () => {
-    if (!rideId) {
-      Alert.alert('Erreur', 'Course introuvable');
+    if (!serviceId) {
+      Alert.alert('Erreur', 'Prestation introuvable');
       return;
     }
     setIsSubmitting(true);
     try {
-      await api.post(`/rides/${rideId}/rate`, {
+      await api.post(rateUrl(serviceType, serviceId), {
         score: rating,
         comment: comment || undefined,
       });
@@ -40,9 +65,9 @@ export default function RatingScreen({ navigation, route }: { navigation: any; r
   const stars = [1, 2, 3, 4, 5];
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Comment s'est passée la course ?</Text>
-      {driverName && <Text style={styles.driverName}>Avec {driverName}</Text>}
+    <View style={[styles.container, safe.topBottom]}>
+      <Text style={styles.title}>Comment s'est passée votre {serviceLabel} ?</Text>
+      {ratedName && <Text style={styles.driverName}>Avec {ratedName}</Text>}
 
       {/* Stars */}
       <View style={styles.starsRow}>
@@ -101,7 +126,7 @@ export default function RatingScreen({ navigation, route }: { navigation: any; r
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xxl, alignItems: 'center' },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg, alignItems: 'center' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text, textAlign: 'center' },
   driverName: { fontSize: typography.md, color: colors.textSecondary, marginTop: spacing.xs },
   starsRow: { flexDirection: 'row', marginTop: spacing.xl, marginBottom: spacing.md },

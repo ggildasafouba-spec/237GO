@@ -5,6 +5,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth.middlew
 import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
+import { submitRating, RatingError } from '../services/rating.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -384,6 +385,68 @@ router.get('/:id/escrow', authenticate, async (req: AuthRequest, res: Response) 
     res.status(500).json({ success: false, message: 'Erreur' });
   }
 });
+
+// Noter une livraison — bidirectionnel : expéditeur <-> livreur (livraison DELIVERED)
+router.post(
+  '/:id/rate',
+  authenticate,
+  [
+    body('score').isInt({ min: 1, max: 5 }).withMessage('Note entre 1 et 5'),
+    body('comment').optional().trim(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      const { id } = req.params;
+      const { score, comment } = req.body;
+      const userId = req.user!.id;
+
+      const delivery = await prisma.delivery.findUnique({ where: { id } });
+      if (!delivery) {
+        throw new AppError('Livraison non trouvée', 404);
+      }
+      if (delivery.status !== 'DELIVERED') {
+        throw new AppError('Vous ne pouvez noter qu\'une livraison terminée', 400);
+      }
+
+      let ratedId: string | null = null;
+      if (userId === delivery.senderId) {
+        ratedId = delivery.driverId; // l'expéditeur note le livreur
+      } else if (delivery.driverId && userId === delivery.driverId) {
+        ratedId = delivery.senderId; // le livreur note l'expéditeur
+      } else {
+        throw new AppError('Vous n\'avez pas participé à cette livraison', 403);
+      }
+
+      const result = await submitRating({
+        serviceType: 'DELIVERY',
+        serviceId: id,
+        raterId: userId,
+        ratedId: ratedId!,
+        score,
+        comment,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Merci pour votre évaluation !',
+        data: { rating: result.rating, average: result.average, totalRatings: result.totalRatings },
+      });
+    } catch (error) {
+      if (error instanceof RatingError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur lors de la notation' });
+    }
+  }
+);
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;

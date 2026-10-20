@@ -4,6 +4,7 @@ import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { submitRating, RatingError } from '../services/rating.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -361,5 +362,71 @@ router.get('/bookings/:id/escrow', authenticate, async (req: AuthRequest, res: R
     res.status(500).json({ success: false, message: 'Erreur' });
   }
 });
+
+// Noter une location — bidirectionnel : locataire <-> propriétaire (réservation terminée)
+router.post(
+  '/bookings/:id/rate',
+  authenticate,
+  [
+    body('score').isInt({ min: 1, max: 5 }).withMessage('Note entre 1 et 5'),
+    body('comment').optional().trim(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
+      const { id } = req.params;
+      const { score, comment } = req.body;
+      const userId = req.user!.id;
+
+      const booking = await prisma.rentalBooking.findUnique({
+        where: { id },
+        include: { vehicle: { select: { ownerId: true } } },
+      });
+      if (!booking) {
+        throw new AppError('Réservation non trouvée', 404);
+      }
+      if (booking.status !== 'COMPLETED') {
+        throw new AppError('Vous ne pouvez noter qu\'une location terminée', 400);
+      }
+
+      const ownerId = booking.vehicle.ownerId;
+      let ratedId: string | null = null;
+      if (userId === booking.renterId) {
+        ratedId = ownerId; // le locataire note le propriétaire
+      } else if (userId === ownerId) {
+        ratedId = booking.renterId; // le propriétaire note le locataire
+      } else {
+        throw new AppError('Vous n\'avez pas participé à cette location', 403);
+      }
+
+      const result = await submitRating({
+        serviceType: 'RENTAL',
+        serviceId: id,
+        raterId: userId,
+        ratedId,
+        score,
+        comment,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Merci pour votre évaluation !',
+        data: { rating: result.rating, average: result.average, totalRatings: result.totalRatings },
+      });
+    } catch (error) {
+      if (error instanceof RatingError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur lors de la notation' });
+    }
+  }
+);
 
 export { router as rentalRouter };

@@ -15,6 +15,7 @@ import { getSocket } from '../config/socket';
 import { useLocation } from '../hooks/useLocation';
 import RideMap from '../components/RideMap';
 import api from '../config/api';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 interface RideRequest {
@@ -59,6 +60,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
 
   const socketRef = useRef(getSocket());
   const { getCurrentLocation } = useLocation();
+  const safe = useSafeScreen();
 
   // Envoi automatique de la position GPS réelle quand une course/livraison est active,
   // pour que le passager voie le chauffeur approcher en temps réel (ETA + marqueur carte).
@@ -207,8 +209,24 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
 
       if (newStatus === 'COMPLETED' || newStatus === 'DELIVERED') {
         setEarnings((prev) => ({ today: prev.today + activeJob.price, trips: prev.trips + 1 }));
-        Alert.alert('🎉 Terminé !', `+${activeJob.price.toLocaleString()} XAF`);
-        setActiveJob(null);
+        const jobId = activeJob.id;
+        const isRide = activeJob.type === 'ride';
+        // Proposer au chauffeur/livreur d'évaluer le client
+        Alert.alert('🎉 Terminé !', `+${activeJob.price.toLocaleString()} XAF\n\nÉvaluer le client ?`, [
+          { text: 'Plus tard', style: 'cancel', onPress: () => setActiveJob(null) },
+          {
+            text: 'Évaluer',
+            onPress: () => {
+              setActiveJob(null);
+              navigation.navigate('Rating', {
+                serviceType: isRide ? 'RIDE' : 'DELIVERY',
+                serviceId: jobId,
+                serviceLabel: isRide ? 'course' : 'livraison',
+                ratedName: 'le client',
+              });
+            },
+          },
+        ]);
       } else {
         setActiveJob({ ...activeJob, status: newStatus });
       }
@@ -241,7 +259,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
   if (activeJob) {
     const nextAction = getNextStatus();
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <View style={styles.activeJobCard}>
           <View style={styles.jobHeader}>
             <Text style={styles.jobType}>
@@ -318,7 +336,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, safe.topBottom]}>
       {/* Header chauffeur */}
       <View style={styles.driverHeader}>
         <TouchableOpacity
@@ -454,7 +472,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl + 20 },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   driverHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: '#fff', padding: spacing.lg, borderRadius: 12, marginBottom: spacing.lg,

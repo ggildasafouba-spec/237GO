@@ -6,6 +6,7 @@ import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
+import { submitRating, RatingError } from '../services/rating.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -492,7 +493,7 @@ router.post(
   }
 );
 
-// Noter une course (le passager évalue le chauffeur)
+// Noter une course — bidirectionnel : le passager note le chauffeur, OU le chauffeur note le passager
 router.post(
   '/:id/rate',
   authenticate,
@@ -509,58 +510,49 @@ router.post(
 
       const { id } = req.params;
       const { score, comment } = req.body;
+      const userId = req.user!.id;
 
       const ride = await prisma.ride.findUnique({ where: { id } });
       if (!ride) {
         throw new AppError('Course non trouvée', 404);
       }
-      // Seul le passager de la course peut la noter
-      if (ride.passengerId !== req.user!.id) {
-        throw new AppError('Vous ne pouvez noter que vos propres courses', 403);
-      }
       if (ride.status !== 'COMPLETED') {
         throw new AppError('Vous ne pouvez noter qu\'une course terminée', 400);
       }
-      if (!ride.driverId) {
-        throw new AppError('Aucun chauffeur à évaluer', 400);
+
+      // Déterminer qui note qui selon le rôle de l'utilisateur dans la course
+      let ratedId: string | null = null;
+      if (userId === ride.passengerId) {
+        ratedId = ride.driverId; // le passager note le chauffeur
+      } else if (ride.driverId && userId === ride.driverId) {
+        ratedId = ride.passengerId; // le chauffeur note le passager
+      } else {
+        throw new AppError('Vous n\'avez pas participé à cette course', 403);
       }
 
-      // Empêcher les doublons (rideId est unique sur Rating)
-      const existing = await prisma.rating.findUnique({ where: { rideId: id } });
-      if (existing) {
-        throw new AppError('Vous avez déjà noté cette course', 409);
+      if (!ratedId) {
+        throw new AppError('Aucun utilisateur à évaluer', 400);
       }
 
-      // Créer la note
-      const rating = await prisma.rating.create({
-        data: {
-          rideId: id,
-          raterId: req.user!.id,
-          ratedId: ride.driverId,
-          score,
-          comment: comment || null,
-        },
+      const result = await submitRating({
+        serviceType: 'RIDE',
+        serviceId: id,
+        rideId: id,
+        raterId: userId,
+        ratedId,
+        score,
+        comment,
       });
-
-      // Recalculer la moyenne du chauffeur à partir de toutes ses notes reçues
-      const agg = await prisma.rating.aggregate({
-        where: { ratedId: ride.driverId },
-        _avg: { score: true },
-        _count: true,
-      });
-      const newAverage = agg._avg.score || score;
-
-      await prisma.driverProfile.update({
-        where: { userId: ride.driverId },
-        data: { averageRating: Math.round(newAverage * 10) / 10 },
-      }).catch(() => {});
 
       res.status(201).json({
         success: true,
         message: 'Merci pour votre évaluation !',
-        data: { rating, driverAverage: Math.round(newAverage * 10) / 10, totalRatings: agg._count },
+        data: { rating: result.rating, average: result.average, totalRatings: result.totalRatings },
       });
     } catch (error) {
+      if (error instanceof RatingError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
       if (error instanceof AppError) {
         return res.status(error.statusCode).json({ success: false, message: error.message });
       }
