@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>237GO — On bouge ensemble 🇨🇲</title>
-    <meta name="description" content="237GO est la super-app de mobilité camerounaise. Transport, livraison, covoiturage, marché à domicile. Téléchargez maintenant !">
+    <meta name="description" content="237GO est la super-app de mobilité camerounaise. Transport, livraison, covoiturage, marché à domicile. Créez votre compte dès maintenant.">
     <meta property="og:title" content="237GO — On bouge ensemble">
     <meta property="og:description" content="La super-app de mobilité camerounaise. Transport, livraison, covoiturage et plus.">
     <meta property="og:type" content="website">
@@ -14,314 +14,332 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
             --green: #1DB954;
-            --green-light: #2EE066;
-            --green-dark: #0E7A35;
+            --green-dark: #0E9E46;
+            --green-deep: #0E7A35;
             --yellow: #FCD116;
             --red: #CE1126;
-            --dark: #121A17;
-            --dark-2: #1C2621;
-            --dark-3: #0C1310;
+            --ink: #121A17;
+            --muted: #5B6B61;
+            --muted-2: #8A9790;
+            --bg: #F6FBF7;
+            --bg-2: #EEF6F0;
+            --line: #E2EAE4;
         }
-        body { font-family: 'Inter', sans-serif; color: #141A17; line-height: 1.6; background: #fff; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', sans-serif; color: var(--ink); line-height: 1.65; background: #fff; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+        a { text-decoration: none; }
 
-        /* Barre tricolore Cameroun */
-        .flag-bar { display: flex; height: 5px; }
-        .flag-bar > div { flex: 1; }
-
-        /* Navbar */
-        .navbar {
-            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 32px; background: rgba(18,26,23,0.85); backdrop-filter: blur(10px);
+        /* ---------- Navbar ---------- */
+        .nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(255,255,255,0.8); backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--line);
         }
-        .navbar .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 900; font-size: 22px; }
-        .navbar .links { display: flex; gap: 24px; }
-        .navbar .links a { color: rgba(255,255,255,0.8); text-decoration: none; font-size: 14px; font-weight: 500; }
-        .navbar .links a:hover { color: var(--green-light); }
-        @media (max-width: 700px) { .navbar .links { display: none; } }
+        .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1160px; margin: 0 auto; }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 22px; color: var(--ink); }
+        .nav-links { display: flex; align-items: center; gap: 28px; }
+        .nav-links a { color: var(--muted); font-size: 15px; font-weight: 500; transition: color .2s; }
+        .nav-links a:hover { color: var(--green); }
+        .nav-cta { background: var(--green); color: #fff !important; padding: 10px 22px; border-radius: 24px; font-weight: 700; font-size: 14px; transition: transform .2s, box-shadow .2s; box-shadow: 0 6px 18px rgba(29,185,84,.28); }
+        .nav-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(29,185,84,.35); }
+        @media (max-width: 820px) { .nav-links a:not(.nav-cta) { display: none; } }
 
-        /* Hero */
-        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        @keyframes float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-22px) rotate(8deg); } }
-        @keyframes floatSlow { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(16px) rotate(-6deg); } }
-        .hero {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #0C1310 0%, #0E7A35 35%, #117A3D 50%, #0C1310 100%);
-            background-size: 300% 300%;
-            animation: gradientShift 14s ease infinite;
-            display: flex; align-items: center; justify-content: center;
-            padding: 100px 20px 60px; text-align: center; color: #fff;
-            position: relative; overflow: hidden;
-        }
-        /* halos colorés drapeau */
-        .hero::before { content: ''; position: absolute; top: -30%; right: -20%; width: 55%; height: 120%; border-radius: 50%; background: radial-gradient(circle, rgba(252,209,22,0.22) 0%, transparent 70%); }
-        .hero::after { content: ''; position: absolute; bottom: -30%; left: -15%; width: 50%; height: 110%; border-radius: 50%; background: radial-gradient(circle, rgba(206,17,38,0.20) 0%, transparent 70%); }
-        /* emojis mobilité flottants */
-        .hero-float { position: absolute; font-size: 46px; opacity: 0.18; z-index: 0; }
-        .hero-float.f1 { top: 16%; left: 10%; animation: float 7s ease-in-out infinite; }
-        .hero-float.f2 { top: 24%; right: 12%; animation: floatSlow 9s ease-in-out infinite; }
-        .hero-float.f3 { bottom: 18%; left: 16%; animation: floatSlow 8s ease-in-out infinite; }
-        .hero-float.f4 { bottom: 22%; right: 14%; animation: float 6.5s ease-in-out infinite; }
-        .hero-content { max-width: 720px; position: relative; z-index: 1; }
-        .hero-logo-svg { margin-bottom: 20px; filter: drop-shadow(0 10px 30px rgba(252,209,22,0.3)); }
-        .hero-logo { font-size: 76px; font-weight: 900; letter-spacing: 2px; margin-bottom: 8px; text-shadow: 0 4px 30px rgba(0,0,0,0.3); }
-        .hero-logo .go { color: var(--yellow); }
-        .hero-slogan { font-size: 25px; opacity: 0.95; margin-bottom: 12px; font-weight: 700; }
-        .hero-flagbar { display: flex; width: 110px; height: 6px; border-radius: 3px; overflow: hidden; margin: 0 auto 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
-        .hero-desc { font-size: 18px; opacity: 0.9; margin-bottom: 44px; line-height: 1.8; }
-        .hero-stats { display: flex; gap: 36px; justify-content: center; margin-bottom: 40px; flex-wrap: wrap; }
-        .hero-stat strong { display: block; font-size: 30px; font-weight: 900; color: var(--yellow); }
-        .hero-stat span { font-size: 13px; opacity: 0.8; }
-        .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-        .btn { padding: 16px 32px; border-radius: 12px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; display: inline-block; }
-        .btn:hover { transform: translateY(-2px); }
-        .btn-primary { background: var(--green); color: #fff; box-shadow: 0 8px 24px rgba(29,185,84,0.4); }
-        .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+        /* ---------- Hero ---------- */
+        .hero { background: linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 100%); padding: 72px 0 90px; overflow: hidden; }
+        .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: center; }
+        .flag-badge { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 22px; }
+        .flag-dots { display: inline-flex; gap: 5px; }
+        .flag-dots i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+        h1.hero-title { font-size: 58px; line-height: 1.05; font-weight: 900; letter-spacing: -1px; margin-bottom: 20px; }
+        h1.hero-title .accent { color: var(--green); }
+        .hero-sub { font-size: 19px; color: var(--muted); margin-bottom: 34px; max-width: 480px; }
+        .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 44px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 15px 28px; border-radius: 14px; font-size: 16px; font-weight: 700; transition: transform .2s, box-shadow .2s; cursor: pointer; }
+        .btn-primary { background: var(--green); color: #fff; box-shadow: 0 10px 26px rgba(29,185,84,.3); }
+        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 16px 34px rgba(29,185,84,.38); }
+        .btn-ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+        .btn-ghost:hover { transform: translateY(-3px); border-color: var(--green); }
+        .hero-stats { display: flex; gap: 40px; flex-wrap: wrap; }
+        .hero-stat strong { display: block; font-size: 30px; font-weight: 900; color: var(--ink); }
+        .hero-stat span { font-size: 13px; color: var(--muted-2); }
 
-        /* Sections */
-        .section { padding: 90px 20px; }
-        .section-title { font-size: 38px; font-weight: 800; margin-bottom: 12px; text-align: center; }
-        .section-sub { color: #6B7B70; font-size: 18px; margin-bottom: 56px; text-align: center; }
-        .container { max-width: 1100px; margin: 0 auto; }
+        /* Téléphone maquette */
+        .phone-wrap { display: flex; justify-content: center; }
+        .phone { width: 300px; height: 600px; background: linear-gradient(180deg, var(--ink), #1C2621); border-radius: 44px; padding: 14px; box-shadow: 0 30px 70px rgba(14,122,53,.25); position: relative; }
+        .phone-screen { background: var(--bg); border-radius: 32px; height: 100%; overflow: hidden; position: relative; }
+        .phone-notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 110px; height: 22px; background: var(--ink); border-radius: 14px; z-index: 2; }
+        .app-head { background: linear-gradient(160deg, var(--ink), #1C2621); padding: 38px 18px 18px; color: #fff; }
+        .app-hello { font-size: 15px; font-weight: 700; }
+        .app-wallet { margin-top: 12px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 12px 14px; }
+        .app-wallet small { color: #CFE8D8; font-size: 11px; }
+        .app-wallet b { display: block; font-size: 20px; margin-top: 2px; }
+        .app-body { padding: 16px; }
+        .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .app-card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.05); }
+        .app-ico { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 19px; margin-bottom: 8px; }
+        .app-card b { font-size: 13px; }
+        .app-promo { margin-top: 12px; background: linear-gradient(135deg, var(--green), var(--green-deep)); border-radius: 16px; padding: 16px; color: #fff; }
+        .app-promo b { font-size: 14px; }
+        .app-promo small { display: block; opacity: .85; font-size: 11px; margin-top: 4px; }
 
-        .services-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 26px; }
-        .service-card { position: relative; background: #fff; padding: 34px 30px; border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); transition: transform 0.25s, box-shadow 0.25s; overflow: hidden; }
-        .service-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px; background: var(--svc, var(--green)); }
-        .service-card:hover { transform: translateY(-8px); box-shadow: 0 18px 40px rgba(0,0,0,0.12); }
-        .service-card:hover .service-icon { transform: scale(1.12) rotate(-6deg); }
-        .service-icon { width: 68px; height: 68px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 34px; margin-bottom: 18px; transition: transform 0.25s; }
-        .service-card h3 { font-size: 21px; margin-bottom: 8px; font-weight: 800; }
-        .service-card p { color: #6B7B70; font-size: 15px; margin-bottom: 14px; }
-        .service-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.3px; }
+        /* ---------- Sections ---------- */
+        section { padding: 88px 0; }
+        .eyebrow { color: var(--green); font-weight: 700; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; text-align: center; }
+        .section-title { font-size: 40px; font-weight: 900; letter-spacing: -0.5px; text-align: center; margin: 10px 0 12px; }
+        .section-sub { color: var(--muted); font-size: 18px; text-align: center; max-width: 560px; margin: 0 auto 56px; }
 
-        /* Section concepteur */
-        .maker { background: linear-gradient(160deg, #0C1310 0%, #0E7A35 55%, #0C1310 100%); background-size: 200% 200%; animation: gradientShift 18s ease infinite; color: #fff; }
-        .maker-card {
-            position: relative; max-width: 720px; margin: 0 auto;
-            background: rgba(255,255,255,0.07); backdrop-filter: blur(8px);
-            border: 1px solid rgba(252,209,22,0.25); border-radius: 28px;
-            padding: 54px 44px 48px; text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-        }
-        /* liseré doré lumineux en haut de la carte */
-        .maker-card::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 70%; height: 3px; background: linear-gradient(90deg, transparent, var(--yellow), transparent); border-radius: 3px; }
-        .maker-avatar {
-            width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 20px;
-            background: linear-gradient(135deg, var(--green-light), var(--green));
-            display: flex; align-items: center; justify-content: center; font-size: 50px;
-            box-shadow: 0 12px 34px rgba(29,185,84,0.5);
-            border: 3px solid var(--yellow);
-        }
-        .maker-name { font-size: 27px; font-weight: 900; margin-bottom: 4px; letter-spacing: 0.3px; }
-        .maker-role { color: var(--yellow); font-weight: 700; font-size: 15px; margin-bottom: 18px; letter-spacing: 1px; text-transform: uppercase; }
-        .maker-bio { opacity: 0.82; font-size: 16px; line-height: 1.75; max-width: 560px; margin: 0 auto; }
-        .maker-tags { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
-        .maker-tag { background: rgba(252,209,22,0.12); border: 1px solid rgba(252,209,22,0.35); color: var(--yellow); padding: 10px 20px; border-radius: 24px; font-size: 14px; font-weight: 700; transition: transform 0.2s, background 0.2s; }
-        .maker-tag:hover { transform: translateY(-3px); background: rgba(252,209,22,0.22); }
+        .services { background: #fff; }
+        .services-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 22px; }
+        .svc { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 28px; transition: transform .25s, box-shadow .25s, border-color .25s; }
+        .svc:hover { transform: translateY(-6px); box-shadow: 0 20px 44px rgba(0,0,0,.08); border-color: transparent; }
+        .svc-ico { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 16px; }
+        .svc h3 { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+        .svc p { color: var(--muted); font-size: 15px; margin-bottom: 14px; }
+        .svc-tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 20px; }
 
-        .why-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 36px; text-align: center; }
-        .why-item .emoji { font-size: 44px; margin-bottom: 12px; }
-        .why-item h3 { font-weight: 700; margin-bottom: 6px; }
-        .why-item p { color: #6B7B70; font-size: 14px; }
+        .why { background: linear-gradient(160deg, var(--bg), var(--bg-2)); }
+        .why-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+        .why-card { background: #fff; border-radius: 18px; padding: 28px; border: 1px solid var(--line); transition: transform .2s; }
+        .why-card:hover { transform: translateY(-4px); }
+        .why-emoji { font-size: 34px; margin-bottom: 12px; }
+        .why-card h3 { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
+        .why-card p { color: var(--muted); font-size: 14px; }
 
-        .driver-section { background: linear-gradient(160deg, var(--dark-3), var(--dark-2)); color: #fff; }
-        .driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; margin-bottom: 40px; }
-        .driver-card { background: rgba(255,255,255,0.06); padding: 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
+        .driver { background: var(--ink); color: #fff; }
+        .driver .section-title, .driver .section-sub { color: #fff; }
+        .driver .section-sub { color: rgba(255,255,255,.65); }
+        .driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; margin-bottom: 42px; }
+        .driver-card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 24px; text-align: center; }
+        .driver-card .e { font-size: 30px; margin-bottom: 10px; }
+        .driver-card b { display: block; font-weight: 700; margin-bottom: 2px; }
+        .driver-card span { opacity: .6; font-size: 13px; }
 
-        .store-btn { display: inline-flex; align-items: center; gap: 12px; background: var(--dark); color: #fff; padding: 14px 26px; border-radius: 12px; text-decoration: none; }
-        .store-btn small { opacity: 0.7; display: block; font-size: 11px; }
-        .store-btn strong { font-size: 16px; }
-        .apk-btn { display: inline-flex; align-items: center; gap: 14px; background: linear-gradient(135deg, var(--green-light), var(--green)); color: #fff; padding: 18px 36px; border-radius: 14px; text-decoration: none; box-shadow: 0 10px 30px rgba(29,185,84,0.4); transition: transform 0.2s, box-shadow 0.2s; }
-        .apk-btn:hover { transform: translateY(-3px); box-shadow: 0 14px 38px rgba(29,185,84,0.5); }
-        .apk-btn small { opacity: 0.85; display: block; font-size: 12px; }
-        .apk-btn strong { font-size: 18px; }
-        .webapp-btn { display: inline-flex; align-items: center; gap: 14px; background: var(--dark); color: #fff; padding: 18px 36px; border-radius: 14px; text-decoration: none; border: 2px solid var(--yellow); transition: transform 0.2s; }
-        .webapp-btn:hover { transform: translateY(-3px); }
-        .webapp-btn small { opacity: 0.7; display: block; font-size: 12px; color: var(--yellow); }
-        .webapp-btn strong { font-size: 18px; }
+        /* ---------- Download ---------- */
+        .download { background: #fff; text-align: center; }
+        .dl-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+        .dl-apk { display: inline-flex; align-items: center; gap: 14px; background: var(--green); color: #fff; padding: 18px 32px; border-radius: 16px; box-shadow: 0 12px 30px rgba(29,185,84,.3); transition: transform .2s; }
+        .dl-apk:hover { transform: translateY(-3px); }
+        .dl-web { display: inline-flex; align-items: center; gap: 14px; background: #fff; color: var(--ink); padding: 18px 32px; border-radius: 16px; border: 1px solid var(--line); transition: transform .2s; }
+        .dl-web:hover { transform: translateY(-3px); border-color: var(--green); }
+        .dl-btn small { display: block; font-size: 12px; opacity: .8; }
+        .dl-btn strong { font-size: 17px; }
+        .dl-note { color: var(--muted-2); font-size: 13px; margin: 8px 0 30px; }
+        .stores { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 36px; }
+        .store { display: inline-flex; align-items: center; gap: 10px; background: var(--ink); color: #fff; padding: 12px 22px; border-radius: 12px; opacity: .55; }
+        .store small { display: block; font-size: 10px; opacity: .8; }
+        .store strong { font-size: 15px; }
+        .signup-cta { display: inline-block; background: var(--green); color: #fff; padding: 16px 36px; border-radius: 14px; font-weight: 700; font-size: 16px; box-shadow: 0 12px 30px rgba(29,185,84,.3); transition: transform .2s; }
+        .signup-cta:hover { transform: translateY(-3px); }
 
-        footer { position: relative; padding: 0 20px 40px; background: linear-gradient(135deg, #0C1310 0%, #0E7A35 50%, #0C1310 100%); background-size: 200% 200%; animation: gradientShift 16s ease infinite; color: rgba(255,255,255,0.75); text-align: center; }
-        footer .brand { font-size: 30px; font-weight: 900; color: #fff; margin-bottom: 6px; letter-spacing: 1px; }
+        .maker { background: linear-gradient(160deg, var(--green-deep), var(--ink)); color: #fff; }
+        .maker .section-title { color: #fff; }
+        .maker .section-sub { color: rgba(255,255,255,.65); }
+        .maker-card { max-width: 680px; margin: 0 auto; background: rgba(255,255,255,.06); border: 1px solid rgba(252,209,22,.3); border-radius: 26px; padding: 48px 40px; text-align: center; }
+        .maker-avatar { width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 18px; background: linear-gradient(135deg, #2EE066, var(--green)); display: flex; align-items: center; justify-content: center; font-size: 44px; border: 3px solid var(--yellow); }
+        .maker-card h3 { font-size: 24px; font-weight: 900; }
+        .maker-role { color: var(--yellow); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+        .maker-bio { opacity: .82; font-size: 16px; max-width: 520px; margin: 0 auto; }
+        .maker-tags { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+        .maker-tag { background: rgba(252,209,22,.12); border: 1px solid rgba(252,209,22,.3); color: var(--yellow); padding: 9px 18px; border-radius: 22px; font-size: 13px; font-weight: 700; }
+
+        footer { background: var(--ink); color: rgba(255,255,255,.7); text-align: center; padding: 56px 0 40px; }
+        footer .brand { justify-content: center; color: #fff; margin-bottom: 8px; }
         footer .brand .go { color: var(--yellow); }
-        .footer-flag { position: relative; display: flex; width: 100%; height: 10px; overflow: hidden; margin: 0 0 32px; }
-        .footer-flag::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); background-size: 200% 100%; animation: shine 3s linear infinite; }
-        @keyframes shine { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .footer-socials { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
-        .footer-socials a { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); display: inline-flex; align-items: center; justify-content: center; font-size: 20px; text-decoration: none; transition: transform 0.2s, background 0.2s; }
-        .footer-socials a:hover { transform: translateY(-4px) scale(1.1); background: var(--yellow); }
+        .footer-socials { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 20px 0 24px; }
+        .footer-socials a { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,.1); display: inline-flex; align-items: center; justify-content: center; font-size: 18px; transition: transform .2s, background .2s; }
+        .footer-socials a:hover { transform: translateY(-3px); background: var(--yellow); }
+        .footer-flag { display: flex; width: 90px; height: 5px; border-radius: 3px; overflow: hidden; margin: 0 auto 24px; }
+        .footer-flag i { flex: 1; }
+
+        @media (max-width: 860px) {
+            .hero-grid { grid-template-columns: 1fr; }
+            .phone-wrap { margin-top: 20px; }
+            h1.hero-title { font-size: 44px; }
+            .section-title { font-size: 30px; }
+        }
     </style>
 </head>
 <body>
-    <!-- Barre tricolore haut -->
-    <div class="flag-bar"><div style="background:var(--green)"></div><div style="background:var(--red)"></div><div style="background:var(--yellow)"></div></div>
-
     <!-- Navbar -->
-    <nav class="navbar">
-        <div class="brand">
-            <svg width="34" height="34" viewBox="0 0 100 100"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2EE066"/><stop offset="1" stop-color="#1DB954"/></linearGradient></defs><circle cx="50" cy="50" r="48" fill="url(#g1)"/><path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56" stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="50" y="40" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">237</text><text x="50" y="82" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text></svg>
-            237GO
+    <header class="nav">
+        <div class="nav-inner">
+            <a class="brand" href="#">
+                <svg width="34" height="34" viewBox="0 0 100 100"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2EE066"/><stop offset="1" stop-color="#1DB954"/></linearGradient></defs><circle cx="50" cy="50" r="48" fill="url(#g1)"/><path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56" stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="50" y="40" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">237</text><text x="50" y="82" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text></svg>
+                237GO
+            </a>
+            <nav class="nav-links">
+                <a href="#services">Services</a>
+                <a href="#why">Pourquoi nous</a>
+                <a href="#driver">Chauffeurs</a>
+                <a href="https://app.237go.app" class="nav-cta">Commencer</a>
+            </nav>
         </div>
-        <div class="links">
-            <a href="#services">Services</a>
-            <a href="#why">Pourquoi nous</a>
-            <a href="#driver">Chauffeurs</a>
-            <a href="#download">Télécharger</a>
-        </div>
-    </nav>
+    </header>
 
     <!-- Hero -->
     <section class="hero">
-        <span class="hero-float f1">🛵</span>
-        <span class="hero-float f2">🚚</span>
-        <span class="hero-float f3">🚐</span>
-        <span class="hero-float f4">🛒</span>
-        <div class="hero-content">
-            <div class="hero-logo-svg">
-                <svg width="120" height="120" viewBox="0 0 100 100"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2EE066"/><stop offset="1" stop-color="#1DB954"/></linearGradient></defs><circle cx="50" cy="50" r="48" fill="url(#g2)"/><path d="M22 62 Q50 42 74 50 L68 44 M74 50 L68 56" stroke="#FCD116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="50" y="40" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">237</text><text x="50" y="82" font-size="20" font-weight="bold" fill="#FCD116" text-anchor="middle">GO</text></svg>
+        <div class="container hero-grid">
+            <div>
+                <span class="flag-badge">
+                    <span class="flag-dots"><i style="background:#1DB954"></i><i style="background:#CE1126"></i><i style="background:#FCD116"></i></span>
+                    Fièrement camerounais
+                </span>
+                <h1 class="hero-title">La mobilité,<br><span class="accent">réinventée.</span></h1>
+                <p class="hero-sub">Transport, livraison, covoiturage inter-villes, marché à domicile. Tout le Cameroun, dans une seule application.</p>
+                <div class="hero-actions">
+                    <a href="https://app.237go.app" class="btn btn-primary">Créer mon compte →</a>
+                    <a href="#download" class="btn btn-ghost">📱 Télécharger l'app</a>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat"><strong>6</strong><span>services</span></div>
+                    <div class="hero-stat"><strong>3</strong><span>langues (fr · en · pidgin)</span></div>
+                    <div class="hero-stat"><strong>100%</strong><span>Mobile Money</span></div>
+                </div>
             </div>
-            <h1 class="hero-logo">237<span class="go">GO</span></h1>
-            <p class="hero-slogan">On bouge ensemble</p>
-            <div class="hero-flagbar"><div style="background:var(--green)"></div><div style="background:var(--red)"></div><div style="background:var(--yellow)"></div></div>
-            <p class="hero-desc">
-                La super-app de mobilité camerounaise. Transport, livraison,
-                covoiturage inter-villes, marché à domicile — tout dans une seule application.
-            </p>
-            <div class="hero-stats">
-                <div class="hero-stat"><strong>6</strong><span>services</span></div>
-                <div class="hero-stat"><strong>3</strong><span>langues (fr · en · pidgin)</span></div>
-                <div class="hero-stat"><strong>100%</strong><span>Mobile Money</span></div>
-            </div>
-            <div class="hero-buttons">
-                <a href="#download" class="btn btn-primary">📱 Télécharger l'app</a>
-                <a href="#services" class="btn btn-secondary">Découvrir nos services →</a>
+            <div class="phone-wrap">
+                <div class="phone">
+                    <div class="phone-notch"></div>
+                    <div class="phone-screen">
+                        <div class="app-head">
+                            <div class="app-hello">Bonjour Germain 👋</div>
+                            <div class="app-wallet"><small>💰 Mon portefeuille</small><b>12 500 XAF · ⭐ 240 pts</b></div>
+                        </div>
+                        <div class="app-body">
+                            <div class="app-grid">
+                                <div class="app-card"><div class="app-ico" style="background:#1DB95418">🛵</div><b>GO Ride</b></div>
+                                <div class="app-card"><div class="app-ico" style="background:#E6510018">🚚</div><b>GO Deliver</b></div>
+                                <div class="app-card"><div class="app-ico" style="background:#7B1FA218">🥬</div><b>GO Market</b></div>
+                                <div class="app-card"><div class="app-ico" style="background:#0277BD18">🚐</div><b>GO Share</b></div>
+                            </div>
+                            <div class="app-promo"><b>Négociez votre prix 💬</b><small>Proposez votre tarif, comme au marché.</small></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
     <!-- Services -->
-    <section id="services" class="section" style="background:#F4F7F4;">
+    <section id="services" class="services">
         <div class="container">
+            <p class="eyebrow">Nos services</p>
             <h2 class="section-title">6 services, 1 seule app</h2>
-            <p class="section-sub">Tout ce dont vous avez besoin pour vous déplacer au Cameroun</p>
+            <p class="section-sub">Tout ce dont vous avez besoin pour vous déplacer et vous faire livrer au Cameroun.</p>
             <div class="services-grid">
-                <div class="service-card" style="--svc:#1DB954;">
-                    <div class="service-icon" style="background:#1DB95418;">🛵</div>
+                <div class="svc">
+                    <div class="svc-ico" style="background:#1DB95418">🛵</div>
                     <h3>GO Ride</h3>
                     <p>Moto-taxi, voiture éco, confort ou VIP. Arrivez vite, payez juste.</p>
-                    <span class="service-badge" style="background:#1DB95418;color:#0E7A35;">💬 Négociez votre prix</span>
+                    <span class="svc-tag" style="background:#1DB95418;color:#0E7A35;">💬 Négociez votre prix</span>
                 </div>
-                <div class="service-card" style="--svc:#E65100;">
-                    <div class="service-icon" style="background:#E6510018;">🚚</div>
+                <div class="svc">
+                    <div class="svc-ico" style="background:#E6510018">🚚</div>
                     <h3>GO Deliver</h3>
                     <p>Colis, documents, repas livrés en un éclair. Suivi en temps réel.</p>
-                    <span class="service-badge" style="background:#E6510018;color:#E65100;">📍 Suivi live</span>
+                    <span class="svc-tag" style="background:#E6510018;color:#E65100;">📍 Suivi live</span>
                 </div>
-                <div class="service-card" style="--svc:#7B1FA2;">
-                    <div class="service-icon" style="background:#7B1FA218;">🥬</div>
+                <div class="svc">
+                    <div class="svc-ico" style="background:#7B1FA218">🥬</div>
                     <h3>GO Market</h3>
                     <p>Le marché livré chez vous. Fruits, légumes et produits locaux frais.</p>
-                    <span class="service-badge" style="background:#7B1FA218;color:#7B1FA2;">🏪 Marchands vérifiés</span>
+                    <span class="svc-tag" style="background:#7B1FA218;color:#7B1FA2;">🏪 Marchands vérifiés</span>
                 </div>
-                <div class="service-card" style="--svc:#0277BD;">
-                    <div class="service-icon" style="background:#0277BD18;">🚐</div>
+                <div class="svc">
+                    <div class="svc-ico" style="background:#0277BD18">🚐</div>
                     <h3>GO Share</h3>
                     <p>Covoiturage inter-villes : Douala ↔ Yaoundé, Bafoussam, Kribi...</p>
-                    <span class="service-badge" style="background:#0277BD18;color:#0277BD;">💸 Jusqu'à -60%</span>
+                    <span class="svc-tag" style="background:#0277BD18;color:#0277BD;">💸 Jusqu'à -60%</span>
                 </div>
-                <div class="service-card" style="--svc:#BF360C;">
-                    <div class="service-icon" style="background:#BF360C18;">🚙</div>
+                <div class="svc">
+                    <div class="svc-ico" style="background:#BF360C18">🚙</div>
                     <h3>GO Rent</h3>
-                    <p>Location de véhicules avec chauffeur. Du scooter au SUV.</p>
-                    <span class="service-badge" style="background:#BF360C18;color:#BF360C;">🔑 Flexible</span>
+                    <p>Location de véhicules avec ou sans chauffeur. Du scooter au SUV.</p>
+                    <span class="svc-tag" style="background:#BF360C18;color:#BF360C;">🔑 Flexible</span>
                 </div>
-                <div class="service-card" style="--svc:#00838F;">
-                    <div class="service-icon" style="background:#00838F18;">🏢</div>
+                <div class="svc">
+                    <div class="svc-ico" style="background:#00838F18">🏢</div>
                     <h3>GO Business</h3>
                     <p>Déplacements entreprise, facturation centralisée, budgets par employé.</p>
-                    <span class="service-badge" style="background:#00838F18;color:#00838F;">📊 Pour les pros</span>
+                    <span class="svc-tag" style="background:#00838F18;color:#00838F;">📊 Pour les pros</span>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Pourquoi 237GO -->
-    <section id="why" class="section" style="background:#fff;">
+    <!-- Pourquoi -->
+    <section id="why" class="why">
         <div class="container">
-            <h2 class="section-title">Pourquoi 237GO ?</h2>
-            <p class="section-sub">Pensé par et pour les Camerounais</p>
+            <p class="eyebrow">Pourquoi 237GO</p>
+            <h2 class="section-title">Pensé par et pour les Camerounais</h2>
+            <p class="section-sub">Des fonctionnalités adaptées aux réalités locales.</p>
             <div class="why-grid">
-                <div class="why-item"><div class="emoji">💰</div><h3>Paiement 100% local</h3><p>Orange Money, MTN MoMo, Express Union, Cash. Payez comme vous voulez.</p></div>
-                <div class="why-item"><div class="emoji">🔒</div><h3>Paiement protégé</h3><p>Votre argent est bloqué en séquestre et libéré seulement quand le service est confirmé.</p></div>
-                <div class="why-item"><div class="emoji">💬</div><h3>Négociez le prix</h3><p>Proposez votre prix. Comme au marché, mais sur l'app.</p></div>
-                <div class="why-item"><div class="emoji">⭐</div><h3>Points de fidélité</h3><p>Gagnez des points à chaque course. Échangez-les contre du crédit gratuit.</p></div>
-                <div class="why-item"><div class="emoji">🚨</div><h3>Sécurité maximale</h3><p>Bouton SOS, partage de trajet, chauffeurs vérifiés (CNI + permis).</p></div>
-                <div class="why-item"><div class="emoji">🌍</div><h3>Multilingue</h3><p>Français, English, Pidgin. Pour tous les Camerounais.</p></div>
+                <div class="why-card"><div class="why-emoji">💰</div><h3>Paiement 100% local</h3><p>Orange Money, MTN MoMo, Express Union, Cash. Payez comme vous voulez.</p></div>
+                <div class="why-card"><div class="why-emoji">🔒</div><h3>Paiement protégé</h3><p>Votre argent est bloqué en séquestre et libéré seulement quand le service est confirmé.</p></div>
+                <div class="why-card"><div class="why-emoji">💬</div><h3>Négociez le prix</h3><p>Proposez votre prix. Comme au marché, mais sur l'app.</p></div>
+                <div class="why-card"><div class="why-emoji">⭐</div><h3>Points de fidélité</h3><p>Gagnez des points à chaque course. Échangez-les contre du crédit gratuit.</p></div>
+                <div class="why-card"><div class="why-emoji">🚨</div><h3>Sécurité maximale</h3><p>Bouton SOS, partage de trajet, chauffeurs vérifiés (CNI + permis).</p></div>
+                <div class="why-card"><div class="why-emoji">🌍</div><h3>Multilingue</h3><p>Français, English, Pidgin. Pour tous les Camerounais.</p></div>
             </div>
         </div>
     </section>
 
     <!-- Chauffeurs -->
-    <section id="driver" class="section driver-section">
-        <div class="container" style="max-width:800px; text-align:center;">
-            <h2 class="section-title" style="color:#fff;">🚗 Devenez chauffeur 237GO</h2>
-            <p class="section-sub" style="color:rgba(255,255,255,0.7);">Gagnez plus, avec plus d'avantages</p>
+    <section id="driver" class="driver">
+        <div class="container" style="max-width:820px; text-align:center;">
+            <p class="eyebrow">Devenir partenaire</p>
+            <h2 class="section-title">🚗 Devenez chauffeur 237GO</h2>
+            <p class="section-sub">Gagnez plus, avec plus d'avantages.</p>
             <div class="driver-grid">
-                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">💵</div><p style="font-weight:600;">Revenus quotidiens</p><p style="opacity:0.6;font-size:13px;">Commission juste</p></div>
-                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">🏥</div><p style="font-weight:600;">Assurance santé</p><p style="opacity:0.6;font-size:13px;">Couverture partenaire</p></div>
-                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">🏦</div><p style="font-weight:600;">Micro-crédit</p><p style="opacity:0.6;font-size:13px;">Pour votre véhicule</p></div>
-                <div class="driver-card"><div style="font-size:28px;margin-bottom:8px;">📚</div><p style="font-weight:600;">Formation gratuite</p><p style="opacity:0.6;font-size:13px;">Conduite & service client</p></div>
+                <div class="driver-card"><div class="e">💵</div><b>Revenus quotidiens</b><span>Commission juste</span></div>
+                <div class="driver-card"><div class="e">🏥</div><b>Assurance santé</b><span>Couverture partenaire</span></div>
+                <div class="driver-card"><div class="e">🏦</div><b>Micro-crédit</b><span>Pour votre véhicule</span></div>
+                <div class="driver-card"><div class="e">📚</div><b>Formation gratuite</b><span>Conduite & service client</span></div>
             </div>
-            <a href="#download" class="btn btn-primary">Rejoindre 237GO →</a>
+            <a href="https://app.237go.app" class="btn btn-primary">Rejoindre 237GO →</a>
         </div>
     </section>
 
     <!-- Download -->
-    <section id="download" class="section" style="background:#F4F7F4; text-align:center;">
-        <div class="container" style="max-width:600px;">
+    <section id="download" class="download">
+        <div class="container" style="max-width:640px;">
+            <p class="eyebrow">Commencer</p>
             <h2 class="section-title">Commencez avec 237GO</h2>
-            <p class="section-sub">Disponible maintenant · Android (APK) & application web · iOS bientôt</p>
+            <p class="section-sub">Disponible maintenant · Android (APK) & application web · iOS bientôt.</p>
 
-            <!-- Boutons d'accès : APK Android + App web (iPhone / tous) -->
-            <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
-                <a href="https://expo.dev/artifacts/eas/hiuVy5EK2f0ooRpoWEpxJ5k4j0pDvHFTs40DTJBf5ls.apk"
-                   class="apk-btn" download>
-                    <span style="font-size:28px;">📲</span>
+            <div class="dl-actions">
+                <a href="https://expo.dev/artifacts/eas/hiuVy5EK2f0ooRpoWEpxJ5k4j0pDvHFTs40DTJBf5ls.apk" class="dl-apk dl-btn" download>
+                    <span style="font-size:26px;">📲</span>
                     <span><small>Télécharger (Android)</small><strong>Application APK</strong></span>
                 </a>
-                <a href="https://app.237go.app" class="webapp-btn">
-                    <span style="font-size:28px;">🌐</span>
+                <a href="https://app.237go.app" class="dl-web dl-btn">
+                    <span style="font-size:26px;">🌐</span>
                     <span><small>iPhone · Android · PC</small><strong>Ouvrir dans le navigateur</strong></span>
                 </a>
             </div>
-            <p style="color:#6B7B70; font-size:13px; margin:14px 0 28px;">
-                Android : téléchargez l'APK et autorisez l'installation. iPhone : ouvrez l'app web, puis « Ajouter à l'écran d'accueil ».
-            </p>
+            <p class="dl-note">Android : téléchargez l'APK et autorisez l'installation. iPhone : ouvrez l'app web, puis « Ajouter à l'écran d'accueil ».</p>
 
-            <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-bottom:32px;">
-                <a href="#" class="store-btn"><span style="font-size:26px;">▶️</span><span><small>Bientôt sur</small><strong>Google Play</strong></span></a>
-                <a href="#" class="store-btn"><span style="font-size:26px;">🍎</span><span><small>Bientôt sur</small><strong>App Store</strong></span></a>
+            <div class="stores">
+                <span class="store"><span style="font-size:22px;">▶️</span><span><small>Bientôt sur</small><strong>Google Play</strong></span></span>
+                <span class="store"><span style="font-size:22px;">🍎</span><span><small>Bientôt sur</small><strong>App Store</strong></span></span>
             </div>
-            <p style="color:#6B7B70; font-size:14px; margin-bottom:16px;">Pas besoin d'attendre : créez votre compte dès maintenant.</p>
-            <a href="https://app.237go.app" class="btn btn-primary" style="background:var(--green); display:inline-block;">
-                Créer mon compte maintenant →
-            </a>
+
+            <p style="color:var(--muted); font-size:15px; margin-bottom:16px;">Pas besoin d'attendre : créez votre compte dès maintenant.</p>
+            <a href="https://app.237go.app" class="signup-cta">Créer mon compte maintenant →</a>
         </div>
     </section>
 
     <!-- Concepteur -->
-    <section class="section maker">
+    <section class="maker">
         <div class="container">
-            <h2 class="section-title" style="color:#fff;">Conçu & développé au Cameroun 🇨🇲</h2>
-            <p class="section-sub" style="color:rgba(255,255,255,0.7);">Une solution 100% locale, pensée dans les moindres détails</p>
+            <p class="eyebrow" style="color:var(--yellow)">Made in Cameroon 🇨🇲</p>
+            <h2 class="section-title">Conçu & développé au Cameroun</h2>
+            <p class="section-sub">Une solution 100% locale, pensée dans les moindres détails.</p>
             <div class="maker-card">
                 <div class="maker-avatar">👨🏾‍💻</div>
-                <h3 class="maker-name">L'équipe 237GO</h3>
+                <h3>L'équipe 237GO</h3>
                 <p class="maker-role">Une équipe de passionnés</p>
-                <p class="maker-bio">
-                    De l'idée à l'application : architecture, développement, design et intégration
-                    de l'intelligence artificielle. Chaque fonctionnalité de 237GO est pensée
-                    pour les réalités camerounaises. 🇨🇲
-                </p>
+                <p class="maker-bio">De l'idée à l'application : architecture, développement, design et intégration de l'intelligence artificielle. Chaque fonctionnalité de 237GO est pensée pour les réalités camerounaises. 🇨🇲</p>
                 <div class="maker-tags">
                     <span class="maker-tag">🎯 Concepteur</span>
                     <span class="maker-tag">💻 Développeur Full-Stack</span>
@@ -333,10 +351,10 @@
 
     <!-- Footer -->
     <footer>
-        <div class="footer-flag"><div style="flex:1;background:var(--green)"></div><div style="flex:1;background:var(--red)"></div><div style="flex:1;background:var(--yellow)"></div></div>
-        <div class="container" style="max-width:800px; padding-top:16px;">
-            <p class="brand">237<span class="go">GO</span></p>
-            <p style="margin-bottom:20px; font-size:16px;">On bouge ensemble 🇨🇲</p>
+        <div class="container">
+            <div class="footer-flag"><i style="background:#1DB954"></i><i style="background:#CE1126"></i><i style="background:#FCD116"></i></div>
+            <a class="brand" href="#" style="display:inline-flex; font-size:26px;">237<span class="go">GO</span></a>
+            <p style="margin-bottom:4px;">On bouge ensemble 🇨🇲</p>
             <div class="footer-socials">
                 <a href="#" title="Facebook">📘</a>
                 <a href="#" title="Instagram">📸</a>
@@ -344,8 +362,7 @@
                 <a href="#" title="WhatsApp">💬</a>
                 <a href="#" title="TikTok">🎵</a>
             </div>
-            <p style="font-size:13px; opacity:0.7; margin-bottom:20px;">🎯 Concepteur · 💻 Développeur Full-Stack · 🤖 IA appliquée</p>
-            <p style="font-size:12px; opacity:0.55;">© 2026 237GO. Tous droits réservés. Made with ❤️ au Cameroun 🇨🇲</p>
+            <p style="font-size:12px; opacity:.5;">© 2026 237GO. Tous droits réservés. Made with ❤️ au Cameroun 🇨🇲</p>
         </div>
     </footer>
 </body>
