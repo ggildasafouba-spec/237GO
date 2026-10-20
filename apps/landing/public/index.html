@@ -46,8 +46,23 @@
         @media (max-width: 820px) { .nav-links a:not(.nav-cta) { display: none; } }
 
         /* ---------- Hero ---------- */
-        .hero { background: linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 100%); padding: 72px 0 90px; overflow: hidden; }
-        .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: center; }
+        .hero { position: relative; background: linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 100%); padding: 72px 0 90px; overflow: hidden; }
+        /* halos colorés animés (ambiance vivante aux couleurs du drapeau) */
+        @keyframes drift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-20px) scale(1.12); } }
+        .hero::before { content: ''; position: absolute; top: -140px; right: -120px; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(252,209,22,.20), transparent 70%); animation: drift 12s ease-in-out infinite; }
+        .hero::after { content: ''; position: absolute; bottom: -160px; left: -100px; width: 400px; height: 400px; border-radius: 50%; background: radial-gradient(circle, rgba(206,17,38,.14), transparent 70%); animation: drift 15s ease-in-out infinite reverse; }
+        .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: center; }
+
+        /* ---------- Animations d'apparition au défilement ---------- */
+        .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+        @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+        /* Bandeau de réassurance */
+        .trust-bar { background: var(--ink); color: rgba(255,255,255,.85); }
+        .trust-inner { display: flex; gap: 40px; justify-content: center; flex-wrap: wrap; padding: 22px 24px; max-width: 1160px; margin: 0 auto; }
+        .trust-item { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
+        .trust-item .t-ico { font-size: 20px; }
         .flag-badge { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 22px; }
         .flag-dots { display: inline-flex; gap: 5px; }
         .flag-dots i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
@@ -66,7 +81,8 @@
 
         /* Téléphone maquette */
         .phone-wrap { display: flex; justify-content: center; }
-        .phone { width: 300px; height: 600px; background: linear-gradient(180deg, var(--ink), #1C2621); border-radius: 44px; padding: 14px; box-shadow: 0 30px 70px rgba(14,122,53,.25); position: relative; }
+        @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+        .phone { width: 300px; height: 600px; background: linear-gradient(180deg, var(--ink), #1C2621); border-radius: 44px; padding: 14px; box-shadow: 0 30px 70px rgba(14,122,53,.25); position: relative; animation: floaty 6s ease-in-out infinite; }
         .phone-screen { background: var(--bg); border-radius: 32px; height: 100%; overflow: hidden; position: relative; }
         .phone-notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 110px; height: 22px; background: var(--ink); border-radius: 14px; z-index: 2; }
         .app-head { background: linear-gradient(160deg, var(--ink), #1C2621); padding: 38px 18px 18px; color: #fff; }
@@ -131,17 +147,6 @@
         .store strong { font-size: 15px; }
         .signup-cta { display: inline-block; background: var(--green); color: #fff; padding: 16px 36px; border-radius: 14px; font-weight: 700; font-size: 16px; box-shadow: 0 12px 30px rgba(29,185,84,.3); transition: transform .2s; }
         .signup-cta:hover { transform: translateY(-3px); }
-
-        .maker { background: linear-gradient(160deg, var(--green-deep), var(--ink)); color: #fff; }
-        .maker .section-title { color: #fff; }
-        .maker .section-sub { color: rgba(255,255,255,.65); }
-        .maker-card { max-width: 680px; margin: 0 auto; background: rgba(255,255,255,.06); border: 1px solid rgba(252,209,22,.3); border-radius: 26px; padding: 48px 40px; text-align: center; }
-        .maker-avatar { width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 18px; background: linear-gradient(135deg, #2EE066, var(--green)); display: flex; align-items: center; justify-content: center; font-size: 44px; border: 3px solid var(--yellow); }
-        .maker-card h3 { font-size: 24px; font-weight: 900; }
-        .maker-role { color: var(--yellow); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
-        .maker-bio { opacity: .82; font-size: 16px; max-width: 520px; margin: 0 auto; }
-        .maker-tags { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
-        .maker-tag { background: rgba(252,209,22,.12); border: 1px solid rgba(252,209,22,.3); color: var(--yellow); padding: 9px 18px; border-radius: 22px; font-size: 13px; font-weight: 700; }
 
         footer { background: var(--ink); color: rgba(255,255,255,.7); text-align: center; padding: 56px 0 40px; }
         footer .brand { justify-content: center; color: #fff; margin-bottom: 8px; }
@@ -220,12 +225,22 @@
         </div>
     </section>
 
+    <!-- Bandeau de réassurance -->
+    <div class="trust-bar">
+        <div class="trust-inner">
+            <span class="trust-item"><span class="t-ico">🔒</span> Paiement protégé (escrow)</span>
+            <span class="trust-item"><span class="t-ico">📱</span> Orange Money · MTN MoMo</span>
+            <span class="trust-item"><span class="t-ico">✅</span> Chauffeurs vérifiés</span>
+            <span class="trust-item"><span class="t-ico">🚨</span> Bouton SOS intégré</span>
+        </div>
+    </div>
+
     <!-- Services -->
     <section id="services" class="services">
         <div class="container">
-            <p class="eyebrow">Nos services</p>
-            <h2 class="section-title">6 services, 1 seule app</h2>
-            <p class="section-sub">Tout ce dont vous avez besoin pour vous déplacer et vous faire livrer au Cameroun.</p>
+            <p class="eyebrow reveal">Nos services</p>
+            <h2 class="section-title reveal">6 services, 1 seule app</h2>
+            <p class="section-sub reveal">Tout ce dont vous avez besoin pour vous déplacer et vous faire livrer au Cameroun.</p>
             <div class="services-grid">
                 <div class="svc">
                     <div class="svc-ico" style="background:#1DB95418">🛵</div>
@@ -270,9 +285,9 @@
     <!-- Pourquoi -->
     <section id="why" class="why">
         <div class="container">
-            <p class="eyebrow">Pourquoi 237GO</p>
-            <h2 class="section-title">Pensé par et pour les Camerounais</h2>
-            <p class="section-sub">Des fonctionnalités adaptées aux réalités locales.</p>
+            <p class="eyebrow reveal">Pourquoi 237GO</p>
+            <h2 class="section-title reveal">Pensé par et pour les Camerounais</h2>
+            <p class="section-sub reveal">Des fonctionnalités adaptées aux réalités locales.</p>
             <div class="why-grid">
                 <div class="why-card"><div class="why-emoji">💰</div><h3>Paiement 100% local</h3><p>Orange Money, MTN MoMo, Express Union, Cash. Payez comme vous voulez.</p></div>
                 <div class="why-card"><div class="why-emoji">🔒</div><h3>Paiement protégé</h3><p>Votre argent est bloqué en séquestre et libéré seulement quand le service est confirmé.</p></div>
@@ -287,9 +302,9 @@
     <!-- Chauffeurs -->
     <section id="driver" class="driver">
         <div class="container" style="max-width:820px; text-align:center;">
-            <p class="eyebrow">Devenir partenaire</p>
-            <h2 class="section-title">🚗 Devenez chauffeur 237GO</h2>
-            <p class="section-sub">Gagnez plus, avec plus d'avantages.</p>
+            <p class="eyebrow reveal">Devenir partenaire</p>
+            <h2 class="section-title reveal">🚗 Devenez chauffeur 237GO</h2>
+            <p class="section-sub reveal">Gagnez plus, avec plus d'avantages.</p>
             <div class="driver-grid">
                 <div class="driver-card"><div class="e">💵</div><b>Revenus quotidiens</b><span>Commission juste</span></div>
                 <div class="driver-card"><div class="e">🏥</div><b>Assurance santé</b><span>Couverture partenaire</span></div>
@@ -303,9 +318,9 @@
     <!-- Download -->
     <section id="download" class="download">
         <div class="container" style="max-width:640px;">
-            <p class="eyebrow">Commencer</p>
-            <h2 class="section-title">Commencez avec 237GO</h2>
-            <p class="section-sub">Disponible maintenant · Android (APK) & application web · iOS bientôt.</p>
+            <p class="eyebrow reveal">Commencer</p>
+            <h2 class="section-title reveal">Commencez avec 237GO</h2>
+            <p class="section-sub reveal">Disponible maintenant · Android (APK) & application web · iOS bientôt.</p>
 
             <div class="dl-actions">
                 <a href="https://expo.dev/artifacts/eas/hiuVy5EK2f0ooRpoWEpxJ5k4j0pDvHFTs40DTJBf5ls.apk" class="dl-apk dl-btn" download>
@@ -329,26 +344,6 @@
         </div>
     </section>
 
-    <!-- Concepteur -->
-    <section class="maker">
-        <div class="container">
-            <p class="eyebrow" style="color:var(--yellow)">Made in Cameroon 🇨🇲</p>
-            <h2 class="section-title">Conçu & développé au Cameroun</h2>
-            <p class="section-sub">Une solution 100% locale, pensée dans les moindres détails.</p>
-            <div class="maker-card">
-                <div class="maker-avatar">👨🏾‍💻</div>
-                <h3>L'équipe 237GO</h3>
-                <p class="maker-role">Une équipe de passionnés</p>
-                <p class="maker-bio">De l'idée à l'application : architecture, développement, design et intégration de l'intelligence artificielle. Chaque fonctionnalité de 237GO est pensée pour les réalités camerounaises. 🇨🇲</p>
-                <div class="maker-tags">
-                    <span class="maker-tag">🎯 Concepteur</span>
-                    <span class="maker-tag">💻 Développeur Full-Stack</span>
-                    <span class="maker-tag">🤖 IA appliquée</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- Footer -->
     <footer>
         <div class="container">
@@ -365,5 +360,27 @@
             <p style="font-size:12px; opacity:.5;">© 2026 237GO. Tous droits réservés. Made with ❤️ au Cameroun 🇨🇲</p>
         </div>
     </footer>
+
+    <script>
+      // Révélation douce des éléments au défilement
+      (function () {
+        var cards = document.querySelectorAll('.svc, .why-card, .driver-card');
+        cards.forEach(function (el, i) {
+          el.classList.add('reveal');
+          el.style.transitionDelay = (i % 6) * 0.06 + 's';
+        });
+        var targets = document.querySelectorAll('.reveal');
+        if (!('IntersectionObserver' in window)) {
+          targets.forEach(function (t) { t.classList.add('visible'); });
+          return;
+        }
+        var obs = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); }
+          });
+        }, { threshold: 0.12 });
+        targets.forEach(function (t) { obs.observe(t); });
+      })();
+    </script>
 </body>
 </html>
