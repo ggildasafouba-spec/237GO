@@ -14,6 +14,7 @@ import * as Location from 'expo-location';
 import { useCarpoolStore } from '../store/carpoolStore';
 import { useAuthStore } from '../store/authStore';
 import EscrowActions from '../components/EscrowActions';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 // Coordonnées connues des grandes villes camerounaises (fallback si géocodage indispo)
@@ -87,6 +88,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
     fetchMyTrips,
     fetchMyBookings,
   } = useCarpoolStore();
+  const safe = useSafeScreen();
 
   const handleSearch = async () => {
     if (!departureCity || !arrivalCity) {
@@ -154,7 +156,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
   if (view === 'search') {
     const current: string = view;
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -259,7 +261,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
   // Vue: Résultats de recherche
   if (view === 'results') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
           <Text style={styles.backText}>← Nouvelle recherche</Text>
         </TouchableOpacity>
@@ -339,7 +341,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
   // Vue: Publier un trajet
   if (view === 'publish') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -434,7 +436,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
 
   // Vue: Mes trajets / réservations
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, safe.topBottom]}>
       <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
         <Text style={styles.backText}>← Rechercher</Text>
       </TouchableOpacity>
@@ -475,6 +477,23 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
                 onDone={fetchMyBookings}
               />
             )}
+
+            {/* Évaluer le conducteur (clé = id de la réservation) */}
+            <TouchableOpacity
+              style={styles.rateButton}
+              onPress={() => navigation.navigate('Rating', {
+                serviceType: 'CARPOOL',
+                serviceId: item.id,
+                serviceLabel: 'trajet',
+                ratedName: item.carpool?.driver
+                  ? `${item.carpool.driver.firstName} ${item.carpool.driver.lastName}`
+                  : 'le conducteur',
+              })}
+              accessibilityRole="button"
+              accessibilityLabel="Évaluer le conducteur"
+            >
+              <Text style={styles.rateButtonText}>⭐ Évaluer le conducteur</Text>
+            </TouchableOpacity>
           </View>
         )}
       />
@@ -483,7 +502,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl + 20 },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   backBtn: { marginBottom: spacing.md },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
@@ -535,4 +554,6 @@ const styles = StyleSheet.create({
   bookingDate: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 4 },
   bookingSeats: { fontSize: typography.sm, color: colors.primary, fontWeight: '600', marginTop: 2 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginTop: spacing.sm },
+  rateButton: { paddingVertical: spacing.sm, borderRadius: 10, alignItems: 'center', marginTop: spacing.sm, borderWidth: 1, borderColor: colors.secondary, backgroundColor: '#FFF8E1' },
+  rateButtonText: { color: colors.primaryDark, fontWeight: '700', fontSize: typography.sm },
 });

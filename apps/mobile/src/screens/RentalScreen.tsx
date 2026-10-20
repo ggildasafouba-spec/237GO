@@ -13,6 +13,7 @@ import {
 import { useRentalStore } from '../store/rentalStore';
 import EscrowActions from '../components/EscrowActions';
 import { pickAndUploadImage } from '../config/upload';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 type ViewMode = 'search' | 'detail' | 'book' | 'publish' | 'my-vehicles' | 'my-bookings';
@@ -69,6 +70,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     fetchMyVehicles,
     fetchMyBookings,
   } = useRentalStore();
+  const safe = useSafeScreen();
 
   useEffect(() => {
     searchVehicles({ lat: 4.0511, lng: 9.7679 });
@@ -184,7 +186,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   // Vue: Recherche
   if (view === 'search') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -303,7 +305,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   // Vue: Détail véhicule
   if (view === 'detail' && selectedVehicle) {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
           <Text style={styles.backText}>← Véhicules</Text>
         </TouchableOpacity>
@@ -399,7 +401,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     const totalPrice = days > 0 ? days * selectedVehicle.pricePerDay : 0;
 
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('detail')} style={styles.backBtn}>
           <Text style={styles.backText}>← Détails</Text>
         </TouchableOpacity>
@@ -476,7 +478,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   // Vue: Publier un véhicule
   if (view === 'publish') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -622,7 +624,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   // Vue: Mes véhicules
   if (view === 'my-vehicles') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, safe.topBottom]}>
         <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -676,7 +678,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, safe.topBottom]}>
       <TouchableOpacity onPress={() => setView('search')} style={styles.backBtn}>
         <Text style={styles.backText}>← Retour</Text>
       </TouchableOpacity>
@@ -721,6 +723,23 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
                 onDone={fetchMyBookings}
               />
             )}
+
+            {/* Évaluer le propriétaire (clé = id de la réservation) */}
+            <TouchableOpacity
+              style={styles.rateButton}
+              onPress={() => navigation.navigate('Rating', {
+                serviceType: 'RENTAL',
+                serviceId: item.id,
+                serviceLabel: 'location',
+                ratedName: item.vehicle?.owner
+                  ? `${item.vehicle.owner.firstName} ${item.vehicle.owner.lastName}`
+                  : 'le propriétaire',
+              })}
+              accessibilityRole="button"
+              accessibilityLabel="Évaluer le propriétaire"
+            >
+              <Text style={styles.rateButtonText}>⭐ Évaluer le propriétaire</Text>
+            </TouchableOpacity>
           </View>
         )}
       />
@@ -729,7 +748,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl + 20 },
+  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   backBtn: { marginBottom: spacing.md },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
@@ -784,6 +803,8 @@ const styles = StyleSheet.create({
   helperText: { fontSize: typography.xs, color: colors.textSecondary, marginBottom: spacing.sm, fontStyle: 'italic' },
   chatButton: { marginTop: spacing.sm, padding: spacing.md, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.primary, backgroundColor: '#E8F5E9' },
   chatButtonText: { color: colors.primary, fontWeight: '700', fontSize: typography.md },
+  rateButton: { marginTop: spacing.sm, paddingVertical: spacing.sm, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.secondary, backgroundColor: '#FFF8E1' },
+  rateButtonText: { color: colors.primaryDark, fontWeight: '700', fontSize: typography.sm },
   input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
   row: { flexDirection: 'row' },
   totalCard: {

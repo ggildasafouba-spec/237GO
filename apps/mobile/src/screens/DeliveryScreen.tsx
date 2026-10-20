@@ -13,6 +13,7 @@ import * as Location from 'expo-location';
 import { useDeliveryStore } from '../store/deliveryStore';
 import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
 type PackageType = 'DOCUMENT' | 'SMALL_PACKAGE' | 'MEDIUM_PACKAGE' | 'LARGE_PACKAGE' | 'FOOD' | 'FRAGILE';
@@ -49,6 +50,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   const { getCurrentLocation, reverseGeocode } = useLocation();
 
   const { currentDelivery, estimate, isLoading, getEstimate, createDelivery, clearDelivery } = useDeliveryStore();
+  const safe = useSafeScreen();
 
   // Récupérer la position réelle au démarrage pour pré-remplir le point de retrait
   useEffect(() => {
@@ -142,7 +144,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   // Step 1: Type de colis
   if (step === 'type') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
@@ -189,7 +191,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   // Step 2: Adresses
   if (step === 'addresses') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setStep('type')} style={styles.backBtn}>
           <Text style={styles.backText}>← Type de colis</Text>
         </TouchableOpacity>
@@ -262,7 +264,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   // Step 3: Confirmation
   if (step === 'confirm') {
     return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => setStep('addresses')} style={styles.backBtn}>
           <Text style={styles.backText}>← Modifier</Text>
         </TouchableOpacity>
@@ -326,7 +328,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
 
   // Step 4: Suivi en temps réel
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, safe.topBottom]}>
       <Text style={styles.title}>Suivi de livraison</Text>
 
       <View style={styles.trackingCard}>
@@ -410,6 +412,25 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
         />
       )}
 
+      {/* Évaluer le livreur une fois la livraison effectuée */}
+      {currentDelivery?.status === 'DELIVERED' && currentDelivery?.id && (
+        <TouchableOpacity
+          style={styles.rateButton}
+          onPress={() => navigation.navigate('Rating', {
+            serviceType: 'DELIVERY',
+            serviceId: currentDelivery.id,
+            serviceLabel: 'livraison',
+            ratedName: currentDelivery.driver
+              ? `${currentDelivery.driver.firstName} ${currentDelivery.driver.lastName}`
+              : 'le livreur',
+          })}
+          accessibilityRole="button"
+          accessibilityLabel="Évaluer le livreur"
+        >
+          <Text style={styles.rateButtonText}>⭐ Évaluer le livreur</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
         style={[styles.button, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.error }]}
         onPress={() => { clearDelivery(); setStep('type'); navigation.goBack(); }}
@@ -425,8 +446,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: spacing.lg,
-    paddingTop: spacing.xl + 20,
+    paddingHorizontal: spacing.lg,
   },
   backBtn: {
     marginBottom: spacing.md,
@@ -680,5 +700,19 @@ const styles = StyleSheet.create({
   chatButtonText: {
     color: colors.primary,
     fontWeight: '700',
+  },
+  rateButton: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.secondary,
+    backgroundColor: '#FFF8E1',
+  },
+  rateButtonText: {
+    color: colors.primaryDark,
+    fontWeight: '700',
+    fontSize: typography.sm,
   },
 });
