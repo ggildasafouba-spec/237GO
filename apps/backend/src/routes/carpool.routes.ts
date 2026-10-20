@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
 
 const router = Router();
@@ -312,10 +312,16 @@ router.post(
 
       const booking = await prisma.carpoolBooking.findUnique({
         where: { id: bookingId },
-        include: { carpool: { select: { driverId: true } } },
+        include: { carpool: { select: { id: true, driverId: true } } },
       });
       if (!booking) {
         throw new AppError('Réservation non trouvée', 404);
+      }
+
+      // Garde "terminé" : l'escrow du trajet (clé = carpool) doit être libéré
+      const completed = await isServiceCompleted('CARPOOL', booking.carpool.id);
+      if (!completed) {
+        throw new AppError('Vous ne pouvez noter qu\'un trajet terminé', 400);
       }
 
       const driverId = booking.carpool.driverId;

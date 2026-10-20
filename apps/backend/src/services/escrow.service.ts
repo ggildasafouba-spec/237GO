@@ -299,3 +299,12 @@ export async function getEscrowForService(serviceType: EscrowServiceType, servic
     orderBy: { createdAt: 'desc' },
   });
 }
+
+/**
+ * Indique si une prestation est terminée (paiement libéré au prestataire).
+ * Sert de "garde" avant d'autoriser une évaluation.
+ */
+export async function isServiceCompleted(serviceType: EscrowServiceType, serviceId: string): Promise<boolean> {
+  const escrow = await getEscrowForService(serviceType, serviceId);
+  return escrow?.status === 'RELEASED';
+}

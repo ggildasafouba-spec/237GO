@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
 
 const router = Router();
@@ -393,7 +393,9 @@ router.post(
       if (!booking) {
         throw new AppError('Réservation non trouvée', 404);
       }
-      if (booking.status !== 'COMPLETED') {
+      // Garde "terminé" : la location doit être finalisée (paiement libéré) pour être notée
+      const completed = booking.status === 'COMPLETED' || (await isServiceCompleted('RENTAL', id));
+      if (!completed) {
         throw new AppError('Vous ne pouvez noter qu\'une location terminée', 400);
       }
 
