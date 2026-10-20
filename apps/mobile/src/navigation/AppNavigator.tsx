@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { colors } from '../theme';
 
@@ -164,6 +164,10 @@ function getMainTabs(role?: string) {
 
 export default function AppNavigator() {
   const { isAuthenticated, isLoading, loadUser, user } = useAuthStore();
+  // Sur grand écran (web/ordinateur), on encadre l'app dans un gabarit "téléphone"
+  // centré, pour qu'aucun écran ne s'étire sur toute la largeur.
+  const { width } = useWindowDimensions();
+  const isWide = width >= 700;
 
   useEffect(() => {
     loadUser();
@@ -178,7 +182,7 @@ export default function AppNavigator() {
     );
   }
 
-  return (
+  const appTree = (
     <NavigationContainer>
       <Stack.Navigator id="AppStack" screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
@@ -213,4 +217,37 @@ export default function AppNavigator() {
       </Stack.Navigator>
     </NavigationContainer>
   );
+
+  // Petit écran (téléphone) : plein écran normal.
+  if (!isWide) return appTree;
+
+  // Grand écran : gabarit téléphone centré sur un fond sombre.
+  return (
+    <View style={styles.webBackdrop}>
+      <View style={styles.phoneFrame}>{appTree}</View>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  webBackdrop: {
+    flex: 1,
+    backgroundColor: '#0C1310',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  phoneFrame: {
+    width: '100%',
+    maxWidth: 480,
+    height: '100%',
+    maxHeight: 920,
+    backgroundColor: colors.background,
+    overflow: 'hidden',
+    borderRadius: 24,
+    // ombre (web)
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 20 },
+  },
+});

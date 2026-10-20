@@ -154,7 +154,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.primary },
-  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, width: '100%', maxWidth: 460, alignSelf: 'center' },
   icon: { fontSize: 56, textAlign: 'center', marginBottom: spacing.sm },
   title: { fontSize: typography.xxl, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: spacing.sm },
   subtitle: { fontSize: typography.sm, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: spacing.lg, lineHeight: 20 },

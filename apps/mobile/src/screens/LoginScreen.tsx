@@ -98,7 +98,13 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: safe.insets.top, paddingBottom: safe.insets.bottom }]} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: safe.insets.top, paddingBottom: safe.insets.bottom },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Logo */}
         <View style={styles.logoContainer}>
           <Logo size={110} variant="light" />
