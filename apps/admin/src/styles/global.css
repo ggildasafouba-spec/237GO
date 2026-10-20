@@ -11,6 +11,7 @@
   --success: #388E3C;
   --info: #1976D2;
   --warning: #F57C00;
+  --sidebar-width: 250px;
 }
 
 * {
@@ -35,4 +36,99 @@ button {
   cursor: pointer;
   border: none;
   font-family: inherit;
+}
+
+/* ===================== LAYOUT RESPONSIVE ===================== */
+
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #F4F7F4;
+}
+
+.admin-sidebar {
+  width: var(--sidebar-width);
+  background: linear-gradient(160deg, #0C1310 0%, #1C2621 60%, #121A17 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  position: fixed;
+  height: 100vh;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  transition: transform 0.25s ease;
+}
+
+.admin-main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  padding: 32px;
+  min-width: 0; /* permet aux tableaux de ne pas forcer la largeur du parent */
+  width: 100%;
+}
+
+/* Bouton hamburger : caché sur desktop */
+.admin-burger {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 120;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #121A17;
+  color: #fff;
+  font-size: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Voile sombre quand le menu est ouvert sur mobile */
+.admin-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 90;
+}
+
+/* Conteneur de tableau : défilement horizontal propre sur petit écran */
+.admin-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-table-scroll > * {
+  min-width: 720px; /* garde les colonnes lisibles ; on scrolle plutôt que d'écraser */
+}
+
+/* ----- Tablette et mobile ----- */
+@media (max-width: 1024px) {
+  .admin-main {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Le menu devient un panneau coulissant masqué par défaut */
+  .admin-sidebar {
+    transform: translateX(-100%);
+  }
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+  .admin-main {
+    margin-left: 0;
+    padding: 16px;
+    padding-top: 68px; /* laisse la place au bouton hamburger */
+  }
+  .admin-burger {
+    display: flex;
+  }
+  .admin-sidebar.open ~ .admin-overlay {
+    display: block;
+  }
 }

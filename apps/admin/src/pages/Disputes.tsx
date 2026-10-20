@@ -135,6 +135,7 @@ export default function Disputes() {
       ) : escrows.length === 0 ? (
         <div style={styles.empty}>Aucun élément dans cette catégorie</div>
       ) : (
+        <div className="admin-table-scroll">
         <div style={styles.table}>
           <div style={styles.tableHeader}>
             <span style={styles.cell}>Service</span>
@@ -207,6 +208,7 @@ export default function Disputes() {
               </div>
             );
           })}
+        </div>
         </div>
       )}
 

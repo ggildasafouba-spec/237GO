@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 
@@ -17,15 +17,28 @@ const navItems = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  // Menu latéral : ouvert/fermé (utile sur mobile où il est masqué par défaut)
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token');
     navigate('/login');
   };
 
+  const closeMenu = () => setMenuOpen(false);
+
   return (
-    <div style={styles.layout}>
-      <aside style={styles.sidebar}>
+    <div className="admin-layout">
+      {/* Bouton hamburger (visible uniquement sur petit écran via le CSS) */}
+      <button
+        className="admin-burger"
+        onClick={() => setMenuOpen((o) => !o)}
+        aria-label="Ouvrir le menu"
+      >
+        ☰
+      </button>
+
+      <aside className={`admin-sidebar${menuOpen ? ' open' : ''}`}>
         <div style={styles.logo}>
           <Logo size={40} />
           <div>
@@ -45,6 +58,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               key={item.path}
               to={item.path}
               end={item.path === '/'}
+              onClick={closeMenu}
               style={({ isActive }) => ({
                 ...styles.navItem,
                 ...(isActive ? styles.navItemActive : {}),
@@ -59,20 +73,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           🚪 Déconnexion
         </button>
       </aside>
-      <main style={styles.main}>{children}</main>
+
+      {/* Voile sombre pour fermer le menu en tapant à côté (mobile) */}
+      <div className="admin-overlay" onClick={closeMenu} />
+
+      <main className="admin-main">{children}</main>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  layout: { display: 'flex', minHeight: '100vh', backgroundColor: '#F4F7F4' },
-  sidebar: {
-    width: 250,
-    background: 'linear-gradient(160deg, #0C1310 0%, #1C2621 60%, #121A17 100%)',
-    color: '#fff',
-    display: 'flex', flexDirection: 'column', padding: '20px 0',
-    position: 'fixed', height: '100vh', left: 0, top: 0,
-  },
   logo: {
     display: 'flex', alignItems: 'center', gap: 12,
     padding: '0 24px 16px',
@@ -81,7 +91,7 @@ const styles: Record<string, React.CSSProperties> = {
   logoSub: { fontSize: 11, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 2 },
   flagBar: { display: 'flex', height: 4, margin: '0 24px 20px', borderRadius: 2, overflow: 'hidden' },
   flagStripe: { flex: 1 },
-  nav: { flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 },
+  nav: { flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' },
   navItem: {
     display: 'flex', alignItems: 'center', padding: '12px 16px',
     borderRadius: 10, color: 'rgba(255,255,255,0.7)', fontSize: 14,
@@ -96,5 +106,4 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#FF6B7A', border: '1px solid rgba(206,17,38,0.3)', borderRadius: 8,
     fontSize: 14, cursor: 'pointer',
   },
-  main: { flex: 1, marginLeft: 250, padding: 32 },
 };

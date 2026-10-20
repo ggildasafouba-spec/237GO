@@ -76,9 +76,10 @@ export default function Login() {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh',
+    padding: 16,
     background: 'linear-gradient(160deg, #0C1310 0%, #1C2621 60%, #121A17 100%)',
   },
-  form: { backgroundColor: '#fff', padding: 48, borderRadius: 20, width: 380, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' },
+  form: { backgroundColor: '#fff', padding: 40, borderRadius: 20, width: '100%', maxWidth: 380, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' },
   logo: { fontSize: 34, fontWeight: 900, color: '#141A17', marginBottom: 4 },
   subtitle: { color: '#757575', marginBottom: 16, fontSize: 14 },
   flagBar: { display: 'flex', height: 4, width: 90, margin: '0 auto 28px', borderRadius: 2, overflow: 'hidden' },

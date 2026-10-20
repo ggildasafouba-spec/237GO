@@ -55,6 +55,7 @@ export default function Deliveries() {
 
       {error && <div style={styles.errorBox}>{error}</div>}
 
+      <div className="admin-table-scroll">
       <div style={styles.table}>
         <div style={styles.tableHeader}>
           <span style={styles.cell}>Expéditeur</span>
@@ -87,6 +88,7 @@ export default function Deliveries() {
             );
           })
         )}
+      </div>
       </div>
     </div>
   );

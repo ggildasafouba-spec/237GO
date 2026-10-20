@@ -95,6 +95,7 @@ export default function Finance() {
 
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>Transactions récentes</h2>
+            <div className="admin-table-scroll">
             <div style={styles.table}>
               {data.recentTransactions.length === 0 ? (
                 <div style={styles.empty}>Aucune transaction</div>
@@ -117,6 +118,7 @@ export default function Finance() {
                   );
                 })
               )}
+            </div>
             </div>
           </div>
         </>

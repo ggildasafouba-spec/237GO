@@ -75,6 +75,7 @@ export default function Rides() {
         </div>
       </div>
 
+      <div className="admin-table-scroll">
       <div style={styles.table}>
         <div style={styles.tableHeader}>
           <span style={{ ...styles.cell, flex: 0.5 }}>ID</span>
@@ -120,6 +121,7 @@ export default function Rides() {
           })
         )}
       </div>
+      </div>
     </div>
   );
 }
@@ -129,8 +131,8 @@ const styles: Record<string, React.CSSProperties> = {
   title: { fontSize: 28, fontWeight: 700 },
   subtitle: { color: '#757575', marginTop: 4 },
   errorBox: { backgroundColor: '#FFEBEE', color: '#D32F2F', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 14 },
-  statsRow: { display: 'flex', gap: 16, marginBottom: 24 },
-  stat: { flex: 1, backgroundColor: '#fff', padding: 20, borderRadius: 10, borderLeft: '4px solid #ccc', textAlign: 'center' },
+  statsRow: { display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' },
+  stat: { flex: '1 1 140px', minWidth: 140, backgroundColor: '#fff', padding: 20, borderRadius: 10, borderLeft: '4px solid #ccc', textAlign: 'center' },
   statValue: { display: 'block', fontSize: 28, fontWeight: 800, color: '#212121' },
   statLabel: { fontSize: 13, color: '#757575' },
   table: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },

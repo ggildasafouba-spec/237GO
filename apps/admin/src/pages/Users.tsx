@@ -104,6 +104,7 @@ export default function Users() {
 
       {error && <div style={styles.errorBox}>{error}</div>}
 
+      <div className="admin-table-scroll">
       <div style={styles.table}>
         <div style={styles.tableHeader}>
           <span style={{ ...styles.cell, flex: 2 }}>Nom</span>
@@ -159,6 +160,7 @@ export default function Users() {
             );
           })
         )}
+      </div>
       </div>
     </div>
   );
