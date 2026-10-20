@@ -14,6 +14,7 @@ interface Carpool {
   status: string;
   description?: string;
   driver: {
+    id?: string;
     firstName: string;
     lastName: string;
     driverProfile?: {
@@ -21,6 +22,12 @@ interface Carpool {
       totalTrips: number;
     };
   };
+  bookings?: {
+    id: string;
+    seats: number;
+    status: string;
+    passenger?: { id: string; firstName: string; lastName: string };
+  }[];
 }
 
 interface CarpoolBooking {

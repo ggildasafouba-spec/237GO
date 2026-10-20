@@ -25,7 +25,13 @@ interface Vehicle {
   ownerIdPhoto?: string;
   verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
   owner: { firstName: string; lastName: string };
-  bookings?: { startDate: string; endDate: string }[];
+  bookings?: {
+    id?: string;
+    startDate: string;
+    endDate: string;
+    status?: string;
+    renter?: { id: string; firstName: string; lastName: string };
+  }[];
 }
 
 interface RentalBooking {

@@ -243,7 +243,11 @@ router.get('/my-vehicles', authenticate, async (req: AuthRequest, res: Response)
     const vehicles = await prisma.vehicle.findMany({
       where: { ownerId: req.user!.id },
       include: {
-        bookings: { orderBy: { startDate: 'desc' }, take: 5 },
+        bookings: {
+          orderBy: { startDate: 'desc' },
+          take: 5,
+          include: { renter: { select: { id: true, firstName: true, lastName: true } } },
+        },
       },
     });
 

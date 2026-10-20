@@ -661,6 +661,28 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
                 </View>
                 <Text style={styles.vehicleCardPrice}>{item.pricePerDay.toLocaleString()} XAF/j</Text>
               </View>
+
+              {/* Réservations : le propriétaire peut évaluer le locataire */}
+              {(item.bookings || []).filter((b) => b.id).map((b) => (
+                <View key={b.id} style={styles.subBookingRow}>
+                  <Text style={styles.subBookingText}>
+                    {b.renter ? `${b.renter.firstName} ${b.renter.lastName}` : 'Locataire'} • {new Date(b.startDate).toLocaleDateString('fr-FR')}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.rateButtonSmall}
+                    onPress={() => navigation.navigate('Rating', {
+                      serviceType: 'RENTAL',
+                      serviceId: b.id,
+                      serviceLabel: 'location',
+                      ratedName: b.renter ? `${b.renter.firstName} ${b.renter.lastName}` : 'le locataire',
+                    })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Évaluer le locataire"
+                  >
+                    <Text style={styles.rateButtonText}>⭐ Évaluer</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           )}
         />
@@ -805,6 +827,9 @@ const styles = StyleSheet.create({
   chatButtonText: { color: colors.primary, fontWeight: '700', fontSize: typography.md },
   rateButton: { marginTop: spacing.sm, paddingVertical: spacing.sm, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.secondary, backgroundColor: '#FFF8E1' },
   rateButtonText: { color: colors.primaryDark, fontWeight: '700', fontSize: typography.sm },
+  subBookingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  subBookingText: { flex: 1, fontSize: typography.xs, color: colors.textSecondary },
+  rateButtonSmall: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.secondary, backgroundColor: '#FFF8E1' },
   input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
   row: { flexDirection: 'row' },
   totalCard: {

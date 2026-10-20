@@ -88,6 +88,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
     fetchMyTrips,
     fetchMyBookings,
   } = useCarpoolStore();
+  // (myTrips et fetchMyTrips servent à la vue chauffeur dans "Mes trajets")
   const safe = useSafeScreen();
 
   const handleSearch = async () => {
@@ -182,7 +183,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
           )}
           <TouchableOpacity
             style={[styles.tab, current === 'my-trips' && styles.tabActive]}
-            onPress={() => { fetchMyBookings(); setView('my-trips'); }}
+            onPress={() => { fetchMyBookings(); if (user?.role === 'DRIVER') fetchMyTrips(); setView('my-trips'); }}
           >
             <Text style={[styles.tabText, current === 'my-trips' && styles.tabTextActive]}>Mes trajets</Text>
           </TouchableOpacity>
@@ -441,6 +442,41 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
         <Text style={styles.backText}>← Rechercher</Text>
       </TouchableOpacity>
 
+      {/* Section chauffeur : trajets publiés + évaluation des passagers */}
+      {user?.role === 'DRIVER' && myTrips.length > 0 && (
+        <>
+          <Text style={styles.title}>Mes trajets publiés</Text>
+          {myTrips.map((trip) => (
+            <View key={trip.id} style={styles.bookingCard}>
+              <Text style={styles.bookingRoute}>{trip.departureCity} → {trip.arrivalCity}</Text>
+              <Text style={styles.bookingDate}>
+                {new Date(trip.departureTime).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}
+              </Text>
+              {(trip.bookings || []).map((b) => (
+                <View key={b.id} style={styles.subBookingRow}>
+                  <Text style={styles.subBookingText}>
+                    {b.passenger ? `${b.passenger.firstName} ${b.passenger.lastName}` : 'Passager'} • {b.seats} place(s)
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.rateButtonSmall}
+                    onPress={() => navigation.navigate('Rating', {
+                      serviceType: 'CARPOOL',
+                      serviceId: b.id,
+                      serviceLabel: 'trajet',
+                      ratedName: b.passenger ? `${b.passenger.firstName} ${b.passenger.lastName}` : 'le passager',
+                    })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Évaluer le passager"
+                  >
+                    <Text style={styles.rateButtonText}>⭐ Évaluer</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
       <Text style={styles.title}>Mes réservations</Text>
 
       <FlatList
@@ -556,4 +592,7 @@ const styles = StyleSheet.create({
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginTop: spacing.sm },
   rateButton: { paddingVertical: spacing.sm, borderRadius: 10, alignItems: 'center', marginTop: spacing.sm, borderWidth: 1, borderColor: colors.secondary, backgroundColor: '#FFF8E1' },
   rateButtonText: { color: colors.primaryDark, fontWeight: '700', fontSize: typography.sm },
+  subBookingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  subBookingText: { flex: 1, fontSize: typography.xs, color: colors.textSecondary },
+  rateButtonSmall: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.secondary, backgroundColor: '#FFF8E1' },
 });
