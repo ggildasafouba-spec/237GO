@@ -26,6 +26,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [lastName, setLastName] = useState('');
   const [accountType, setAccountType] = useState<'PASSENGER' | 'DRIVER' | 'MERCHANT'>('PASSENGER');
   const [isInternational, setIsInternational] = useState(false);
+  const [countryDialCode, setCountryDialCode] = useState('+33'); // indicatif par défaut à l'étranger (France)
+  const [showCountryList, setShowCountryList] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -35,6 +37,31 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     { id: 'MERCHANT' as const, label: 'Marchand', icon: '🏪' },
   ];
 
+  // Indicatifs des pays fréquents de la diaspora camerounaise
+  const countries = [
+    { code: '+33', flag: '🇫🇷', name: 'France' },
+    { code: '+32', flag: '🇧🇪', name: 'Belgique' },
+    { code: '+1', flag: '🇺🇸', name: 'USA / Canada' },
+    { code: '+44', flag: '🇬🇧', name: 'Royaume-Uni' },
+    { code: '+49', flag: '🇩🇪', name: 'Allemagne' },
+    { code: '+41', flag: '🇨🇭', name: 'Suisse' },
+    { code: '+39', flag: '🇮🇹', name: 'Italie' },
+    { code: '+34', flag: '🇪🇸', name: 'Espagne' },
+    { code: '+971', flag: '🇦🇪', name: 'Émirats' },
+    { code: '+86', flag: '🇨🇳', name: 'Chine' },
+    { code: '+237', flag: '🇨🇲', name: 'Cameroun' },
+  ];
+  const selectedCountry = countries.find((c) => c.code === countryDialCode) || countries[0];
+
+  // Construit le numéro complet à envoyer au backend :
+  // - Cameroun : 6XXXXXXXX tel quel
+  // - International : indicatif pays + numéro local (sans le +237), chiffres uniquement après le +
+  const buildFullPhone = () => {
+    if (!isInternational) return phone.trim();
+    const local = phone.replace(/\D/g, ''); // garder seulement les chiffres du numéro local
+    return `${countryDialCode}${local}`;
+  };
+
   const { login, register } = useAuthStore();
 
   const handleSubmit = async () => {
@@ -43,16 +70,18 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       return;
     }
 
+    const fullPhone = buildFullPhone();
+
     // Accepte le format camerounais (6XXXXXXXX) ou international (+indicatif...)
-    if (!phone.match(/^(6[0-9]{8}|\+[1-9][0-9]{6,14})$/)) {
-      Alert.alert('Erreur', 'Numéro invalide. Format camerounais 6XXXXXXXX, ou international avec l\'indicatif (ex: +33...).');
+    if (!fullPhone.match(/^(6[0-9]{8}|\+[1-9][0-9]{6,14})$/)) {
+      Alert.alert('Erreur', 'Numéro invalide. Format camerounais 6XXXXXXXX, ou international (indicatif + numéro).');
       return;
     }
 
     setIsLoading(true);
     try {
       if (isLogin) {
-        await login(phone, password);
+        await login(fullPhone, password);
       } else {
         if (!firstName || !lastName) {
           Alert.alert('Attention', 'Veuillez entrer votre nom et prénom');
@@ -62,7 +91,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         // Le compte est créé en PASSENGER (sécurité). Si l'utilisateur a choisi
         // Chauffeur ou Marchand, on l'orientera vers le formulaire de demande
         // (validation par l'admin ensuite).
-        await register({ phone, firstName, lastName, password });
+        await register({ phone: fullPhone, firstName, lastName, password });
 
         if (accountType === 'DRIVER') {
           Alert.alert(
@@ -171,24 +200,52 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           )}
 
           <View style={styles.phoneContainer}>
-            {!isInternational && (
+            {!isInternational ? (
               <View style={styles.phonePrefix}>
                 <Text style={styles.phonePrefixText}>🇨🇲 +237</Text>
               </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.phonePrefix}
+                onPress={() => setShowCountryList(!showCountryList)}
+                accessibilityRole="button"
+                accessibilityLabel="Choisir l'indicatif du pays"
+              >
+                <Text style={styles.phonePrefixText}>{selectedCountry.flag} {selectedCountry.code} ▾</Text>
+              </TouchableOpacity>
             )}
             <TextInput
               style={styles.phoneInput}
-              placeholder={isInternational ? '+33 6 12 34 56 78' : '6XXXXXXXX'}
+              placeholder={isInternational ? 'Numéro local (sans indicatif)' : '6XXXXXXXX'}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
-              maxLength={isInternational ? 16 : 9}
+              maxLength={isInternational ? 15 : 9}
               placeholderTextColor={colors.textLight}
               accessibilityLabel="Numéro de téléphone"
             />
           </View>
+
+          {/* Liste des indicatifs (mode international) */}
+          {isInternational && showCountryList && (
+            <View style={styles.countryList}>
+              {countries.map((c) => (
+                <TouchableOpacity
+                  key={c.code}
+                  style={styles.countryItem}
+                  onPress={() => { setCountryDialCode(c.code); setShowCountryList(false); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${c.name} ${c.code}`}
+                >
+                  <Text style={styles.countryItemText}>{c.flag}  {c.name}</Text>
+                  <Text style={styles.countryItemCode}>{c.code}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           <TouchableOpacity
-            onPress={() => { setIsInternational(!isInternational); setPhone(''); }}
+            onPress={() => { setIsInternational(!isInternational); setPhone(''); setShowCountryList(false); }}
             style={styles.intlToggle}
             accessibilityRole="button"
           >
@@ -399,6 +456,33 @@ const styles = StyleSheet.create({
     fontSize: typography.sm,
     color: colors.text,
     fontWeight: '600',
+  },
+  countryList: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  countryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  countryItemText: {
+    fontSize: typography.sm,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  countryItemCode: {
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+    fontWeight: '700',
   },
   phoneInput: {
     flex: 1,
