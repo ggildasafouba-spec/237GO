@@ -66,23 +66,51 @@ router.post('/notchpay', async (req: Request, res: Response) => {
   }
 });
 
-// Webhook CinetPay — Notification de paiement
+// Webhook CinetPay — notification de paiement (MoMo / Orange / carte).
+// CinetPay poste en x-www-form-urlencoded avec notre transaction_id dans cpm_trans_id.
+// La signature HMAC (header x-token) est vérifiée si CINETPAY_SECRET_KEY est défini,
+// mais la sécurité réelle vient de la re-vérification via l'API /payment/check.
 router.post('/cinetpay', async (req: Request, res: Response) => {
   try {
-    const { cpm_trans_id } = req.body;
-    console.log(`🔔 Webhook CinetPay: Transaction ${cpm_trans_id}`);
+    const body = req.body || {};
+    // Notre transaction_id arrive dans cpm_trans_id (ou metadata en repli).
+    const transId = body.cpm_trans_id || body.transaction_id || body.metadata;
 
-    if (!cpm_trans_id) {
+    console.log(`🔔 Webhook CinetPay: cpm_trans_id=${transId}`);
+
+    if (!transId) {
       return res.status(200).json({ success: true });
     }
 
-    // Vérifier le paiement auprès de CinetPay
-    const result = await verifyPayment(cpm_trans_id);
+    // Vérification de signature HMAC (informative) : CinetPay signe le corps
+    // (champs concaténés) avec la secret key et l'envoie dans le header x-token.
+    const secretKey = process.env.CINETPAY_SECRET_KEY || '';
+    const token = (req.headers['x-token'] as string | undefined) || body.token;
+    if (secretKey && token) {
+      try {
+        // Concaténation des champs cpm_* dans l'ordre reçu (modèle CinetPay HMAC-SHA256).
+        const dataString = [
+          body.cpm_site_id, body.cpm_trans_id, body.cpm_trans_date, body.cpm_amount,
+          body.cpm_currency, body.signature, body.payment_method, body.cel_phone_num,
+          body.cpm_phone_prefixe, body.cpm_language, body.cpm_version, body.cpm_payment_config,
+          body.cpm_page_action, body.cpm_custom, body.cpm_designation, body.cpm_error_message,
+        ].join('');
+        const computed = crypto.createHmac('sha256', secretKey).update(dataString).digest('hex');
+        if (computed !== token) {
+          console.warn('🔔 Webhook CinetPay: signature non concordante (traitement poursuivi après revérification API)');
+        }
+      } catch {
+        /* ignore — la revérification API reste la source de vérité */
+      }
+    }
+
+    // Source de vérité : re-vérifier le paiement auprès de CinetPay.
+    const result = await verifyPayment(transId);
 
     if (result.status === 'COMPLETED') {
-      await confirmDeposit(cpm_trans_id);
+      await confirmDeposit(transId);
     } else if (result.status === 'FAILED') {
-      await failDeposit(cpm_trans_id);
+      await failDeposit(transId);
     }
 
     res.status(200).json({ success: true });

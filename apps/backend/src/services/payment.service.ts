@@ -141,38 +141,67 @@ export interface PaymentResponse {
   message: string;
 }
 
+export function isCinetPayConfigured(): boolean {
+  return !!(cinetPayConfig.apiKey && cinetPayConfig.siteId);
+}
+
+/**
+ * Initialise un paiement CinetPay (page de paiement hébergée, API v2 checkout).
+ * CinetPay exige un montant multiple de 5 pour le mobile money (XAF/XOF).
+ * L'utilisateur choisit ensuite MoMo / Orange / carte sur la page CinetPay.
+ */
 export async function initiatePayment(data: PaymentRequest): Promise<PaymentResponse> {
   try {
-    const response = await axios.post(`${cinetPayConfig.baseUrl}/payment`, {
-      apikey: cinetPayConfig.apiKey,
-      site_id: cinetPayConfig.siteId,
-      transaction_id: data.transactionId,
-      amount: data.amount,
-      currency: data.currency || 'XAF',
-      description: data.description,
-      customer_phone_number: data.customerPhone,
-      customer_name: data.customerName,
-      channels: getChannel(data.paymentMethod),
-      notify_url: data.notifyUrl,
-      return_url: data.returnUrl || '',
-    });
+    // CinetPay impose un montant multiple de 5 pour le Mobile Money en zone CEMAC/UEMOA.
+    const amount = Math.round(data.amount / 5) * 5;
 
-    if (response.data.code === '201') {
+    // L'email est requis par l'API v2. On en fabrique un si absent.
+    const safePhone = (data.customerPhone || '').replace(/[^0-9]/g, '');
+    const customerEmail = (data as any).customerEmail || `${safePhone || 'client'}@237go.app`;
+
+    const response = await axios.post(
+      `${cinetPayConfig.baseUrl}/payment`,
+      {
+        apikey: cinetPayConfig.apiKey,
+        site_id: cinetPayConfig.siteId,
+        transaction_id: data.transactionId,
+        amount,
+        currency: data.currency || 'XAF',
+        description: data.description,
+        customer_name: data.customerName,
+        customer_surname: '',
+        customer_email: customerEmail,
+        customer_phone_number: data.customerPhone,
+        channels: getChannel(data.paymentMethod),
+        notify_url: data.notifyUrl,
+        return_url: data.returnUrl || '',
+        lang: 'fr',
+        metadata: data.transactionId,
+      },
+      { timeout: 20000 }
+    );
+
+    // L'API v2 renvoie code '201' + data.payment_url + data.payment_token
+    if (response.data?.code === '201' && response.data?.data?.payment_url) {
       return {
         success: true,
         paymentUrl: response.data.data.payment_url,
-        transactionRef: response.data.data.payment_token,
-        message: 'Paiement initié',
+        transactionRef: response.data.data.payment_token || data.transactionId,
+        message: 'Paiement initié. Finalisez sur la page sécurisée.',
       };
     }
 
-    return { success: false, message: response.data.message || 'Erreur CinetPay' };
+    return { success: false, message: response.data?.message || response.data?.description || 'Erreur CinetPay' };
   } catch (error: any) {
-    console.error('CinetPay Error:', error.message);
+    console.error('CinetPay Error:', error.response?.data || error.message);
     return { success: false, message: 'Service de paiement indisponible' };
   }
 }
 
+/**
+ * Vérifie l'état d'un paiement CinetPay par NOTRE transaction_id.
+ * C'est la source de vérité : on l'appelle après chaque notification webhook.
+ */
 export async function verifyPayment(transactionId: string): Promise<{
   success: boolean;
   status: 'COMPLETED' | 'PENDING' | 'FAILED';
@@ -180,28 +209,34 @@ export async function verifyPayment(transactionId: string): Promise<{
   message: string;
 }> {
   try {
-    const response = await axios.post(`${cinetPayConfig.baseUrl}/payment/check`, {
-      apikey: cinetPayConfig.apiKey,
-      site_id: cinetPayConfig.siteId,
-      transaction_id: transactionId,
-    });
+    const response = await axios.post(
+      `${cinetPayConfig.baseUrl}/payment/check`,
+      {
+        apikey: cinetPayConfig.apiKey,
+        site_id: cinetPayConfig.siteId,
+        transaction_id: transactionId,
+      },
+      { timeout: 20000 }
+    );
 
-    const status = response.data.data?.status;
+    // code '00' = opération réussie (paiement ACCEPTED). Sinon on lit data.status.
+    const code = (response.data?.code || '').toString();
+    const status = (response.data?.data?.status || '').toString().toUpperCase();
+    const amount = response.data?.data?.amount ? Number(response.data.data.amount) : undefined;
 
-    if (status === 'ACCEPTED') {
-      return {
-        success: true,
-        status: 'COMPLETED',
-        amount: response.data.data.amount,
-        message: 'Paiement confirmé',
-      };
-    } else if (status === 'PENDING') {
+    if (code === '00' || status === 'ACCEPTED' || status === 'SUCCES' || status === 'COMPLETED') {
+      return { success: true, status: 'COMPLETED', amount, message: 'Paiement confirmé' };
+    }
+    if (status === 'PENDING' || status === 'WAITING_FOR_CUSTOMER' || status === 'WAITING' || status === '') {
+      // Statut vide ou en attente : NE PAS marquer échoué.
       return { success: true, status: 'PENDING', message: 'Paiement en attente' };
     }
-
-    return { success: false, status: 'FAILED', message: 'Paiement échoué' };
+    // REFUSED, CANCELED, FAILED...
+    return { success: false, status: 'FAILED', message: `Paiement ${status || 'refusé'}` };
   } catch (error: any) {
-    return { success: false, status: 'FAILED', message: error.message };
+    // Erreur réseau/temporaire : rester en PENDING pour ne pas annuler à tort.
+    console.error('verifyPayment (CinetPay) error:', error.response?.data || error.message);
+    return { success: true, status: 'PENDING', message: 'Vérification temporairement indisponible' };
   }
 }
 
@@ -335,20 +370,43 @@ export async function initiateOrangeMoneyPayment(data: {
 // ========== HELPER ==========
 
 function getChannel(method: string): string {
+  // CinetPay v2 : 'ALL' = toutes méthodes, 'MOBILE_MONEY' = MoMo/Orange, 'CREDIT_CARD' = carte.
+  // On laisse 'ALL' par défaut pour que l'utilisateur choisisse MoMo OU Orange OU carte
+  // sur la page CinetPay (plus souple et moins d'erreurs qu'un canal imposé).
   switch (method) {
-    case 'ORANGE_MONEY': return 'ORANGE_MONEY';
-    case 'MTN_MOMO': return 'MOBILE_MONEY';
-    case 'EXPRESS_UNION': return 'EXPRESS_UNION';
-    default: return 'ALL';
+    case 'ORANGE_MONEY':
+    case 'MTN_MOMO':
+    case 'EXPRESS_UNION':
+      return 'MOBILE_MONEY';
+    default:
+      return 'ALL';
   }
 }
 
 // ========== PAIEMENT UNIFIÉ ==========
 
 export async function processPayment(data: PaymentRequest): Promise<PaymentResponse> {
-  // Passerelle prioritaire : NotchPay (gère MoMo + Orange + carte au Cameroun)
+  const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3002}`;
+
+  // Choix de la passerelle via PAYMENT_PROVIDER (cinetpay | notchpay).
+  // Par défaut : notchpay (comportement historique), avec repli automatique si l'un n'est pas configuré.
+  const provider = (process.env.PAYMENT_PROVIDER || 'notchpay').toLowerCase();
+
+  const useCinetPay =
+    (provider === 'cinetpay' && isCinetPayConfigured()) ||
+    (!isNotchPayConfigured() && isCinetPayConfigured());
+
+  if (useCinetPay) {
+    return initiatePayment({
+      ...data,
+      currency: data.currency || 'XAF',
+      notifyUrl: `${apiBaseUrl}/api/webhooks/cinetpay`,
+      returnUrl: data.returnUrl || `${apiBaseUrl}/api/webhooks/return`,
+    });
+  }
+
+  // Passerelle NotchPay (gère MoMo + Orange + carte au Cameroun)
   if (isNotchPayConfigured()) {
-    const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3002}`;
     return initiateNotchPay({
       amount: data.amount,
       phone: data.customerPhone,
