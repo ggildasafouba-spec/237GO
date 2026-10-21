@@ -39,6 +39,8 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
   const [isLoading, setIsLoading] = useState(false);
   const [dialCode, setDialCode] = useState('+237');
   const [showCountryList, setShowCountryList] = useState(false);
+  const [byEmail, setByEmail] = useState(false);
+  const [emailValue, setEmailValue] = useState('');
 
   const selectedCountry = COUNTRIES.find((c) => c.code === dialCode) || COUNTRIES[0];
   const isCameroon = dialCode === '+237';
@@ -49,16 +51,26 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     return `${dialCode}${phone.replace(/\D/g, '')}`;
   };
 
+  // Identifiant envoyé au backend : email ou numéro complet
+  const getIdentifier = () => (byEmail ? emailValue.trim().toLowerCase() : fullPhone());
+
   const handleRequestOtp = async () => {
-    const full = fullPhone();
-    const valid = isCameroon ? /^6[0-9]{8}$/.test(full) : /^\+[1-9][0-9]{6,14}$/.test(full);
-    if (!valid) {
-      Alert.alert('Numéro invalide', isCameroon ? 'Format attendu : 6XXXXXXXX' : 'Entrez votre numéro local (indicatif ajouté automatiquement).');
-      return;
+    const id = getIdentifier();
+    if (byEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id)) {
+        Alert.alert('Email invalide', 'Veuillez entrer une adresse email valide.');
+        return;
+      }
+    } else {
+      const valid = isCameroon ? /^6[0-9]{8}$/.test(id) : /^\+[1-9][0-9]{6,14}$/.test(id);
+      if (!valid) {
+        Alert.alert('Numéro invalide', isCameroon ? 'Format attendu : 6XXXXXXXX' : 'Entrez votre numéro local (indicatif ajouté automatiquement).');
+        return;
+      }
     }
     setIsLoading(true);
     try {
-      const res = await api.post('/auth/forgot-password', { phone: full });
+      const res = await api.post('/auth/forgot-password', { identifier: id });
       Alert.alert('Code envoyé', res.data.message);
       setStep('reset');
     } catch (error: any) {
@@ -79,7 +91,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     }
     setIsLoading(true);
     try {
-      const res = await api.post('/auth/reset-password', { phone: fullPhone(), otp, newPassword });
+      const res = await api.post('/auth/reset-password', { identifier: getIdentifier(), otp, newPassword });
       Alert.alert('Succès ✅', res.data.message, [
         { text: 'Se connecter', onPress: () => navigation.goBack() },
       ]);
@@ -99,45 +111,71 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
         {step === 'phone' ? (
           <>
             <Text style={styles.subtitle}>
-              Entrez votre numéro de téléphone. Nous vous enverrons un code de réinitialisation par SMS.
+              {byEmail
+                ? 'Entrez votre email. Nous vous enverrons un code de réinitialisation par email.'
+                : 'Entrez votre numéro de téléphone. Nous vous enverrons un code de réinitialisation par SMS.'}
             </Text>
 
-            <View style={styles.phoneContainer}>
-              <TouchableOpacity
-                style={styles.phonePrefix}
-                onPress={() => setShowCountryList(!showCountryList)}
-                accessibilityRole="button"
-                accessibilityLabel="Choisir l'indicatif du pays"
-              >
-                <Text style={styles.phonePrefixText}>{selectedCountry.flag} {selectedCountry.code} ▾</Text>
-              </TouchableOpacity>
+            {byEmail ? (
               <TextInput
-                style={styles.phoneInput}
-                placeholder={isCameroon ? '6XXXXXXXX' : 'Numéro local'}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                maxLength={isCameroon ? 9 : 15}
+                style={styles.input}
+                placeholder="Votre email"
+                value={emailValue}
+                onChangeText={setEmailValue}
+                keyboardType="email-address"
+                autoCapitalize="none"
                 placeholderTextColor={colors.textLight}
               />
-            </View>
-
-            {showCountryList && (
-              <View style={styles.countryList}>
-                {COUNTRIES.map((c) => (
+            ) : (
+              <>
+                <View style={styles.phoneContainer}>
                   <TouchableOpacity
-                    key={c.code}
-                    style={styles.countryItem}
-                    onPress={() => { setDialCode(c.code); setShowCountryList(false); setPhone(''); }}
+                    style={styles.phonePrefix}
+                    onPress={() => setShowCountryList(!showCountryList)}
                     accessibilityRole="button"
-                    accessibilityLabel={`${c.name} ${c.code}`}
+                    accessibilityLabel="Choisir l'indicatif du pays"
                   >
-                    <Text style={styles.countryItemText}>{c.flag}  {c.name}</Text>
-                    <Text style={styles.countryItemCode}>{c.code}</Text>
+                    <Text style={styles.phonePrefixText}>{selectedCountry.flag} {selectedCountry.code} ▾</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                  <TextInput
+                    style={styles.phoneInput}
+                    placeholder={isCameroon ? '6XXXXXXXX' : 'Numéro local'}
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    maxLength={isCameroon ? 9 : 15}
+                    placeholderTextColor={colors.textLight}
+                  />
+                </View>
+
+                {showCountryList && (
+                  <View style={styles.countryList}>
+                    {COUNTRIES.map((c) => (
+                      <TouchableOpacity
+                        key={c.code}
+                        style={styles.countryItem}
+                        onPress={() => { setDialCode(c.code); setShowCountryList(false); setPhone(''); }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${c.name} ${c.code}`}
+                      >
+                        <Text style={styles.countryItemText}>{c.flag}  {c.name}</Text>
+                        <Text style={styles.countryItemCode}>{c.code}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </>
             )}
+
+            <TouchableOpacity
+              onPress={() => { setByEmail(!byEmail); setShowCountryList(false); }}
+              style={styles.linkButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkText}>
+                {byEmail ? '📱 Utiliser mon numéro de téléphone' : '📧 Utiliser mon email'}
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -150,7 +188,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
         ) : (
           <>
             <Text style={styles.subtitle}>
-              Entrez le code reçu par SMS au {isCameroon ? `+237 ${phone}` : fullPhone()} et choisissez un nouveau mot de passe.
+              Entrez le code reçu {byEmail ? `par email à ${emailValue.trim()}` : `par SMS au ${getIdentifier()}`} et choisissez un nouveau mot de passe.
             </Text>
 
             <Text style={styles.label}>Code de vérification</Text>

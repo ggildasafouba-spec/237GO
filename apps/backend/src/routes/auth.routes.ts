@@ -6,6 +6,7 @@ import { body, validationResult } from 'express-validator';
 import { AppError } from '../middleware/error.middleware';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { sendSMS } from '../services/sms.service';
+import { sendPasswordResetEmail } from '../services/mail.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -99,11 +100,11 @@ router.post(
   }
 );
 
-// Connexion
+// Connexion — par numéro de téléphone OU par email
 router.post(
   '/login',
   [
-    body('phone').matches(/^(6[0-9]{8}|\+[1-9][0-9]{6,14})$/).withMessage('Numéro invalide'),
+    // "identifier" = téléphone (6XXXXXXXX / +...) OU email. On garde "phone" en compat.
     body('password').notEmpty().withMessage('Mot de passe requis'),
   ],
   async (req: Request, res: Response) => {
@@ -113,11 +114,22 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const { phone, password } = req.body;
+      const { phone, identifier, password } = req.body;
+      // On accepte "identifier" (nouveau) ou "phone" (ancien) comme identifiant de connexion
+      const rawId = String(identifier || phone || '').trim();
+      if (!rawId) {
+        throw new AppError('Veuillez entrer votre numéro ou votre email', 400);
+      }
 
-      const user = await prisma.user.findUnique({ where: { phone } });
+      // Si l'identifiant ressemble à un email, on cherche par email (insensible à la casse) ;
+      // sinon on cherche par numéro de téléphone.
+      const isEmail = rawId.includes('@');
+      const user = isEmail
+        ? await prisma.user.findUnique({ where: { email: rawId.toLowerCase() } })
+        : await prisma.user.findUnique({ where: { phone: rawId } });
+
       if (!user) {
-        throw new AppError('Numéro ou mot de passe incorrect', 401);
+        throw new AppError('Identifiant ou mot de passe incorrect', 401);
       }
 
       // Vérifier le mot de passe
@@ -126,7 +138,7 @@ router.post(
       }
       const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
       if (!isPasswordValid) {
-        throw new AppError('Numéro ou mot de passe incorrect', 401);
+        throw new AppError('Identifiant ou mot de passe incorrect', 401);
       }
 
       const token = jwt.sign(
@@ -142,6 +154,7 @@ router.post(
           user: {
             id: user.id,
             phone: user.phone,
+            email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
             role: user.role,
@@ -159,25 +172,33 @@ router.post(
   }
 );
 
-// Mot de passe oublié — demande d'un code OTP par SMS
+// Recherche un utilisateur par identifiant (email si "@", sinon téléphone)
+async function findUserByIdentifier(rawId: string) {
+  const id = rawId.trim();
+  if (id.includes('@')) {
+    return prisma.user.findUnique({ where: { email: id.toLowerCase() } });
+  }
+  return prisma.user.findUnique({ where: { phone: id } });
+}
+
+// Mot de passe oublié — code OTP envoyé par SMS et/ou email
 router.post(
   '/forgot-password',
-  [body('phone').matches(/^6[0-9]{8}$/).withMessage('Numéro camerounais invalide')],
+  [body('identifier').optional(), body('phone').optional()],
   async (req: Request, res: Response) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ success: false, errors: errors.array() });
+      const rawId = String(req.body.identifier || req.body.phone || '').trim();
+      if (!rawId) {
+        return res.status(400).json({ success: false, message: 'Veuillez entrer votre numéro ou votre email' });
       }
 
-      const { phone } = req.body;
-      const user = await prisma.user.findUnique({ where: { phone } });
+      const user = await findUserByIdentifier(rawId);
 
-      // Toujours répondre succès pour ne pas révéler si le numéro existe (sécurité)
+      // Toujours répondre succès pour ne pas révéler si le compte existe (sécurité)
       if (!user) {
         return res.json({
           success: true,
-          message: 'Si ce numéro est enregistré, un code de réinitialisation a été envoyé.',
+          message: 'Si ce compte existe, un code de réinitialisation a été envoyé.',
         });
       }
 
@@ -190,10 +211,19 @@ router.post(
         data: { resetOtp: otp, resetOtpExpiry: expiry },
       });
 
-      // Envoyer le code par SMS (best-effort : ne bloque pas si l'envoi échoue)
+      // Envoi par EMAIL si disponible (fiable à l'international) — best-effort
+      if (user.email) {
+        try {
+          await sendPasswordResetEmail(user.email, otp);
+        } catch (e) {
+          console.error('Échec envoi email reset (non bloquant):', (e as Error).message);
+        }
+      }
+
+      // Envoi par SMS aussi (best-effort) — utile pour les numéros locaux
       try {
         await sendSMS({
-          to: phone,
+          to: user.phone,
           message: `237GO: Votre code de réinitialisation est ${otp}. Valable 10 minutes. Ne le partagez pas.`,
         });
       } catch (smsError) {
@@ -202,7 +232,7 @@ router.post(
 
       res.json({
         success: true,
-        message: 'Si ce numéro est enregistré, un code de réinitialisation a été envoyé.',
+        message: 'Si ce compte existe, un code de réinitialisation a été envoyé (SMS et/ou email).',
       });
     } catch (error) {
       console.error('forgot-password error:', error);
@@ -215,7 +245,6 @@ router.post(
 router.post(
   '/reset-password',
   [
-    body('phone').matches(/^6[0-9]{8}$/).withMessage('Numéro invalide'),
     body('otp').isLength({ min: 6, max: 6 }).withMessage('Code à 6 chiffres requis'),
     body('newPassword').isLength({ min: 6 }).withMessage('Mot de passe minimum 6 caractères'),
   ],
@@ -226,8 +255,9 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const { phone, otp, newPassword } = req.body;
-      const user = await prisma.user.findUnique({ where: { phone } });
+      const { phone, identifier, otp, newPassword } = req.body;
+      const rawId = String(identifier || phone || '').trim();
+      const user = await findUserByIdentifier(rawId);
 
       if (!user || !user.resetOtp || !user.resetOtpExpiry) {
         throw new AppError('Demande de réinitialisation invalide', 400);

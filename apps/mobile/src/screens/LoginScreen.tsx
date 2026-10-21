@@ -29,6 +29,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [isInternational, setIsInternational] = useState(false);
   const [countryDialCode, setCountryDialCode] = useState('+33'); // indicatif par défaut à l'étranger (France)
   const [showCountryList, setShowCountryList] = useState(false);
+  const [loginByEmail, setLoginByEmail] = useState(false); // connexion par email (surtout diaspora)
+  const [loginEmail, setLoginEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -66,8 +68,32 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const { login, register } = useAuthStore();
 
   const handleSubmit = async () => {
-    if (!phone || !password) {
-      Alert.alert('Attention', 'Veuillez remplir tous les champs');
+    if (!password) {
+      Alert.alert('Attention', 'Veuillez entrer votre mot de passe');
+      return;
+    }
+
+    // Connexion par email (si activée en mode connexion)
+    if (isLogin && loginByEmail) {
+      const em = loginEmail.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        Alert.alert('Email invalide', 'Veuillez entrer une adresse email valide.');
+        return;
+      }
+      setIsLoading(true);
+      try {
+        await login(em, password); // le backend accepte email ou téléphone
+      } catch (error: any) {
+        const data = error?.response?.data;
+        Alert.alert('Erreur', data?.message || 'Identifiant ou mot de passe incorrect');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (!phone) {
+      Alert.alert('Attention', 'Veuillez entrer votre numéro de téléphone');
       return;
     }
 
@@ -228,32 +254,59 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </>
           )}
 
-          <View style={styles.phoneContainer}>
-            {!isInternational ? (
-              <View style={styles.phonePrefix}>
-                <Text style={styles.phonePrefixText}>🇨🇲 +237</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.phonePrefix}
-                onPress={() => setShowCountryList(!showCountryList)}
-                accessibilityRole="button"
-                accessibilityLabel="Choisir l'indicatif du pays"
-              >
-                <Text style={styles.phonePrefixText}>{selectedCountry.flag} {selectedCountry.code} ▾</Text>
-              </TouchableOpacity>
-            )}
+          {isLogin && loginByEmail ? (
+            /* Connexion par email */
             <TextInput
-              style={styles.phoneInput}
-              placeholder={isInternational ? 'Numéro local (sans indicatif)' : '6XXXXXXXX'}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              maxLength={isInternational ? 15 : 9}
+              style={styles.input}
+              placeholder="Votre email"
+              value={loginEmail}
+              onChangeText={setLoginEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
               placeholderTextColor={colors.textLight}
-              accessibilityLabel="Numéro de téléphone"
+              accessibilityLabel="Adresse email"
             />
-          </View>
+          ) : (
+            <View style={styles.phoneContainer}>
+              {!isInternational ? (
+                <View style={styles.phonePrefix}>
+                  <Text style={styles.phonePrefixText}>🇨🇲 +237</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.phonePrefix}
+                  onPress={() => setShowCountryList(!showCountryList)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choisir l'indicatif du pays"
+                >
+                  <Text style={styles.phonePrefixText}>{selectedCountry.flag} {selectedCountry.code} ▾</Text>
+                </TouchableOpacity>
+              )}
+              <TextInput
+                style={styles.phoneInput}
+                placeholder={isInternational ? 'Numéro local (sans indicatif)' : '6XXXXXXXX'}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                maxLength={isInternational ? 15 : 9}
+                placeholderTextColor={colors.textLight}
+                accessibilityLabel="Numéro de téléphone"
+              />
+            </View>
+          )}
+
+          {/* Bascule connexion email / téléphone (mode connexion seulement) */}
+          {isLogin && (
+            <TouchableOpacity
+              onPress={() => setLoginByEmail(!loginByEmail)}
+              style={styles.intlToggle}
+              accessibilityRole="button"
+            >
+              <Text style={styles.intlToggleText}>
+                {loginByEmail ? '📱 Me connecter avec mon numéro' : '📧 Me connecter avec mon email'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Liste des indicatifs (mode international) */}
           {isInternational && showCountryList && (
@@ -273,6 +326,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </View>
           )}
 
+          {!(isLogin && loginByEmail) && (
           <TouchableOpacity
             onPress={() => { setIsInternational(!isInternational); setPhone(''); setShowCountryList(false); }}
             style={styles.intlToggle}
@@ -282,6 +336,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
               {isInternational ? '🇨🇲 J\'ai un numéro camerounais' : '🌍 Je suis à l\'étranger (numéro international)'}
             </Text>
           </TouchableOpacity>
+          )}
 
           <View style={styles.passwordContainer}>
             <TextInput
