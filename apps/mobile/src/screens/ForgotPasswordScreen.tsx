@@ -15,6 +15,20 @@ import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
+const COUNTRIES = [
+  { code: '+237', flag: '🇨🇲', name: 'Cameroun' },
+  { code: '+33', flag: '🇫🇷', name: 'France' },
+  { code: '+32', flag: '🇧🇪', name: 'Belgique' },
+  { code: '+1', flag: '🇺🇸', name: 'USA / Canada' },
+  { code: '+44', flag: '🇬🇧', name: 'Royaume-Uni' },
+  { code: '+49', flag: '🇩🇪', name: 'Allemagne' },
+  { code: '+41', flag: '🇨🇭', name: 'Suisse' },
+  { code: '+39', flag: '🇮🇹', name: 'Italie' },
+  { code: '+34', flag: '🇪🇸', name: 'Espagne' },
+  { code: '+971', flag: '🇦🇪', name: 'Émirats' },
+  { code: '+86', flag: '🇨🇳', name: 'Chine' },
+];
+
 export default function ForgotPasswordScreen({ navigation }: { navigation: any }) {
   const safe = useSafeScreen();
   const [step, setStep] = useState<'phone' | 'reset'>('phone');
@@ -23,15 +37,28 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [dialCode, setDialCode] = useState('+237');
+  const [showCountryList, setShowCountryList] = useState(false);
+
+  const selectedCountry = COUNTRIES.find((c) => c.code === dialCode) || COUNTRIES[0];
+  const isCameroon = dialCode === '+237';
+
+  // Numéro complet : Cameroun = 6XXXXXXXX tel quel ; sinon indicatif + numéro local
+  const fullPhone = () => {
+    if (isCameroon) return phone.trim();
+    return `${dialCode}${phone.replace(/\D/g, '')}`;
+  };
 
   const handleRequestOtp = async () => {
-    if (!phone.match(/^6[0-9]{8}$/)) {
-      Alert.alert('Numéro invalide', 'Format attendu : 6XXXXXXXX');
+    const full = fullPhone();
+    const valid = isCameroon ? /^6[0-9]{8}$/.test(full) : /^\+[1-9][0-9]{6,14}$/.test(full);
+    if (!valid) {
+      Alert.alert('Numéro invalide', isCameroon ? 'Format attendu : 6XXXXXXXX' : 'Entrez votre numéro local (indicatif ajouté automatiquement).');
       return;
     }
     setIsLoading(true);
     try {
-      const res = await api.post('/auth/forgot-password', { phone });
+      const res = await api.post('/auth/forgot-password', { phone: full });
       Alert.alert('Code envoyé', res.data.message);
       setStep('reset');
     } catch (error: any) {
@@ -52,7 +79,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     }
     setIsLoading(true);
     try {
-      const res = await api.post('/auth/reset-password', { phone, otp, newPassword });
+      const res = await api.post('/auth/reset-password', { phone: fullPhone(), otp, newPassword });
       Alert.alert('Succès ✅', res.data.message, [
         { text: 'Se connecter', onPress: () => navigation.goBack() },
       ]);
@@ -76,19 +103,41 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
             </Text>
 
             <View style={styles.phoneContainer}>
-              <View style={styles.phonePrefix}>
-                <Text style={styles.phonePrefixText}>🇨🇲 +237</Text>
-              </View>
+              <TouchableOpacity
+                style={styles.phonePrefix}
+                onPress={() => setShowCountryList(!showCountryList)}
+                accessibilityRole="button"
+                accessibilityLabel="Choisir l'indicatif du pays"
+              >
+                <Text style={styles.phonePrefixText}>{selectedCountry.flag} {selectedCountry.code} ▾</Text>
+              </TouchableOpacity>
               <TextInput
                 style={styles.phoneInput}
-                placeholder="6XXXXXXXX"
+                placeholder={isCameroon ? '6XXXXXXXX' : 'Numéro local'}
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
-                maxLength={9}
+                maxLength={isCameroon ? 9 : 15}
                 placeholderTextColor={colors.textLight}
               />
             </View>
+
+            {showCountryList && (
+              <View style={styles.countryList}>
+                {COUNTRIES.map((c) => (
+                  <TouchableOpacity
+                    key={c.code}
+                    style={styles.countryItem}
+                    onPress={() => { setDialCode(c.code); setShowCountryList(false); setPhone(''); }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${c.name} ${c.code}`}
+                  >
+                    <Text style={styles.countryItemText}>{c.flag}  {c.name}</Text>
+                    <Text style={styles.countryItemCode}>{c.code}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -101,7 +150,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
         ) : (
           <>
             <Text style={styles.subtitle}>
-              Entrez le code reçu par SMS au +237 {phone} et choisissez un nouveau mot de passe.
+              Entrez le code reçu par SMS au {isCameroon ? `+237 ${phone}` : fullPhone()} et choisissez un nouveau mot de passe.
             </Text>
 
             <Text style={styles.label}>Code de vérification</Text>
@@ -159,13 +208,17 @@ const styles = StyleSheet.create({
   title: { fontSize: typography.xxl, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: spacing.sm },
   subtitle: { fontSize: typography.sm, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: spacing.lg, lineHeight: 20 },
   label: { fontSize: typography.sm, fontWeight: '600', color: '#fff', marginBottom: spacing.xs, marginTop: spacing.md },
-  input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md },
+  input: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, color: colors.text },
   phoneContainer: { flexDirection: 'row', marginBottom: spacing.md },
   phonePrefix: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, marginRight: spacing.sm, justifyContent: 'center' },
   phonePrefixText: { fontSize: typography.sm, color: colors.text, fontWeight: '600' },
-  phoneInput: { flex: 1, backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md },
+  phoneInput: { flex: 1, backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, fontSize: typography.md, color: colors.text },
+  countryList: { backgroundColor: '#fff', borderRadius: 12, marginBottom: spacing.md, overflow: 'hidden' },
+  countryItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  countryItemText: { fontSize: typography.sm, color: colors.text, fontWeight: '500' },
+  countryItemCode: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '700' },
   passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12 },
-  passwordInput: { flex: 1, padding: spacing.md, fontSize: typography.md },
+  passwordInput: { flex: 1, padding: spacing.md, fontSize: typography.md, color: colors.text },
   eyeButton: { padding: spacing.md },
   eyeIcon: { fontSize: 18 },
   button: { backgroundColor: colors.secondary, padding: spacing.md + 2, borderRadius: 12, alignItems: 'center', marginTop: spacing.lg },

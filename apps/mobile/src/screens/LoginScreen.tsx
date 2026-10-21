@@ -386,6 +386,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    color: colors.text,
   },
   accountTypeLabel: {
     fontSize: typography.sm,
@@ -492,6 +493,7 @@ const styles = StyleSheet.create({
     fontSize: typography.md,
     borderWidth: 1,
     borderColor: colors.border,
+    color: colors.text,
   },
   passwordContainer: {
     flexDirection: 'row',
@@ -506,6 +508,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
     fontSize: typography.md,
+    color: colors.text,
   },
   eyeButton: {
     padding: spacing.md,
