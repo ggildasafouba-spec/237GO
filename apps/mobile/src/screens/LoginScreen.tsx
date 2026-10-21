@@ -21,6 +21,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const safe = useSafeScreen();
   const [isLogin, setIsLogin] = useState(true);
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -88,10 +89,22 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           setIsLoading(false);
           return;
         }
+        // Email : obligatoire pour la diaspora (mode international), optionnel sinon
+        const trimmedEmail = email.trim();
+        if (isInternational && !trimmedEmail) {
+          Alert.alert('Email requis', 'Depuis l\'étranger, un email est nécessaire (pour la récupération de compte).');
+          setIsLoading(false);
+          return;
+        }
+        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          Alert.alert('Email invalide', 'Veuillez entrer une adresse email valide.');
+          setIsLoading(false);
+          return;
+        }
         // Le compte est créé en PASSENGER (sécurité). Si l'utilisateur a choisi
         // Chauffeur ou Marchand, on l'orientera vers le formulaire de demande
         // (validation par l'admin ensuite).
-        await register({ phone: fullPhone, firstName, lastName, password });
+        await register({ phone: fullPhone, firstName, lastName, password, email: trimmedEmail || undefined });
 
         if (accountType === 'DRIVER') {
           Alert.alert(
@@ -171,6 +184,22 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
                 placeholderTextColor={colors.textLight}
                 accessibilityLabel="Nom de famille"
               />
+
+              <TextInput
+                style={styles.input}
+                placeholder={isInternational ? 'Email (obligatoire à l\'étranger)' : 'Email (optionnel)'}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholderTextColor={colors.textLight}
+                accessibilityLabel="Adresse email"
+              />
+              {isInternational && (
+                <Text style={styles.accountTypeHint}>
+                  📧 Depuis l'étranger, l'email permet de récupérer votre compte (le SMS international n'est pas toujours fiable).
+                </Text>
+              )}
 
               {/* Choix du type de compte */}
               <Text style={styles.accountTypeLabel}>Je m'inscris en tant que</Text>

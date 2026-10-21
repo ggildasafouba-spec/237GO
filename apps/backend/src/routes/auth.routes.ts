@@ -20,6 +20,8 @@ router.post(
     body('lastName').trim().notEmpty().withMessage('Nom requis'),
     body('password').isLength({ min: 6 }).withMessage('Mot de passe minimum 6 caractères'),
     body('role').optional().isIn(['PASSENGER', 'DRIVER', 'MERCHANT']),
+    // Email : optionnel, mais requis pour les numéros internationaux (diaspora)
+    body('email').optional({ values: 'falsy' }).isEmail().withMessage('Email invalide'),
   ],
   async (req: Request, res: Response) => {
     try {
@@ -28,12 +30,28 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const { phone, firstName, lastName, password, role, language } = req.body;
+      const { phone, firstName, lastName, password, role, language, email } = req.body;
 
-      // Vérifier si l'utilisateur existe déjà
+      // L'email est obligatoire pour les comptes internationaux (diaspora),
+      // car le SMS international est coûteux/peu fiable : l'email sert de secours.
+      const isInternational = phone.startsWith('+') && !phone.startsWith('+237');
+      if (isInternational && !email) {
+        throw new AppError('Un email est requis pour les inscriptions avec un numéro international', 400);
+      }
+
+      // Vérifier si le numéro existe déjà
       const existingUser = await prisma.user.findUnique({ where: { phone } });
       if (existingUser) {
         throw new AppError('Ce numéro de téléphone est déjà enregistré', 409);
+      }
+
+      // Vérifier l'unicité de l'email s'il est fourni
+      const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+      if (normalizedEmail) {
+        const emailTaken = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (emailTaken) {
+          throw new AppError('Cet email est déjà utilisé', 409);
+        }
       }
 
       const hashedPassword = await bcrypt.hash(password, 12);
@@ -41,6 +59,7 @@ router.post(
       const user = await prisma.user.create({
         data: {
           phone,
+          email: normalizedEmail,
           firstName,
           lastName,
           passwordHash: hashedPassword,
@@ -52,6 +71,7 @@ router.post(
         select: {
           id: true,
           phone: true,
+          email: true,
           firstName: true,
           lastName: true,
           role: true,

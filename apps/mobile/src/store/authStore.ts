@@ -25,6 +25,7 @@ interface AuthState {
     firstName: string;
     lastName: string;
     password: string;
+    email?: string;
     role?: string;
     language?: string;
   }) => Promise<void>;
