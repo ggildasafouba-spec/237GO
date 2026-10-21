@@ -172,11 +172,20 @@ async function sendViaInfobip(phone: string, message: string): Promise<SMSRespon
 // ========== HELPERS ==========
 
 function formatPhone(phone: string): string {
-  // Convertir 6XXXXXXXX en +2376XXXXXXXX
-  const cleaned = phone.replace(/\D/g, '');
+  const trimmed = (phone || '').trim();
+
+  // Numéro international déjà fourni avec son indicatif (+33..., +1..., etc.) : on le respecte.
+  if (trimmed.startsWith('+')) {
+    return `+${trimmed.replace(/\D/g, '')}`;
+  }
+
+  const cleaned = trimmed.replace(/\D/g, '');
+  // Déjà préfixé Cameroun
   if (cleaned.startsWith('237')) return `+${cleaned}`;
-  if (cleaned.startsWith('6')) return `+237${cleaned}`;
-  return `+237${cleaned}`;
+  // Numéro local camerounais (6XXXXXXXX) : on ajoute l'indicatif Cameroun
+  if (cleaned.startsWith('6') && cleaned.length === 9) return `+237${cleaned}`;
+  // Par défaut (chiffres sans +) : on préfixe + tel quel, sans forcer le Cameroun
+  return `+${cleaned}`;
 }
 
 function generateOTP(): string {
