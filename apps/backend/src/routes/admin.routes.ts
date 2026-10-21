@@ -605,6 +605,63 @@ router.put('/settings', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ========== RÉINITIALISATION DES DONNÉES DE TEST ==========
+// Vide les données financières/d'activité de test et remet les soldes à 0.
+// NE SUPPRIME PAS les comptes utilisateurs, chauffeurs, marchands, véhicules, produits.
+// Protégé : réservé admin + nécessite { confirm: "RESET" } dans le corps.
+router.post('/reset-test-data', async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.body?.confirm !== 'RESET') {
+      return res.status(400).json({
+        success: false,
+        message: 'Confirmation requise : envoyez { "confirm": "RESET" } pour réinitialiser.',
+      });
+    }
+
+    // Ordre de suppression : enfants d'abord, puis parents (contraintes FK).
+    const result = await prisma.$transaction(async (tx) => {
+      const ratings = await tx.rating.deleteMany({});
+      const orderItems = await tx.orderItem.deleteMany({});
+      const marketOrders = await tx.marketOrder.deleteMany({});
+      const rentalBookings = await tx.rentalBooking.deleteMany({});
+      const carpoolBookings = await tx.carpoolBooking.deleteMany({});
+      const carpools = await tx.carpool.deleteMany({});
+      const rides = await tx.ride.deleteMany({});
+      const deliveries = await tx.delivery.deleteMany({});
+      const escrows = await tx.escrow.deleteMany({});
+      const transactions = await tx.transaction.deleteMany({});
+      // Remettre tous les soldes de portefeuille à 0
+      const wallets = await tx.wallet.updateMany({ data: { balance: 0 } });
+      // Remettre les points de fidélité à 0
+      const loyalty = await tx.loyaltyPoints.updateMany({ data: { points: 0, tier: 'BRONZE' } });
+
+      return {
+        transactions: transactions.count,
+        escrows: escrows.count,
+        rides: rides.count,
+        deliveries: deliveries.count,
+        carpools: carpools.count,
+        carpoolBookings: carpoolBookings.count,
+        rentalBookings: rentalBookings.count,
+        marketOrders: marketOrders.count,
+        orderItems: orderItems.count,
+        ratings: ratings.count,
+        walletsReset: wallets.count,
+        loyaltyReset: loyalty.count,
+      };
+    });
+
+    res.json({
+      success: true,
+      message: 'Données de test réinitialisées. Comptes, chauffeurs, marchands et véhicules conservés.',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('reset-test-data error:', error?.message || error);
+    res.status(500).json({ success: false, message: 'Erreur lors de la réinitialisation' });
+  }
+});
+
 // ========== GESTION DES ESCROWS ==========
 
 // Lister les escrows (filtrable par statut)

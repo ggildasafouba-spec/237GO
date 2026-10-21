@@ -55,6 +55,34 @@ export default function Finance() {
 
   const fmt = (n: number) => (n / 1000000).toFixed(2) + 'M XAF';
 
+  const [resetting, setResetting] = useState(false);
+  const handleResetTestData = async () => {
+    const ok = window.confirm(
+      '⚠️ RÉINITIALISATION DES DONNÉES DE TEST\n\n' +
+      'Cela va SUPPRIMER DÉFINITIVEMENT :\n' +
+      '• toutes les transactions\n• tous les escrows\n• courses, livraisons, covoiturages, locations, commandes\n• les avis\n' +
+      'et remettre tous les soldes de portefeuille et points de fidélité à 0.\n\n' +
+      'Les comptes utilisateurs, chauffeurs, marchands et véhicules sont CONSERVÉS.\n\n' +
+      'Cette action est IRRÉVERSIBLE. Continuer ?'
+    );
+    if (!ok) return;
+    const typed = window.prompt('Pour confirmer, tapez : RESET');
+    if (typed !== 'RESET') {
+      alert('Confirmation incorrecte. Réinitialisation annulée.');
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await api.post('/admin/reset-test-data', { confirm: 'RESET' });
+      alert('✅ ' + (res.data?.message || 'Données réinitialisées.'));
+      await loadFinance();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Échec de la réinitialisation');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <div>
       <div style={styles.header}>
@@ -65,6 +93,9 @@ export default function Finance() {
               {p === 'week' ? 'Semaine' : p === 'month' ? 'Mois' : 'Année'}
             </button>
           ))}
+          <button onClick={handleResetTestData} disabled={resetting} style={styles.resetBtn}>
+            {resetting ? 'Réinitialisation…' : '🗑️ Réinitialiser les données de test'}
+          </button>
         </div>
       </div>
 
@@ -133,6 +164,7 @@ const styles: Record<string, React.CSSProperties> = {
   periodBtns: { display: 'flex', gap: 8 },
   periodBtn: { padding: '8px 16px', backgroundColor: '#f5f5f5', borderRadius: 6, fontSize: 13, fontWeight: 600, color: '#757575', cursor: 'pointer' },
   periodActive: { backgroundColor: '#1DB954', color: '#fff' },
+  resetBtn: { padding: '8px 16px', backgroundColor: '#FFEBEE', color: '#D32F2F', border: '1px solid #F5C6CB', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   errorBox: { backgroundColor: '#FFEBEE', color: '#D32F2F', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 14 },
   empty: { backgroundColor: '#fff', padding: 48, borderRadius: 12, textAlign: 'center', color: '#999' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 },
