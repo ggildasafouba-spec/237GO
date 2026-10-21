@@ -7,6 +7,7 @@ import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../ser
 import { sendPushNotification } from '../services/notification.service';
 import { aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
 import { submitRating, RatingError } from '../services/rating.service';
+import { dispatchToNearbyDrivers } from '../services/matching.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -125,17 +126,27 @@ router.post(
         },
       });
 
-      // Notifier les chauffeurs à proximité via Socket.IO
+      // Notifier uniquement les chauffeurs à proximité (du plus proche au plus loin),
+      // avec élargissement automatique du rayon si personne n'accepte.
       const io = req.app.get('io');
-      io.to(`drivers:${vehicleType}`).emit('new_ride_request', {
-        rideId: ride.id,
-        pickup: { lat: pickupLat, lng: pickupLng, address: pickupAddress },
-        dropoff: { lat: dropoffLat, lng: dropoffLng, address: dropoffAddress },
-        estimatedPrice,
-        proposedPrice: proposedPrice || null,
+      await dispatchToNearbyDrivers({
+        io,
+        event: 'new_ride_request',
         vehicleType,
-        distance,
-        duration,
+        pickupLat,
+        pickupLng,
+        serviceType: 'ride',
+        serviceId: ride.id,
+        payload: {
+          rideId: ride.id,
+          pickup: { lat: pickupLat, lng: pickupLng, address: pickupAddress },
+          dropoff: { lat: dropoffLat, lng: dropoffLng, address: dropoffAddress },
+          estimatedPrice,
+          proposedPrice: proposedPrice || null,
+          vehicleType,
+          distance,
+          duration,
+        },
       });
 
       res.status(201).json({

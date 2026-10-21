@@ -6,6 +6,7 @@ import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { submitRating, RatingError } from '../services/rating.service';
+import { dispatchToNearbyDrivers } from '../services/matching.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -123,15 +124,24 @@ router.post(
         },
       });
 
-      // Notifier les livreurs disponibles
+      // Notifier uniquement les livreurs à proximité (élargissement auto si besoin)
       const io = req.app.get('io');
-      io.to('drivers:delivery').emit('new_delivery_request', {
-        deliveryId: delivery.id,
-        pickup: { lat: pickupLat, lng: pickupLng, address: pickupAddress },
-        dropoff: { lat: dropoffLat, lng: dropoffLng, address: dropoffAddress },
-        packageType,
-        estimatedPrice,
-        distance,
+      await dispatchToNearbyDrivers({
+        io,
+        event: 'new_delivery_request',
+        // pas de vehicleType : tout chauffeur en ligne peut livrer
+        pickupLat,
+        pickupLng,
+        serviceType: 'delivery',
+        serviceId: delivery.id,
+        payload: {
+          deliveryId: delivery.id,
+          pickup: { lat: pickupLat, lng: pickupLng, address: pickupAddress },
+          dropoff: { lat: dropoffLat, lng: dropoffLng, address: dropoffAddress },
+          packageType,
+          estimatedPrice,
+          distance,
+        },
       });
 
       res.status(201).json({
