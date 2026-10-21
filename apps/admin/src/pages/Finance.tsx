@@ -56,28 +56,27 @@ export default function Finance() {
   const fmt = (n: number) => (n / 1000000).toFixed(2) + 'M XAF';
 
   const [resetting, setResetting] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetResult, setResetResult] = useState<string>('');
+
+  const openResetModal = () => {
+    setResetConfirmText('');
+    setResetResult('');
+    setShowResetModal(true);
+  };
+
   const handleResetTestData = async () => {
-    const ok = window.confirm(
-      '⚠️ RÉINITIALISATION DES DONNÉES DE TEST\n\n' +
-      'Cela va SUPPRIMER DÉFINITIVEMENT :\n' +
-      '• toutes les transactions\n• tous les escrows\n• courses, livraisons, covoiturages, locations, commandes\n• les avis\n' +
-      'et remettre tous les soldes de portefeuille et points de fidélité à 0.\n\n' +
-      'Les comptes utilisateurs, chauffeurs, marchands et véhicules sont CONSERVÉS.\n\n' +
-      'Cette action est IRRÉVERSIBLE. Continuer ?'
-    );
-    if (!ok) return;
-    const typed = window.prompt('Pour confirmer, tapez : RESET');
-    if (typed !== 'RESET') {
-      alert('Confirmation incorrecte. Réinitialisation annulée.');
-      return;
-    }
+    if (resetConfirmText !== 'RESET') return;
     setResetting(true);
+    setResetResult('');
     try {
       const res = await api.post('/admin/reset-test-data', { confirm: 'RESET' });
-      alert('✅ ' + (res.data?.message || 'Données réinitialisées.'));
+      setResetResult('✅ ' + (res.data?.message || 'Données réinitialisées.'));
       await loadFinance();
+      setResetConfirmText('');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Échec de la réinitialisation');
+      setResetResult('❌ ' + (err.response?.data?.message || err.message || 'Échec de la réinitialisation'));
     } finally {
       setResetting(false);
     }
@@ -93,11 +92,62 @@ export default function Finance() {
               {p === 'week' ? 'Semaine' : p === 'month' ? 'Mois' : 'Année'}
             </button>
           ))}
-          <button onClick={handleResetTestData} disabled={resetting} style={styles.resetBtn}>
+          <button type="button" onClick={openResetModal} disabled={resetting} style={styles.resetBtn}>
             {resetting ? 'Réinitialisation…' : '🗑️ Réinitialiser les données de test'}
           </button>
         </div>
       </div>
+
+      {showResetModal && (
+        <div style={styles.modalOverlay} onClick={() => !resetting && setShowResetModal(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.modalTitle}>⚠️ Réinitialiser les données de test</h2>
+            <p style={styles.modalText}>
+              Cette action va <strong>supprimer définitivement</strong> toutes les transactions, escrows,
+              courses, livraisons, covoiturages, locations, commandes et avis, puis remettre tous les
+              soldes de portefeuille et points de fidélité à 0.
+            </p>
+            <p style={styles.modalText}>
+              Les comptes <strong>utilisateurs, chauffeurs, marchands et véhicules sont conservés</strong>.
+            </p>
+            <p style={{ ...styles.modalText, color: '#D32F2F', fontWeight: 700 }}>
+              Cette action est irréversible.
+            </p>
+            <p style={styles.modalText}>Pour confirmer, tapez <strong>RESET</strong> ci-dessous :</p>
+            <input
+              autoFocus
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              placeholder="RESET"
+              style={styles.modalInput}
+              disabled={resetting}
+            />
+            {resetResult && <div style={styles.modalResult}>{resetResult}</div>}
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                disabled={resetting}
+                style={styles.modalCancel}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleResetTestData}
+                disabled={resetting || resetConfirmText !== 'RESET'}
+                style={{
+                  ...styles.modalConfirm,
+                  opacity: resetting || resetConfirmText !== 'RESET' ? 0.5 : 1,
+                  cursor: resetting || resetConfirmText !== 'RESET' ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {resetting ? 'Réinitialisation…' : 'Confirmer la suppression'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && <div style={styles.errorBox}>{error}</div>}
 
@@ -165,6 +215,15 @@ const styles: Record<string, React.CSSProperties> = {
   periodBtn: { padding: '8px 16px', backgroundColor: '#f5f5f5', borderRadius: 6, fontSize: 13, fontWeight: 600, color: '#757575', cursor: 'pointer' },
   periodActive: { backgroundColor: '#1DB954', color: '#fff' },
   resetBtn: { padding: '8px 16px', backgroundColor: '#FFEBEE', color: '#D32F2F', border: '1px solid #F5C6CB', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+  modal: { backgroundColor: '#fff', borderRadius: 12, padding: 24, maxWidth: 480, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' },
+  modalTitle: { fontSize: 20, fontWeight: 800, color: '#D32F2F', marginBottom: 16 },
+  modalText: { fontSize: 14, color: '#424242', lineHeight: 1.5, marginBottom: 12 },
+  modalInput: { width: '100%', padding: '10px 12px', fontSize: 15, border: '2px solid #D32F2F', borderRadius: 8, marginTop: 4, marginBottom: 12, boxSizing: 'border-box', color: '#212121' },
+  modalResult: { padding: 12, borderRadius: 8, backgroundColor: '#f5f5f5', fontSize: 14, marginBottom: 12, wordBreak: 'break-word' },
+  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
+  modalCancel: { padding: '10px 18px', backgroundColor: '#f5f5f5', color: '#424242', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' },
+  modalConfirm: { padding: '10px 18px', backgroundColor: '#D32F2F', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700 },
   errorBox: { backgroundColor: '#FFEBEE', color: '#D32F2F', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 14 },
   empty: { backgroundColor: '#fff', padding: 48, borderRadius: 12, textAlign: 'center', color: '#999' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 },
