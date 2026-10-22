@@ -443,10 +443,8 @@ export async function processPayment(data: PaymentRequest): Promise<PaymentRespo
 
 // ========== CONFIRMATION DE DÉPÔT (appelée par les webhooks) ==========
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { addLoyaltyPoints } from './loyalty.service';
-
-const prisma = new PrismaClient();
 
 /**
  * Confirme un dépôt après validation du paiement par le prestataire (webhook).

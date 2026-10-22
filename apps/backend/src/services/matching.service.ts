@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import type { Server } from 'socket.io';
-
-const prisma = new PrismaClient();
 
 // Rayons de recherche (km) par type de service, et paliers d'élargissement.
 // Si personne n'accepte dans le rayon initial, on élargit automatiquement.

@@ -1,12 +1,11 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { releaseFunds, refundFunds } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiVision, aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Middleware admin
 router.use(authenticate);

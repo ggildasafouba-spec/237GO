@@ -1,12 +1,11 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
 import { VEHICLE_CRITERIA, validateVehicleForCategory } from '../services/vehicleCriteria';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Mettre à jour le profil
 router.patch(

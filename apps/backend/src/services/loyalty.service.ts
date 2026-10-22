@@ -1,6 +1,5 @@
-import { PrismaClient, LoyaltyTier } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { LoyaltyTier } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
 // Seuils des paliers (points cumulés)
 export const TIER_THRESHOLDS: { tier: LoyaltyTier; min: number }[] = [

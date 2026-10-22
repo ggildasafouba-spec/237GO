@@ -1,11 +1,10 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { aiChat, isAiConfigured, AiMessage } from '../services/ai.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Base de connaissances 237GO injectée dans le system prompt
 const KNOWLEDGE = `

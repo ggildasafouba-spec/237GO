@@ -1,9 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { sendSOSAlert, sendTripShareLink } from '../services/sms.service';
-
-const prisma = new PrismaClient();
 
 interface AuthSocket extends Socket {
   userId?: string;

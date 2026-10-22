@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
@@ -9,7 +9,6 @@ import { sendSMS } from '../services/sms.service';
 import { sendPasswordResetEmail } from '../services/mail.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Enregistrement par numéro de téléphone
 router.post(

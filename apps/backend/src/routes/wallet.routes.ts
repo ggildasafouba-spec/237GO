@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
@@ -7,7 +7,6 @@ import { processPayment, verifyNotchPay, confirmDeposit } from '../services/paym
 import { redeemLoyaltyPoints, computeTier } from '../services/loyalty.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Vérifier manuellement l'état d'un paiement et créditer si confirmé.
 // Appelé par l'app après le retour de la page de paiement (ne dépend pas du webhook).

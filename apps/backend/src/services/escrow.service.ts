@@ -1,9 +1,8 @@
-import { PrismaClient, PaymentMethod, EscrowServiceType, EscrowStatus } from '@prisma/client';
+import { PaymentMethod, EscrowServiceType, EscrowStatus } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/error.middleware';
 import { addLoyaltyPoints } from './loyalty.service';
 import { sendPushNotification } from './notification.service';
-
-const prisma = new PrismaClient();
 
 // Taux de commission de la plateforme (15%)
 export const PLATFORM_COMMISSION_RATE = 0.15;

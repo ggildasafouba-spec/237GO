@@ -1,11 +1,10 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { sendPushNotification } from '../services/notification.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Liste des conversations de l'utilisateur connecté.
