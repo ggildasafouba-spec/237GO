@@ -56,16 +56,40 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  message: 'Trop de requêtes, veuillez réessayer plus tard.',
+// ===== Rate limiting =====
+// Limiteur global : généreux, car un seul utilisateur actif génère beaucoup de
+// requêtes (carte, positions, listes...). Trop bas = on bloque de vrais clients,
+// surtout plusieurs utilisateurs derrière une même IP (réseau mobile/wifi public).
+// Surchargeable via RATE_LIMIT_MAX. On n'applique PAS de limite aux webhooks
+// (prestataires de paiement) ni au health check.
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: Number(process.env.RATE_LIMIT_MAX || 300), // 300 req/min/IP par défaut
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Ne pas limiter le health check (pings d'uptime de Railway).
+  skip: (req) => req.path === '/health' || req.path === '/api/health',
+  message: { success: false, message: 'Trop de requêtes, veuillez réessayer dans un instant.' },
 });
-app.use('/api/', limiter);
+
+// Limiteur strict anti-bruteforce pour l'authentification (login, register, reset).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 30), // 30 tentatives / 15 min / IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de tentatives. Réessayez dans quelques minutes.' },
+});
+
+// Les webhooks de paiement ne doivent JAMAIS être limités (sinon on rate des
+// confirmations de paiement). Ils sont montés avant le limiteur global.
+app.use('/api/webhooks', webhookRouter);
+
+// Limiteur global pour le reste de l'API (hors webhooks déjà montés).
+app.use('/api/', globalLimiter);
 
 // Routes
-app.use('/api/auth', authRouter);
+app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/rides', rideRouter);
 app.use('/api/deliveries', deliveryRouter);
@@ -75,7 +99,6 @@ app.use('/api/carpools', carpoolRouter);
 app.use('/api/rentals', rentalRouter);
 app.use('/api/business', businessRouter);
 app.use('/api/admin', adminRouter);
-app.use('/api/webhooks', webhookRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/chat', chatRouter);

@@ -113,11 +113,33 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
     if (!socket) return;
 
     if (!isOnline) {
-      // Se mettre en ligne
+      // 1) Récupérer la VRAIE position GPS du chauffeur (indispensable pour le
+      //    matching de proximité : moto 4 km, voiture 6 km, livraison 7 km).
+      const loc = await getCurrentLocation();
+      if (!loc) {
+        Alert.alert(
+          'Localisation requise',
+          "Impossible de récupérer votre position. Activez le GPS et autorisez la localisation pour vous mettre en ligne."
+        );
+        return;
+      }
+
+      // 2) Récupérer le VRAI type de véhicule depuis le profil chauffeur.
+      //    On interroge /auth/me (qui inclut driverProfile). Repli = CAR_ECONOMY.
+      let vehicleType = 'CAR_ECONOMY';
+      try {
+        const me = await api.get('/auth/me');
+        const profileType = me.data?.data?.driverProfile?.vehicleType;
+        if (profileType) vehicleType = profileType;
+      } catch {
+        /* en cas d'échec réseau, on garde le repli pour ne pas bloquer la mise en ligne */
+      }
+
+      // 3) Se mettre en ligne avec la vraie position + le vrai véhicule.
       socket.emit('driver:online', {
-        vehicleType: 'CAR_ECONOMY', // TODO: récupérer du profil
-        lat: 4.0511,
-        lng: 9.7679,
+        vehicleType,
+        lat: loc.latitude,
+        lng: loc.longitude,
       });
       setIsOnline(true);
     } else {
