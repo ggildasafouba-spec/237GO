@@ -73,38 +73,22 @@ router.post('/notchpay', async (req: Request, res: Response) => {
 router.post('/cinetpay', async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
-    // Notre transaction_id arrive dans cpm_trans_id (ou metadata en repli).
-    const transId = body.cpm_trans_id || body.transaction_id || body.metadata;
+    // API Aurore : la notification contient NOTRE merchant_transaction_id et un notify_token.
+    // On gère aussi cpm_trans_id (ancienne API) par compatibilité.
+    const transId =
+      body.merchant_transaction_id ||
+      body.cpm_trans_id ||
+      body.transaction_id ||
+      body.metadata;
 
-    console.log(`🔔 Webhook CinetPay: cpm_trans_id=${transId}`);
+    console.log(`🔔 Webhook CinetPay: merchant_transaction_id=${transId}`);
 
     if (!transId) {
       return res.status(200).json({ success: true });
     }
 
-    // Vérification de signature HMAC (informative) : CinetPay signe le corps
-    // (champs concaténés) avec la secret key et l'envoie dans le header x-token.
-    const secretKey = process.env.CINETPAY_SECRET_KEY || '';
-    const token = (req.headers['x-token'] as string | undefined) || body.token;
-    if (secretKey && token) {
-      try {
-        // Concaténation des champs cpm_* dans l'ordre reçu (modèle CinetPay HMAC-SHA256).
-        const dataString = [
-          body.cpm_site_id, body.cpm_trans_id, body.cpm_trans_date, body.cpm_amount,
-          body.cpm_currency, body.signature, body.payment_method, body.cel_phone_num,
-          body.cpm_phone_prefixe, body.cpm_language, body.cpm_version, body.cpm_payment_config,
-          body.cpm_page_action, body.cpm_custom, body.cpm_designation, body.cpm_error_message,
-        ].join('');
-        const computed = crypto.createHmac('sha256', secretKey).update(dataString).digest('hex');
-        if (computed !== token) {
-          console.warn('🔔 Webhook CinetPay: signature non concordante (traitement poursuivi après revérification API)');
-        }
-      } catch {
-        /* ignore — la revérification API reste la source de vérité */
-      }
-    }
-
-    // Source de vérité : re-vérifier le paiement auprès de CinetPay.
+    // Source de vérité : on reconfirme TOUJOURS le paiement auprès de l'API CinetPay
+    // (le notify_token sert à authentifier la notif, mais la vérif API reste la garantie).
     const result = await verifyPayment(transId);
 
     if (result.status === 'COMPLETED') {

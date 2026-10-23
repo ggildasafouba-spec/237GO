@@ -108,18 +108,14 @@ export async function verifyNotchPay(reference: string): Promise<{
   }
 }
 
-// ========== CINETPAY (Passerelle universelle) ==========
+// ========== CINETPAY (API Aurore v1 : OAuth + MoMo/Orange) ==========
 
-interface CinetPayConfig {
-  apiKey: string;
-  siteId: string;
-  baseUrl: string;
-}
-
-const cinetPayConfig: CinetPayConfig = {
+const cinetPayConfig = {
   apiKey: process.env.CINETPAY_API_KEY || '',
-  siteId: process.env.CINETPAY_SITE_ID || '',
-  baseUrl: 'https://api-checkout.cinetpay.com/v2',
+  apiPassword: process.env.CINETPAY_API_PASSWORD || process.env.CINETPAY_SECRET_KEY || '',
+  // API "Aurore" (v1). Sandbox: https://api.cinetpay.net ; Production: https://api.cinetpay.net
+  // (CinetPay distingue sandbox/prod via les clés, pas via l'URL). Surchargeable par env.
+  baseUrl: process.env.CINETPAY_BASE_URL || 'https://api.cinetpay.net',
 };
 
 export interface PaymentRequest {
@@ -132,6 +128,7 @@ export interface PaymentRequest {
   paymentMethod: 'ORANGE_MONEY' | 'MTN_MOMO' | 'EXPRESS_UNION';
   notifyUrl: string;
   returnUrl?: string;
+  customerEmail?: string;
 }
 
 export interface PaymentResponse {
@@ -142,56 +139,123 @@ export interface PaymentResponse {
 }
 
 export function isCinetPayConfigured(): boolean {
-  return !!(cinetPayConfig.apiKey && cinetPayConfig.siteId);
+  return !!(cinetPayConfig.apiKey && cinetPayConfig.apiPassword);
+}
+
+// ----- Gestion du jeton OAuth (mise en cache) -----
+let cinetPayToken: { value: string; expiresAt: number } | null = null;
+
+/**
+ * Récupère un jeton d'accès CinetPay (API Aurore) via /v1/oauth/login.
+ * Le jeton est mis en cache jusqu'à ~5 min avant son expiration.
+ */
+async function getCinetPayToken(): Promise<string | null> {
+  // Réutiliser le jeton en cache s'il est encore valide
+  if (cinetPayToken && Date.now() < cinetPayToken.expiresAt) {
+    return cinetPayToken.value;
+  }
+  try {
+    const response = await axios.post(
+      `${cinetPayConfig.baseUrl}/v1/oauth/login`,
+      {
+        api_key: cinetPayConfig.apiKey,
+        api_password: cinetPayConfig.apiPassword,
+      },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 20000 }
+    );
+
+    // Le jeton peut être renvoyé sous data.token, token, ou access_token selon la version.
+    const data = response.data?.data || response.data || {};
+    const token = data.token || data.access_token || response.data?.token;
+    // Durée de vie : expires_in (secondes) si fourni, sinon on prend 23h par défaut.
+    const expiresInSec = Number(data.expires_in || response.data?.expires_in || 82800);
+
+    if (token) {
+      cinetPayToken = {
+        value: token,
+        expiresAt: Date.now() + (expiresInSec - 300) * 1000, // marge de 5 min
+      };
+      return token;
+    }
+    console.error('CinetPay login: jeton introuvable', response.data);
+    return null;
+  } catch (error: any) {
+    console.error('CinetPay login error:', error.response?.data || error.message);
+    return null;
+  }
 }
 
 /**
- * Initialise un paiement CinetPay (page de paiement hébergée, API v2 checkout).
- * CinetPay exige un montant multiple de 5 pour le mobile money (XAF/XOF).
- * L'utilisateur choisit ensuite MoMo / Orange / carte sur la page CinetPay.
+ * Initialise un paiement CinetPay (API Aurore, POST /v1/payment).
+ * Flux : login OAuth -> création du paiement -> on récupère payment_url.
+ * L'utilisateur est redirigé vers payment_url pour choisir MoMo / Orange.
  */
 export async function initiatePayment(data: PaymentRequest): Promise<PaymentResponse> {
   try {
-    // CinetPay impose un montant multiple de 5 pour le Mobile Money en zone CEMAC/UEMOA.
+    const token = await getCinetPayToken();
+    if (!token) {
+      return { success: false, message: 'Authentification CinetPay impossible' };
+    }
+
+    // Montant multiple de 5 (exigence Mobile Money zone CEMAC/UEMOA).
     const amount = Math.round(data.amount / 5) * 5;
 
-    // L'email est requis par l'API v2. On en fabrique un si absent.
+    // Email requis par l'API : on en fabrique un si absent.
     const safePhone = (data.customerPhone || '').replace(/[^0-9]/g, '');
-    const customerEmail = (data as any).customerEmail || `${safePhone || 'client'}@237go.app`;
+    const customerEmail = data.customerEmail || `${safePhone || 'client'}@237go.app`;
+
+    // Prénom / nom : l'API exige au moins 2 caractères chacun.
+    const parts = (data.customerName || 'Client 237GO').trim().split(/\s+/);
+    const firstName = (parts[0] || 'Client').padEnd(2, ' ').trim() || 'Client';
+    const lastName = (parts.slice(1).join(' ') || '237GO').padEnd(2, ' ').trim() || '237GO';
+
+    const returnUrl = data.returnUrl || '';
 
     const response = await axios.post(
-      `${cinetPayConfig.baseUrl}/payment`,
+      `${cinetPayConfig.baseUrl}/v1/payment`,
       {
-        apikey: cinetPayConfig.apiKey,
-        site_id: cinetPayConfig.siteId,
-        transaction_id: data.transactionId,
-        amount,
         currency: data.currency || 'XAF',
-        description: data.description,
-        customer_name: data.customerName,
-        customer_surname: '',
-        customer_email: customerEmail,
-        customer_phone_number: data.customerPhone,
-        channels: getChannel(data.paymentMethod),
-        notify_url: data.notifyUrl,
-        return_url: data.returnUrl || '',
+        merchant_transaction_id: data.transactionId,
+        amount,
         lang: 'fr',
-        metadata: data.transactionId,
+        designation: data.description,
+        client_email: customerEmail,
+        client_phone_number: data.customerPhone || '',
+        client_first_name: firstName,
+        client_last_name: lastName,
+        success_url: returnUrl,
+        failed_url: returnUrl,
+        notify_url: data.notifyUrl,
+        direct_pay: false,
       },
-      { timeout: 20000 }
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 20000,
+      }
     );
 
-    // L'API v2 renvoie code '201' + data.payment_url + data.payment_token
-    if (response.data?.code === '201' && response.data?.data?.payment_url) {
+    // Réponse SUCCESS Aurore : code 200/OK + payment_url + payment_token + transaction_id
+    const body = response.data || {};
+    const status = (body.status || '').toString().toUpperCase();
+    const paymentUrl = body.payment_url;
+
+    if ((body.code === 200 || status === 'OK') && paymentUrl) {
       return {
         success: true,
-        paymentUrl: response.data.data.payment_url,
-        transactionRef: response.data.data.payment_token || data.transactionId,
+        paymentUrl,
+        // On conserve le transaction_id CinetPay pour retrouver/vérifier la transaction.
+        transactionRef: body.transaction_id || body.payment_token || data.transactionId,
         message: 'Paiement initié. Finalisez sur la page sécurisée.',
       };
     }
 
-    return { success: false, message: response.data?.message || response.data?.description || 'Erreur CinetPay' };
+    return {
+      success: false,
+      message: body.message || body.details?.message || 'Erreur CinetPay',
+    };
   } catch (error: any) {
     console.error('CinetPay Error:', error.response?.data || error.message);
     return { success: false, message: 'Service de paiement indisponible' };
@@ -199,7 +263,7 @@ export async function initiatePayment(data: PaymentRequest): Promise<PaymentResp
 }
 
 /**
- * Vérifie l'état d'un paiement CinetPay par NOTRE transaction_id.
+ * Vérifie l'état d'un paiement CinetPay (API Aurore) par NOTRE merchant_transaction_id.
  * C'est la source de vérité : on l'appelle après chaque notification webhook.
  */
 export async function verifyPayment(transactionId: string): Promise<{
@@ -209,32 +273,38 @@ export async function verifyPayment(transactionId: string): Promise<{
   message: string;
 }> {
   try {
-    const response = await axios.post(
-      `${cinetPayConfig.baseUrl}/payment/check`,
+    const token = await getCinetPayToken();
+    if (!token) {
+      // Impossible de vérifier pour l'instant : rester en PENDING.
+      return { success: true, status: 'PENDING', message: 'Authentification CinetPay indisponible' };
+    }
+
+    // Statut du paiement : GET /v1/payment/{merchant_transaction_id}/status
+    const response = await axios.get(
+      `${cinetPayConfig.baseUrl}/v1/payment/${encodeURIComponent(transactionId)}/status`,
       {
-        apikey: cinetPayConfig.apiKey,
-        site_id: cinetPayConfig.siteId,
-        transaction_id: transactionId,
-      },
-      { timeout: 20000 }
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 20000,
+      }
     );
 
-    // code '00' = opération réussie (paiement ACCEPTED). Sinon on lit data.status.
-    const code = (response.data?.code || '').toString();
-    const status = (response.data?.data?.status || '').toString().toUpperCase();
-    const amount = response.data?.data?.amount ? Number(response.data.data.amount) : undefined;
+    // La réponse contient un statut (status) et un objet details.
+    const body = response.data || {};
+    const detail = body.details || body.data || body;
+    const status = (detail.status || body.status || '').toString().toUpperCase();
+    const amount = detail.amount ? Number(detail.amount) : undefined;
 
-    if (code === '00' || status === 'ACCEPTED' || status === 'SUCCES' || status === 'COMPLETED') {
+    if (status === 'SUCCESS' || status === 'ACCEPTED' || status === 'COMPLETED' || status === 'SUCCES') {
       return { success: true, status: 'COMPLETED', amount, message: 'Paiement confirmé' };
     }
-    if (status === 'PENDING' || status === 'WAITING_FOR_CUSTOMER' || status === 'WAITING' || status === '') {
-      // Statut vide ou en attente : NE PAS marquer échoué.
+    if (status === 'INITIATED' || status === 'PENDING' || status === 'WAITING' || status === '') {
+      // En cours : NE PAS marquer échoué.
       return { success: true, status: 'PENDING', message: 'Paiement en attente' };
     }
-    // REFUSED, CANCELED, FAILED...
+    // FAILED, REFUSED, CANCELED...
     return { success: false, status: 'FAILED', message: `Paiement ${status || 'refusé'}` };
   } catch (error: any) {
-    // Erreur réseau/temporaire : rester en PENDING pour ne pas annuler à tort.
+    // 404 = transaction inconnue/non finalisée : rester en PENDING (ne pas annuler à tort).
     console.error('verifyPayment (CinetPay) error:', error.response?.data || error.message);
     return { success: true, status: 'PENDING', message: 'Vérification temporairement indisponible' };
   }
@@ -368,20 +438,6 @@ export async function initiateOrangeMoneyPayment(data: {
 }
 
 // ========== HELPER ==========
-
-function getChannel(method: string): string {
-  // CinetPay v2 : 'ALL' = toutes méthodes, 'MOBILE_MONEY' = MoMo/Orange, 'CREDIT_CARD' = carte.
-  // On laisse 'ALL' par défaut pour que l'utilisateur choisisse MoMo OU Orange OU carte
-  // sur la page CinetPay (plus souple et moins d'erreurs qu'un canal imposé).
-  switch (method) {
-    case 'ORANGE_MONEY':
-    case 'MTN_MOMO':
-    case 'EXPRESS_UNION':
-      return 'MOBILE_MONEY';
-    default:
-      return 'ALL';
-  }
-}
 
 // ========== PAIEMENT UNIFIÉ ==========
 
