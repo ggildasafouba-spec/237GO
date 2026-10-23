@@ -26,6 +26,13 @@ import { errorHandler } from './middleware/error.middleware';
 dotenv.config();
 
 const app = express();
+
+// Railway (et la plupart des hébergeurs) placent l'app derrière un proxy qui
+// ajoute l'en-tête X-Forwarded-For. Sans ce réglage, express-rate-limit lève
+// l'erreur ERR_ERL_UNEXPECTED_X_FORWARDED_FOR et identifie mal les clients.
+// '1' = faire confiance au premier proxy (Railway), suffisant et sûr.
+app.set('trust proxy', 1);
+
 const httpServer = createServer(app);
 
 // Socket.IO pour le tracking temps réel
