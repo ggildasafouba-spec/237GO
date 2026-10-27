@@ -17,6 +17,7 @@ import RideMap from '../components/RideMap';
 import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+import { formatPhone } from '../utils/phone';
 
 interface RideRequest {
   rideId: string;
@@ -319,7 +320,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
               accessibilityRole="button"
               accessibilityLabel="Appeler le passager"
             >
-              <Text style={styles.callPassengerText}>📞 Appeler le passager (+237 {activeJob.passengerPhone})</Text>
+              <Text style={styles.callPassengerText}>📞 Appeler le passager ({formatPhone(activeJob.passengerPhone)})</Text>
             </TouchableOpacity>
           )}
 

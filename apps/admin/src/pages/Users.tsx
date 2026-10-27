@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../config/api';
+import { formatPhone } from '../utils/phone';
 
 interface User {
   id: string;
@@ -126,7 +127,7 @@ export default function Users() {
                 <span style={{ ...styles.cell, flex: 2, fontWeight: 600 }}>
                   {user.firstName} {user.lastName}
                 </span>
-                <span style={styles.cell}>+237 {user.phone}</span>
+                <span style={styles.cell}>{formatPhone(user.phone)}</span>
                 <span style={styles.cell}>
                   <span style={{ ...styles.badge, backgroundColor: badge.bg, color: badge.color }}>
                     {user.role}

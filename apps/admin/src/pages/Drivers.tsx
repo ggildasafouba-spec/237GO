@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../config/api';
+import { formatPhone } from '../utils/phone';
 
 interface DriverProfile {
   id: string;
@@ -123,7 +124,7 @@ export default function Drivers() {
                   <div style={styles.avatar}>{driver.user.firstName[0]}</div>
                   <div>
                     <h3 style={styles.driverName}>{name}</h3>
-                    <p style={styles.driverPhone}>+237 {driver.user.phone}</p>
+                    <p style={styles.driverPhone}>{formatPhone(driver.user.phone)}</p>
                   </div>
                   <span style={{ ...styles.onlineDot, backgroundColor: driver.isOnline ? '#388E3C' : '#BDBDBD' }} />
                 </div>

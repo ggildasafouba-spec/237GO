@@ -15,6 +15,7 @@ import { useWalletStore } from '../store/walletStore';
 import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+import { formatPhone } from '../utils/phone';
 
 interface EmergencyContact {
   id: string;
@@ -137,7 +138,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
           </Text>
         </View>
         <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
-        <Text style={styles.profilePhone}>+237 {user?.phone}</Text>
+        <Text style={styles.profilePhone}>{formatPhone(user?.phone)}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>
             {user?.role === 'DRIVER' ? '🚗 Chauffeur' : user?.role === 'MERCHANT' ? '🏪 Marchand' : '👤 Passager'}
@@ -224,7 +225,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Téléphone</Text>
-              <Text style={styles.infoValue}>+237 {user?.phone}</Text>
+              <Text style={styles.infoValue}>{formatPhone(user?.phone)}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Langue</Text>
@@ -283,7 +284,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
             <View key={contact.id} style={styles.contactCard}>
               <View style={styles.contactInfo}>
                 <Text style={styles.contactName}>{contact.name}</Text>
-                <Text style={styles.contactPhone}>+237 {contact.phone}</Text>
+                <Text style={styles.contactPhone}>{formatPhone(contact.phone)}</Text>
                 {contact.relation && <Text style={styles.contactRelation}>{contact.relation}</Text>}
               </View>
               <TouchableOpacity

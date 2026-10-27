@@ -15,6 +15,7 @@ import { useAuthStore } from '../store/authStore';
 import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+import { formatPhone } from '../utils/phone';
 
 interface Product {
   id: string;
@@ -287,7 +288,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
                     <Text style={styles.statusBadgeText}>{STATUS_LABELS[item.status] || item.status}</Text>
                   </View>
                 </View>
-                <Text style={styles.orderPhone}>📞 +237 {item.customer.phone}</Text>
+                <Text style={styles.orderPhone}>📞 {formatPhone(item.customer.phone)}</Text>
                 <Text style={styles.orderAddress}>📍 {item.deliveryAddress}</Text>
                 <View style={styles.orderItems}>
                   {item.items.map((it) => (

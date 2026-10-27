@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../config/api';
+import { formatPhone } from '../utils/phone';
 
 interface Merchant {
   id: string;
@@ -109,7 +110,7 @@ export default function Merchants() {
                   <h3 style={styles.shopName}>{m.shopName}</h3>
                   <span style={{ ...styles.status, backgroundColor: st.bg, color: st.color }}>{st.label}</span>
                 </div>
-                <p style={styles.owner}>{m.user.firstName} {m.user.lastName} • +237 {m.user.phone}</p>
+                <p style={styles.owner}>{m.user.firstName} {m.user.lastName} • {formatPhone(m.user.phone)}</p>
                 <p style={styles.category}>{m.category} · {m.shopAddress}</p>
 
                 {m.rejectionReason && <div style={styles.warnBox}>Motif de rejet : {m.rejectionReason}</div>}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../config/api';
+import { formatPhone } from '../utils/phone';
 
 interface Vehicle {
   id: string;
@@ -119,7 +120,7 @@ export default function Vehicles() {
 
               <div style={styles.cardDetails}>
                 <div style={styles.detail}><span style={styles.detailLabel}>Propriétaire</span><span>{v.owner.firstName} {v.owner.lastName}</span></div>
-                <div style={styles.detail}><span style={styles.detailLabel}>Téléphone</span><span>+237 {v.owner.phone}</span></div>
+                <div style={styles.detail}><span style={styles.detailLabel}>Téléphone</span><span>{formatPhone(v.owner.phone)}</span></div>
                 <div style={styles.detail}><span style={styles.detailLabel}>Plaque</span><span>{v.plate}</span></div>
                 <div style={styles.detail}><span style={styles.detailLabel}>Prix / jour</span><span>{v.pricePerDay.toLocaleString()} XAF</span></div>
                 <div style={styles.detail}><span style={styles.detailLabel}>Avec chauffeur</span><span>{v.withDriver ? 'Oui' : 'Non'}</span></div>
