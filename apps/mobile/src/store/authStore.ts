@@ -32,9 +32,10 @@ interface AuthState {
   login: (phone: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
+  updateUser: (patch: Partial<User>) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   isLoading: true,
@@ -93,5 +94,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       set({ isLoading: false });
     }
+  },
+
+  // Met à jour localement les infos du user (ex. après ajout d'email dans le profil)
+  // et persiste, pour que l'UI (ex. bannière "ajoutez un email") se mette à jour.
+  updateUser: async (patch) => {
+    const current = get().user;
+    if (!current) return;
+    const updated = { ...current, ...patch };
+    set({ user: updated });
+    try {
+      await AsyncStorage.setItem('user', JSON.stringify(updated));
+    } catch {}
   },
 }));

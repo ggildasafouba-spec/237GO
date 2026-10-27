@@ -159,6 +159,24 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         <View style={[styles.flagStripe, { backgroundColor: colors.secondary }]} />
       </View>
 
+      {/* Rappel : ajouter un email pour sécuriser/récupérer le compte (non bloquant) */}
+      {!user?.email && (
+        <TouchableOpacity
+          style={styles.emailReminder}
+          onPress={() => navigation.navigate('Profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Ajouter un email pour sécuriser votre compte"
+        >
+          <Text style={styles.emailReminderIcon}>📧</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.emailReminderTitle}>Sécurisez votre compte</Text>
+            <Text style={styles.emailReminderText}>
+              Ajoutez votre email pour pouvoir récupérer votre mot de passe. Toucher pour compléter →
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Services */}
       <View style={styles.body}>
       <Text style={styles.sectionTitle}>Nos services</Text>
@@ -289,6 +307,32 @@ const styles = StyleSheet.create({
   flagStripe: {
     flex: 1,
     height: 5,
+  },
+  emailReminder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    borderRadius: 12,
+    padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  emailReminderIcon: {
+    fontSize: 22,
+  },
+  emailReminderTitle: {
+    fontSize: typography.sm,
+    fontWeight: '700',
+    color: '#8D6E00',
+    marginBottom: 2,
+  },
+  emailReminderText: {
+    fontSize: typography.xs,
+    color: '#8D6E00',
+    lineHeight: 16,
   },
   body: {
     paddingBottom: spacing.lg,

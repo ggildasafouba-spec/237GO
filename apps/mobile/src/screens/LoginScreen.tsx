@@ -221,11 +221,11 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
                 placeholderTextColor={colors.textLight}
                 accessibilityLabel="Adresse email"
               />
-              {isInternational && (
-                <Text style={styles.accountTypeHint}>
-                  📧 Depuis l'étranger, l'email permet de récupérer votre compte (le SMS international n'est pas toujours fiable).
-                </Text>
-              )}
+              <Text style={styles.accountTypeHint}>
+                {isInternational
+                  ? '📧 Depuis l\'étranger, l\'email permet de récupérer votre compte (le SMS international n\'est pas toujours fiable).'
+                  : '📧 Recommandé : ajoutez un email pour pouvoir récupérer votre compte si vous oubliez votre mot de passe.'}
+              </Text>
 
               {/* Choix du type de compte */}
               <Text style={styles.accountTypeLabel}>Je m'inscris en tant que</Text>

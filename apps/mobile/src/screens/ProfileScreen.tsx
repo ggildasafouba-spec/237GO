@@ -25,14 +25,14 @@ interface EmergencyContact {
 }
 
 export default function ProfileScreen({ navigation }: { navigation: any }) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const { balance, loyaltyPoints, loyaltyTier } = useWalletStore();
   const safe = useSafeScreen();
 
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(user?.email || '');
   const [language, setLanguage] = useState(user?.language || 'fr');
 
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
@@ -54,7 +54,10 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 
   const handleUpdateProfile = async () => {
     try {
-      await api.patch('/users/profile', { firstName, lastName, email: email || undefined, language });
+      const trimmedEmail = email.trim();
+      await api.patch('/users/profile', { firstName, lastName, email: trimmedEmail || undefined, language });
+      // Met à jour le store pour rafraîchir l'UI (ex. masquer la bannière "ajoutez un email").
+      await updateUser({ firstName, lastName, language, ...(trimmedEmail ? { email: trimmedEmail } : {}) });
       Alert.alert('✅ Profil mis à jour');
       setIsEditing(false);
     } catch {
