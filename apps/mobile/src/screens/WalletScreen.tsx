@@ -19,10 +19,12 @@ import { colors, spacing, typography } from '../theme';
 
 type PaymentProvider = 'ORANGE_MONEY' | 'MTN_MOMO' | 'EXPRESS_UNION';
 
+// Moyens de recharge réellement supportés par la passerelle (CinetPay Cameroun) :
+// Orange Money et MTN Mobile Money. Le paiement par carte et Express Union ne
+// sont pas disponibles — on ne les propose donc pas pour éviter des échecs.
 const providers: { id: PaymentProvider; name: string; icon: string; color: string }[] = [
   { id: 'ORANGE_MONEY', name: 'Orange Money', icon: '🟠', color: '#FF6600' },
   { id: 'MTN_MOMO', name: 'MTN MoMo', icon: '🟡', color: '#FFCC00' },
-  { id: 'EXPRESS_UNION', name: 'Express Union', icon: '🔵', color: '#0066CC' },
 ];
 
 const quickAmounts = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000];
