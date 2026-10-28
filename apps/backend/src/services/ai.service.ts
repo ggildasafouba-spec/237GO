@@ -18,7 +18,9 @@ const API_KEY = process.env.AI_API_KEY || '';
 const DEFAULT_MODELS: Record<AiProvider, string> = {
   claude: 'claude-3-5-sonnet-20241022',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-3.8-flash',
+  // Modèle Gemini stable et disponible sur le niveau gratuit (v1beta).
+  // Surchargeable via AI_MODEL si besoin.
+  gemini: 'gemini-2.5-flash',
 };
 
 const MODEL = process.env.AI_MODEL || DEFAULT_MODELS[PROVIDER];
@@ -216,9 +218,15 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
  * (503 "high demand" ou 429), fréquent sur le niveau gratuit.
  */
 async function geminiPostWithRetry(payload: any): Promise<any> {
-  // Liste de modèles à essayer dans l'ordre (fallback si surcharge Google)
-  const models = [MODEL, 'gemini-3.8-flash', 'gemini-flash-latest']
-    .filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
+  // Liste de modèles à essayer dans l'ordre. Fallback si un modèle est indisponible
+  // (surcharge 503/429) OU introuvable pour la clé/région (404/400).
+  // On met plusieurs IDs valides du niveau gratuit pour maximiser les chances.
+  const models = [
+    MODEL,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+  ].filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
 
   let lastError: any;
   for (const model of models) {
@@ -234,8 +242,9 @@ async function geminiPostWithRetry(payload: any): Promise<any> {
         lastError = err;
         const status = err?.response?.status;
         const isTimeout = err?.code === 'ECONNABORTED';
-        // 503/429 = surcharge → on passe au modèle suivant directement
-        if (status === 503 || status === 429) break;
+        // 503/429 = surcharge, 404/400 = modèle introuvable/non supporté
+        // → on passe au modèle suivant de la liste.
+        if (status === 503 || status === 429 || status === 404 || status === 400) break;
         // timeout → une 2e tentative sur le même modèle
         if (isTimeout && i === 0) {
           await new Promise((r) => setTimeout(r, 800));
