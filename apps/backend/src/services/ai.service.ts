@@ -213,20 +213,52 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
   return response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
+// Cache de la liste des modèles disponibles (évite d'appeler ListModels à chaque requête).
+let cachedGeminiModels: string[] | null = null;
+
 /**
- * POST vers l'API Gemini avec réessais automatiques en cas de surcharge
- * (503 "high demand" ou 429), fréquent sur le niveau gratuit.
+ * Demande à Google la liste des modèles réellement disponibles pour CETTE clé,
+ * et ne garde que les modèles "flash" supportant generateContent.
+ * Ça rend l'intégration robuste aux changements de génération (3.8, 3.6, 2.5...).
+ */
+async function listGeminiModels(): Promise<string[]> {
+  if (cachedGeminiModels && cachedGeminiModels.length) return cachedGeminiModels;
+  try {
+    const res = await axios.get(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}&pageSize=100`,
+      { timeout: 15000 }
+    );
+    const all = (res.data?.models || []) as Array<{
+      name: string;
+      supportedGenerationMethods?: string[];
+    }>;
+    const usable = all
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => m.name.replace(/^models\//, ''));
+
+    // Priorité aux modèles "flash" (rapides + gratuits), puis le reste en secours.
+    const flash = usable.filter((n) => n.includes('flash') && !n.includes('lite'));
+    const flashLite = usable.filter((n) => n.includes('flash') && n.includes('lite'));
+    const others = usable.filter((n) => !n.includes('flash'));
+    cachedGeminiModels = [...flash, ...flashLite, ...others];
+    return cachedGeminiModels;
+  } catch (err: any) {
+    console.error('Gemini ListModels error:', err?.response?.data || err.message);
+    return [];
+  }
+}
+
+/**
+ * POST vers l'API Gemini avec réessais automatiques.
+ * On essaie d'abord le modèle configuré (AI_MODEL), puis ceux réellement
+ * disponibles pour la clé (découverts via ListModels). Fallback sur surcharge
+ * (503/429) ou modèle introuvable (404/400).
  */
 async function geminiPostWithRetry(payload: any): Promise<any> {
-  // Liste de modèles à essayer dans l'ordre. Fallback si un modèle est indisponible
-  // (surcharge 503/429) OU introuvable pour la clé/région (404/400).
-  // On met plusieurs IDs valides du niveau gratuit pour maximiser les chances.
-  const models = [
-    MODEL,
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-  ].filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
+  const discovered = await listGeminiModels();
+  const models = [MODEL, ...discovered]
+    .filter((m) => !!m)
+    .filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
 
   let lastError: any;
   for (const model of models) {
