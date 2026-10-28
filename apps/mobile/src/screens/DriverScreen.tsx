@@ -296,6 +296,8 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
             <RideMap
               pickup={activeJob.pickupCoords}
               dropoff={activeJob.dropoffCoords}
+              pickupLabel={activeJob.pickupAddress}
+              dropoffLabel={activeJob.dropoffAddress}
               height={180}
             />
           )}

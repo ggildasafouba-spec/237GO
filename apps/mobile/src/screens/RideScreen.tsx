@@ -278,7 +278,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
         <Text style={styles.title}>Où allez-vous ?</Text>
 
         {/* Carte avec la position du passager */}
-        <RideMap pickup={pickupCoords} height={180} />
+        <RideMap pickup={pickupCoords} height={180} pickupLabel={pickupAddress} />
 
         <View style={styles.inputContainer}>
           <View style={styles.dotGreen} />
@@ -550,6 +550,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
       {/* Carte temps réel : passager + chauffeur */}
       <RideMap
         pickup={pickupCoords}
+        pickupLabel={pickupAddress}
+        dropoffLabel={dropoffAddress}
         dropoff={currentRide?.status === 'IN_PROGRESS' ? dropoffCoords : null}
         driver={driverLocation}
         height={220}

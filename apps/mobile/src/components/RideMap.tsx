@@ -12,6 +12,10 @@ interface RideMapProps {
   dropoff?: LatLng | null;
   driver?: LatLng | null;
   height?: number;
+  // Libellés lisibles (nom du lieu). Si absents, on affiche un texte générique
+  // au lieu des coordonnées brutes.
+  pickupLabel?: string;
+  dropoffLabel?: string;
 }
 
 /**
@@ -69,17 +73,26 @@ class MapErrorBoundary extends React.Component<
 // Passer à true une fois la clé Google Maps ajoutée dans app.json.
 const MAPS_ENABLED = false;
 
-export default function RideMap({ pickup, dropoff, driver, height = 240 }: RideMapProps) {
+export default function RideMap({ pickup, dropoff, driver, height = 240, pickupLabel, dropoffLabel }: RideMapProps) {
   // Point central : priorité au chauffeur, puis au pickup
   const center = driver || pickup || dropoff || { lat: 4.0511, lng: 9.7679 };
 
+  // On affiche le nom du lieu si on l'a, sinon un libellé générique (jamais de coordonnées).
   const fallback = (
     <View style={[styles.fallback, { height }]}>
       <Text style={styles.fallbackIcon}>🗺️</Text>
       <Text style={styles.fallbackText}>Carte en direct</Text>
-      {pickup && <Text style={styles.fallbackLine}>🟢 Départ : {pickup.lat.toFixed(4)}, {pickup.lng.toFixed(4)}</Text>}
-      {driver && <Text style={styles.fallbackLine}>🚗 Chauffeur : {driver.lat.toFixed(4)}, {driver.lng.toFixed(4)}</Text>}
-      {dropoff && <Text style={styles.fallbackLine}>🔴 Arrivée : {dropoff.lat.toFixed(4)}, {dropoff.lng.toFixed(4)}</Text>}
+      {pickup && (
+        <Text style={styles.fallbackLine} numberOfLines={1}>
+          🟢 Départ : {pickupLabel && pickupLabel.trim() ? pickupLabel : 'Votre position'}
+        </Text>
+      )}
+      {driver && <Text style={styles.fallbackLine}>🚗 Chauffeur en route</Text>}
+      {dropoff && (
+        <Text style={styles.fallbackLine} numberOfLines={1}>
+          🔴 Arrivée : {dropoffLabel && dropoffLabel.trim() ? dropoffLabel : 'Destination choisie'}
+        </Text>
+      )}
     </View>
   );
 
