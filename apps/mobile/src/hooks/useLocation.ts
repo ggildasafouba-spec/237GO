@@ -116,27 +116,77 @@ export function useLocation(): UseLocationReturn {
     }
   };
 
+  // Libellé de repli lisible quand aucun nom de lieu n'est trouvé (fréquent au Cameroun).
+  // On n'affiche plus de coordonnées brutes à l'utilisateur/chauffeur.
+  const FALLBACK_LABEL = '📍 Position GPS (voir sur la carte)';
+
+  /**
+   * Convertit des coordonnées en nom de lieu lisible.
+   * 1) Essaie le géocodeur natif Expo (rapide, mais couvre mal le Cameroun).
+   * 2) Si échec/vide, interroge Nominatim (OpenStreetMap), bien plus riche localement.
+   * 3) En dernier recours, renvoie un libellé propre (pas de chiffres bruts).
+   */
   const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+    // 1) Géocodeur natif Expo
     try {
-      const [result] = await Location.reverseGeocodeAsync({
-        latitude: lat,
-        longitude: lng,
-      });
-
+      const [result] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
       if (result) {
-        const parts = [
-          result.street,
-          result.district,
-          result.city,
-          result.region,
-        ].filter(Boolean);
-        return parts.join(', ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        const parts = [result.name, result.street, result.district, result.city, result.region]
+          .filter(Boolean)
+          // éviter les doublons (ex. name == street)
+          .filter((v, i, arr) => arr.indexOf(v) === i);
+        if (parts.length > 0) return parts.join(', ');
       }
-
-      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     } catch {
-      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      /* on tente Nominatim ci-dessous */
     }
+
+    // 2) Nominatim (OpenStreetMap) — meilleure couverture des quartiers camerounais
+    try {
+      const osm = await reverseGeocodeOSM(lat, lng);
+      if (osm) return osm;
+    } catch {
+      /* on retombe sur le libellé propre */
+    }
+
+    // 3) Libellé propre (plus de "4.0511, 9.7679")
+    return FALLBACK_LABEL;
+  };
+
+  /**
+   * Géocodage inverse via l'API publique Nominatim d'OpenStreetMap.
+   * Construit un libellé court à partir des composants d'adresse les plus parlants.
+   */
+  const reverseGeocodeOSM = async (lat: number, lng: number): Promise<string | null> => {
+    const url =
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2` +
+      `&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1&accept-language=fr`;
+    const res = await fetch(url, {
+      headers: {
+        // Nominatim exige un User-Agent identifiant l'application.
+        'User-Agent': '237GO/1.0 (support@237go.app)',
+      },
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const a = data?.address || {};
+    // Priorité aux repères parlants : lieu/commerce, rue, quartier, arrondissement, ville.
+    const parts = [
+      a.amenity || a.shop || a.building || a.name,
+      a.road,
+      a.neighbourhood || a.suburb || a.quarter,
+      a.city_district,
+      a.city || a.town || a.village,
+    ]
+      .filter(Boolean)
+      .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i);
+
+    if (parts.length > 0) return parts.slice(0, 3).join(', ');
+    // Nominatim renvoie parfois un display_name complet : on le raccourcit.
+    if (data?.display_name) {
+      return String(data.display_name).split(',').slice(0, 3).join(',').trim();
+    }
+    return null;
   };
 
   return {

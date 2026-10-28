@@ -146,7 +146,8 @@ export default function DestinationPicker({
     onConfirm({
       lat: center.lat,
       lng: center.lng,
-      label: label || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`,
+      // Libellé propre si le géocodage ne renvoie rien (plus de coordonnées brutes).
+      label: label || '📍 Destination sur la carte',
     });
   };
 

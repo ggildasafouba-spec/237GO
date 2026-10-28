@@ -48,7 +48,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   const [step, setStep] = useState<'location' | 'vehicle' | 'confirm' | 'waiting' | 'inride'>('location');
   const [pickupAddress, setPickupAddress] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
-  const [landmark, setLandmark] = useState(''); // repère / indication complémentaire
+  const [landmark, setLandmark] = useState(''); // repère / indication pour la DESTINATION
+  const [pickupLandmark, setPickupLandmark] = useState(''); // repère pour le point de DÉPART
   const [showDestPicker, setShowDestPicker] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleType>(route?.params?.vehicleType || 'MOTO');
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('ORANGE_MONEY');
@@ -104,7 +105,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     if (loc) {
       setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
       const addr = await reverseGeocode(loc.latitude, loc.longitude);
-      setPickupAddress(addr || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+      // reverseGeocode renvoie déjà un libellé propre si aucun nom n'est trouvé.
+      setPickupAddress(addr);
     } else {
       Alert.alert('Localisation', "Impossible d'obtenir votre position. Vérifiez que le GPS est activé.");
     }
@@ -216,12 +218,16 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
 
   const handleConfirmRide = async () => {
     try {
-      // On joint le repère à l'adresse de destination pour qu'il parvienne au chauffeur
+      // On joint les repères aux adresses pour qu'ils parviennent au chauffeur.
+      // Au Cameroun, le repère est souvent plus utile que l'adresse GPS elle-même.
+      const pickupWithLandmark = pickupLandmark.trim()
+        ? `${pickupAddress} — Repère : ${pickupLandmark.trim()}`
+        : pickupAddress;
       const dropoffWithLandmark = landmark.trim()
         ? `${dropoffAddress} — Repère : ${landmark.trim()}`
         : dropoffAddress;
       await createRide({
-        pickup: { ...pickup, address: pickupAddress },
+        pickup: { ...pickup, address: pickupWithLandmark },
         dropoff: { ...dropoff, address: dropoffWithLandmark },
         vehicleType: selectedVehicle,
         paymentMethod: selectedPayment,
@@ -300,6 +306,16 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           )}
         </TouchableOpacity>
 
+        {/* Repère du point de DÉPART (très utile au Cameroun où l'adresse GPS est imprécise) */}
+        <TextInput
+          style={styles.landmarkInput}
+          placeholder="🧭 Repère du départ (ex: carrefour Total, portail bleu)"
+          value={pickupLandmark}
+          onChangeText={setPickupLandmark}
+          placeholderTextColor={colors.textLight}
+          accessibilityLabel="Repère du point de départ"
+        />
+
         {/* Destination : choisie sur la carte (pas de saisie d'adresse postale) */}
         <View style={styles.inputContainer}>
           <View style={styles.dotRed} />
@@ -315,14 +331,14 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           </TouchableOpacity>
         </View>
 
-        {/* Repère / indication (adapté au Cameroun) */}
+        {/* Repère de la DESTINATION (adapté au Cameroun) */}
         <TextInput
           style={styles.landmarkInput}
-          placeholder="🧭 Repère / indication (ex: portail bleu, après la pharmacie)"
+          placeholder="🧭 Repère de l'arrivée (ex: après la pharmacie, immeuble rouge)"
           value={landmark}
           onChangeText={setLandmark}
           placeholderTextColor={colors.textLight}
-          accessibilityLabel="Repère ou indication complémentaire"
+          accessibilityLabel="Repère de la destination"
         />
 
         <TouchableOpacity
