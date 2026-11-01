@@ -334,6 +334,67 @@ router.patch(
   }
 );
 
+// Annuler une course (passager uniquement, tant que la course est PENDING ou ACCEPTED)
+router.patch(
+  '/:id/cancel',
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const ride = await prisma.ride.findUnique({ where: { id } });
+      if (!ride) throw new AppError('Course non trouvée', 404);
+
+      // Seul le passager peut annuler via cette route
+      if (ride.passengerId !== req.user!.id) {
+        throw new AppError('Vous n\'êtes pas le passager de cette course', 403);
+      }
+
+      // On ne peut annuler qu'une course encore en attente ou acceptée
+      if (!['PENDING', 'ACCEPTED'].includes(ride.status)) {
+        throw new AppError(`Impossible d'annuler une course en statut ${ride.status}`, 400);
+      }
+
+      const updated = await prisma.ride.update({
+        where: { id },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancelReason: reason || 'Annulé par le passager',
+        },
+      });
+
+      // Rembourser l'escrow si créé
+      const io = req.app.get('io');
+      try {
+        const { refundFunds } = await import('../services/escrow.service');
+        await refundFunds('RIDE', id);
+      } catch { /* pas d'escrow à rembourser */ }
+
+      // Notifier le chauffeur si assigné
+      if (ride.driverId) {
+        io.to(`user:${ride.driverId}`).emit('ride_status_update', {
+          rideId: id,
+          status: 'CANCELLED',
+        });
+      }
+      // Notifier le passager (confirmation)
+      io.to(`user:${ride.passengerId}`).emit('ride_status_update', {
+        rideId: id,
+        status: 'CANCELLED',
+      });
+
+      res.json({ success: true, message: 'Course annulée', data: updated });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur lors de l\'annulation' });
+    }
+  }
+);
+
 // Historique des courses
 router.get('/history', authenticate, async (req: AuthRequest, res: Response) => {
   try {

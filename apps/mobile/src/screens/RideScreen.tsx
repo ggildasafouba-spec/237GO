@@ -243,7 +243,17 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     if (currentRide) {
       Alert.alert('Annuler la course ?', 'Des frais d\'annulation peuvent s\'appliquer.', [
         { text: 'Non' },
-        { text: 'Oui, annuler', style: 'destructive', onPress: () => cancelRide(currentRide.id) },
+        {
+          text: 'Oui, annuler',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelRide(currentRide.id);
+            } catch {
+              Alert.alert('Erreur', 'Impossible d\'annuler la course. Réessayez.');
+            }
+          },
+        },
       ]);
     }
   };

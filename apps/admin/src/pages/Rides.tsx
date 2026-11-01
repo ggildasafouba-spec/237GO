@@ -25,11 +25,19 @@ export default function Rides() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const loadRides = () => {
+    setIsLoading(true);
     api.get('/admin/rides', { params: { limit: '100' } })
-      .then((res) => setRides(res.data.data.rides || []))
+      .then((res) => { setRides(res.data.data.rides || []); setError(''); })
       .catch((err) => setError(err.response?.data?.message || 'Erreur de chargement'))
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    loadRides();
+    // Rafraîchissement automatique toutes les 30s (courses actives en temps quasi-réel)
+    const interval = setInterval(loadRides, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const getStatusStyle = (status: string) => {
@@ -50,8 +58,17 @@ export default function Rides() {
   return (
     <div>
       <div style={styles.header}>
-        <h1 style={styles.title}>Courses</h1>
-        <p style={styles.subtitle}>Suivi des courses</p>
+        <div>
+          <h1 style={styles.title}>Courses</h1>
+          <p style={styles.subtitle}>Suivi des courses · Mise à jour auto toutes les 30s</p>
+        </div>
+        <button
+          onClick={loadRides}
+          disabled={isLoading}
+          style={styles.refreshBtn}
+        >
+          {isLoading ? '⟳ Chargement…' : '⟳ Actualiser'}
+        </button>
       </div>
 
       {error && <div style={styles.errorBox}>{error}</div>}
@@ -127,9 +144,10 @@ export default function Rides() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  header: { marginBottom: 24 },
+  header: { marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
   title: { fontSize: 28, fontWeight: 700 },
-  subtitle: { color: '#757575', marginTop: 4 },
+  subtitle: { color: '#757575', marginTop: 4, fontSize: 13 },
+  refreshBtn: { padding: '8px 16px', backgroundColor: '#f5f5f5', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#424242' },
   errorBox: { backgroundColor: '#FFEBEE', color: '#D32F2F', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 14 },
   statsRow: { display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' },
   stat: { flex: '1 1 140px', minWidth: 140, backgroundColor: '#fff', padding: 20, borderRadius: 10, borderLeft: '4px solid #ccc', textAlign: 'center' },

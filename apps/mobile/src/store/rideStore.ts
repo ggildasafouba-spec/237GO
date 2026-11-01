@@ -114,7 +114,9 @@ export const useRideStore = create<RideState>((set, get) => ({
   },
 
   cancelRide: async (rideId) => {
-    await api.patch(`/rides/${rideId}/status`, { status: 'CANCELLED' });
+    // Route dédiée passager : PATCH /rides/:id/cancel
+    // (La route /status est réservée aux chauffeurs)
+    await api.patch(`/rides/${rideId}/cancel`, { reason: 'Annulé par le passager' });
     set({ currentRide: null, driverLocation: null });
   },
 
