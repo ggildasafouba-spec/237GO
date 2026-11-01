@@ -284,6 +284,9 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           onPress: async () => {
             try {
               await cancelRide(currentRide.id);
+              // Revenir à l'écran de départ après annulation
+              setStep('location');
+              clearRide();
             } catch {
               Alert.alert('Erreur', 'Impossible d\'annuler la course. Réessayez.');
             }
