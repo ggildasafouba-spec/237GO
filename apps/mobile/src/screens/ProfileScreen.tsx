@@ -35,6 +35,10 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
   const [email, setEmail] = useState(user?.email || '');
   const [language, setLanguage] = useState(user?.language || 'fr');
 
+  // Compteur d'annulations tardives (chargé depuis /auth/me)
+  const [cancelCount, setCancelCount] = useState<number>(0);
+  const [cancelWarning, setCancelWarning] = useState<string | null>(null);
+
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
@@ -43,6 +47,12 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 
   useEffect(() => {
     fetchEmergencyContacts();
+    // Charger le compteur d'annulations depuis /auth/me
+    api.get('/auth/me').then((res) => {
+      const data = res.data?.data;
+      if (data?.cancelCount !== undefined) setCancelCount(data.cancelCount);
+      if (data?.cancelWarning) setCancelWarning(data.cancelWarning);
+    }).catch(() => {});
   }, []);
 
   const fetchEmergencyContacts = async () => {
@@ -163,7 +173,18 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
           <Text style={styles.statValue}>{loyaltyTier}</Text>
           <Text style={styles.statLabel}>Niveau</Text>
         </View>
+        <View style={[styles.statCard, cancelCount >= 3 && { backgroundColor: '#FFEBEE' }]}>
+          <Text style={[styles.statValue, cancelCount >= 3 && { color: '#D32F2F' }]}>{cancelCount}</Text>
+          <Text style={[styles.statLabel, cancelCount >= 3 && { color: '#D32F2F' }]}>Annulations</Text>
+        </View>
       </View>
+
+      {/* Avertissement annulations tardives */}
+      {cancelWarning && (
+        <View style={styles.cancelWarningBox}>
+          <Text style={styles.cancelWarningText}>⚠️ {cancelWarning}</Text>
+        </View>
+      )}
 
       {/* Edit Profile */}
       <View style={styles.section}>
@@ -392,10 +413,12 @@ const styles = StyleSheet.create({
   profilePhone: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 4 },
   roleBadge: { backgroundColor: '#E8F5E9', paddingHorizontal: 14, paddingVertical: 4, borderRadius: 12, marginTop: spacing.sm },
   roleText: { fontSize: typography.xs, color: colors.primary, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   statCard: { flex: 1, backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, alignItems: 'center', marginHorizontal: 4 },
   statValue: { fontSize: typography.lg, fontWeight: '800', color: colors.primary },
   statLabel: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
+  cancelWarningBox: { backgroundColor: '#FFEBEE', borderRadius: 10, padding: spacing.md, marginBottom: spacing.lg, borderLeftWidth: 4, borderLeftColor: '#D32F2F' },
+  cancelWarningText: { fontSize: typography.sm, color: '#D32F2F', fontWeight: '600', lineHeight: 20 },
   section: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: 12, marginBottom: spacing.lg },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   sectionTitle: { fontSize: typography.md, fontWeight: '700', color: colors.text },

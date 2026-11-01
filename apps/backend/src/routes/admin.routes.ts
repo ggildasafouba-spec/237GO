@@ -87,12 +87,32 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
         select: {
           id: true, phone: true, firstName: true, lastName: true,
           role: true, isActive: true, createdAt: true, language: true,
+          // Compteur d'annulations tardives (chauffeur avait accepté)
+          _count: { select: { ridesAsPassenger: true } },
         },
       }),
       prisma.user.count({ where }),
     ]);
 
-    res.json({ success: true, data: { users, total, page: parseInt(page as string) } });
+    // Récupérer les annulations tardives pour chaque utilisateur
+    const userIds = users.map((u) => u.id);
+    const cancelCounts = await prisma.ride.groupBy({
+      by: ['passengerId'],
+      where: {
+        passengerId: { in: userIds },
+        status: 'CANCELLED',
+        driverId: { not: null },
+      },
+      _count: { _all: true },
+    });
+    const cancelMap = Object.fromEntries(cancelCounts.map((c) => [c.passengerId, c._count._all]));
+
+    const enriched = users.map((u) => ({
+      ...u,
+      cancelCount: cancelMap[u.id] || 0,
+    }));
+
+    res.json({ success: true, data: { users: enriched, total, page: parseInt(page as string) } });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }

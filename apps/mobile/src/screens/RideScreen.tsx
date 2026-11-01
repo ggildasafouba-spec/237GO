@@ -240,9 +240,44 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   };
 
   const handleCancel = () => {
-    if (currentRide) {
-      Alert.alert('Annuler la course ?', 'Des frais d\'annulation peuvent s\'appliquer.', [
-        { text: 'Non' },
+    if (!currentRide) return;
+
+    // Construire un message d'avertissement adapté au stade et au mode de paiement.
+    const status = currentRide.status;
+    const method = selectedPayment;
+
+    // Stade de la course
+    const isDriverEnRoute = status === 'ACCEPTED' || status === 'DRIVER_ARRIVING';
+    const stageMsg = isDriverEnRoute
+      ? '⚠️ Le chauffeur est déjà en route pour vous récupérer.'
+      : 'La course est en attente d\'un chauffeur.';
+
+    // Message selon le mode de paiement
+    let paymentWarning = '';
+    if (method === 'WALLET') {
+      paymentWarning = isDriverEnRoute
+        ? '\n\n💳 Portefeuille 237GO : des frais d\'annulation pourront être prélevés sur votre solde lors d\'une prochaine mise à jour.'
+        : '\n\n💳 Portefeuille 237GO : aucun frais pour cette annulation.';
+    } else if (method === 'ORANGE_MONEY' || method === 'MTN_MOMO') {
+      paymentWarning = isDriverEnRoute
+        ? '\n\n📱 Mobile Money : des frais d\'annulation pourront s\'appliquer lors de la mise en place de la facturation.'
+        : '\n\n📱 Mobile Money : aucun frais pour cette annulation.';
+    } else if (method === 'CASH') {
+      paymentWarning = isDriverEnRoute
+        ? '\n\n💵 Espèces : aucun frais automatique, mais les annulations répétées peuvent entraîner la suspension de votre compte.'
+        : '\n\n💵 Espèces : aucun frais pour cette annulation.';
+    }
+
+    // Avertissement si course en cours → risque de mauvaise note
+    const reputationMsg = isDriverEnRoute
+      ? '\n\n📊 Les annulations tardives sont enregistrées et peuvent affecter votre compte.'
+      : '';
+
+    Alert.alert(
+      'Annuler la course ?',
+      `${stageMsg}${paymentWarning}${reputationMsg}`,
+      [
+        { text: 'Non, garder la course', style: 'cancel' },
         {
           text: 'Oui, annuler',
           style: 'destructive',
@@ -254,8 +289,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             }
           },
         },
-      ]);
-    }
+      ]
+    );
   };
 
   const selectedEstimate = estimates.find((e) => e.vehicleType === selectedVehicle);

@@ -10,6 +10,7 @@ interface User {
   role: string;
   isActive: boolean;
   createdAt: string;
+  cancelCount?: number; // annulations tardives
 }
 
 export default function Users() {
@@ -112,6 +113,7 @@ export default function Users() {
           <span style={styles.cell}>Téléphone</span>
           <span style={styles.cell}>Rôle</span>
           <span style={styles.cell}>Statut</span>
+          <span style={styles.cell}>Annulations</span>
           <span style={styles.cell}>Inscrit le</span>
           <span style={styles.cell}>Actions</span>
         </div>
@@ -137,6 +139,19 @@ export default function Users() {
                   <span style={{ color: user.isActive ? '#388E3C' : '#D32F2F' }}>
                     {user.isActive ? '● Actif' : '● Inactif'}
                   </span>
+                </span>
+                <span style={styles.cell}>
+                  {(user.cancelCount || 0) > 0 ? (
+                    <span style={{
+                      color: (user.cancelCount || 0) >= 3 ? '#D32F2F' : '#F57C00',
+                      fontWeight: 700,
+                      fontSize: 13,
+                    }}>
+                      {user.cancelCount} {(user.cancelCount || 0) >= 3 ? '⚠️' : ''}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#9E9E9E', fontSize: 13 }}>0</span>
+                  )}
                 </span>
                 <span style={styles.cell}>{new Date(user.createdAt).toLocaleDateString('fr-FR')}</span>
                 <span style={styles.cell}>

@@ -290,18 +290,38 @@ router.post(
 // Profil utilisateur
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-      include: {
-        wallet: true,
-        loyaltyPoints: true,
-        driverProfile: true,
-        merchantProfile: true,
-        emergencyContacts: true,
-      },
-    });
+    const [user, cancelCount] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: req.user!.id },
+        include: {
+          wallet: true,
+          loyaltyPoints: true,
+          driverProfile: true,
+          merchantProfile: true,
+          emergencyContacts: true,
+        },
+      }),
+      // Compteur d'annulations tardives (course acceptée ou chauffeur en route)
+      // = courses annulées où le chauffeur avait déjà accepté (driverId non null).
+      prisma.ride.count({
+        where: {
+          passengerId: req.user!.id,
+          status: 'CANCELLED',
+          driverId: { not: null }, // chauffeur avait accepté = annulation tardive
+        },
+      }),
+    ]);
 
-    res.json({ success: true, data: user });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    // Avertissement si seuil dépassé (3 annulations tardives)
+    const cancelWarning = cancelCount >= 3
+      ? `Attention : vous avez ${cancelCount} annulation(s) tardive(s). Votre compte pourrait être suspendu.`
+      : null;
+
+    res.json({ success: true, data: { ...user, cancelCount, cancelWarning } });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur lors de la récupération du profil' });
   }
