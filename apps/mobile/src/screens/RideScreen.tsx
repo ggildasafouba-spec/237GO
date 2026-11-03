@@ -54,6 +54,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleType>(route?.params?.vehicleType || 'MOTO');
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('ORANGE_MONEY');
   const [proposedPrice, setProposedPrice] = useState('');
+  const [passengerCount, setPassengerCount] = useState(1);
+  const [luggageSize, setLuggageSize] = useState<'NONE' | 'SMALL' | 'LARGE'>('NONE');
 
   const {
     estimates,
@@ -232,6 +234,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
         vehicleType: selectedVehicle,
         paymentMethod: selectedPayment,
         proposedPrice: proposedPrice ? parseFloat(proposedPrice) : undefined,
+        passengerCount,
+        luggageSize,
       });
       setStep('waiting');
     } catch {
@@ -497,6 +501,55 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             placeholderTextColor={colors.textLight}
             accessibilityLabel="Proposer un prix personnalisé"
           />
+        </View>
+
+        {/* Nombre de passagers (masqué pour les motos) */}
+        {selectedVehicle !== 'MOTO' && (
+          <View style={styles.optionSection}>
+            <Text style={styles.optionTitle}>👥 Nombre de passagers</Text>
+            <View style={styles.optionRow}>
+              {[1, 2, 3, 4].map((n) => (
+                <TouchableOpacity
+                  key={n}
+                  style={[styles.optionChip, passengerCount === n && styles.optionChipSelected]}
+                  onPress={() => setPassengerCount(n)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: passengerCount === n }}
+                  accessibilityLabel={`${n} passager${n > 1 ? 's' : ''}`}
+                >
+                  <Text style={[styles.optionChipText, passengerCount === n && styles.optionChipTextSelected]}>
+                    {n}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Bagages */}
+        <View style={styles.optionSection}>
+          <Text style={styles.optionTitle}>🧳 Bagages</Text>
+          <View style={styles.optionRow}>
+            {([
+              { id: 'NONE', label: 'Aucun', icon: '🚫' },
+              { id: 'SMALL', label: 'Petit sac', icon: '👜' },
+              { id: 'LARGE', label: 'Valise', icon: '🧳' },
+            ] as { id: 'NONE' | 'SMALL' | 'LARGE'; label: string; icon: string }[]).map((opt) => (
+              <TouchableOpacity
+                key={opt.id}
+                style={[styles.optionChipWide, luggageSize === opt.id && styles.optionChipSelected]}
+                onPress={() => setLuggageSize(opt.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: luggageSize === opt.id }}
+                accessibilityLabel={opt.label}
+              >
+                <Text style={styles.optionChipIcon}>{opt.icon}</Text>
+                <Text style={[styles.optionChipText, luggageSize === opt.id && styles.optionChipTextSelected]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* Méthode de paiement */}
@@ -1012,5 +1065,56 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
     fontSize: typography.md,
+  },
+  // --- Passagers & Bagages ---
+  optionSection: {
+    marginBottom: spacing.md,
+  },
+  optionTitle: {
+    fontSize: typography.sm,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  optionChip: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  optionChipWide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  optionChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  optionChipIcon: {
+    fontSize: 16,
+  },
+  optionChipText: {
+    fontSize: typography.sm,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  optionChipTextSelected: {
+    color: colors.primary,
   },
 });

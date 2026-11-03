@@ -52,6 +52,8 @@ interface RideState {
     vehicleType: string;
     paymentMethod: string;
     proposedPrice?: number;
+    passengerCount?: number;
+    luggageSize?: string;
   }) => Promise<void>;
   cancelRide: (rideId: string) => Promise<void>;
   confirmArrival: (rideId: string) => Promise<string>;
@@ -103,6 +105,8 @@ export const useRideStore = create<RideState>((set, get) => ({
         vehicleType: data.vehicleType,
         paymentMethod: data.paymentMethod,
         proposedPrice: data.proposedPrice,
+        passengerCount: data.passengerCount,
+        luggageSize: data.luggageSize,
       });
 
       set({ currentRide: response.data.data, isLoading: false });

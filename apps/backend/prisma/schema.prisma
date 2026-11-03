@@ -189,6 +189,8 @@ model Ride {
   estimatedPrice  Float
   finalPrice      Float?
   proposedPrice   Float?     // prix proposé par le passager (négociation)
+  passengerCount  Int        @default(1)   // nombre de passagers
+  luggageSize     String?                  // NONE | SMALL | LARGE
   paymentMethod   PaymentMethod
   isPaid          Boolean    @default(false)
   startedAt       DateTime?

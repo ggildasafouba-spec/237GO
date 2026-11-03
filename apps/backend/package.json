@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "npx prisma generate && npx tsc --skipLibCheck",
-    "start": "node dist/server.js",
+    "start": "npx prisma migrate deploy && node dist/server.js",
     "db:migrate": "npx prisma migrate dev",
     "db:seed": "npx prisma db seed"
   },

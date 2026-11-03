@@ -79,6 +79,8 @@ router.post(
     body('vehicleType').isIn(['MOTO', 'CAR_ECONOMY', 'CAR_COMFORT', 'CAR_VIP']),
     body('paymentMethod').isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CASH', 'WALLET']),
     body('proposedPrice').optional().isFloat({ min: 0 }),
+    body('passengerCount').optional().isInt({ min: 1, max: 4 }),
+    body('luggageSize').optional().isIn(['NONE', 'SMALL', 'LARGE']),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
@@ -91,6 +93,7 @@ router.post(
         pickupLat, pickupLng, pickupAddress,
         dropoffLat, dropoffLng, dropoffAddress,
         vehicleType, paymentMethod, proposedPrice,
+        passengerCount, luggageSize,
       } = req.body;
 
       // Calcul du prix estimé
@@ -122,6 +125,8 @@ router.post(
           estimatedPrice,
           proposedPrice: proposedPrice || null,
           paymentMethod,
+          passengerCount: passengerCount || 1,
+          luggageSize: luggageSize || 'NONE',
         },
       });
 
@@ -145,6 +150,8 @@ router.post(
           vehicleType,
           distance,
           duration,
+          passengerCount: passengerCount || 1,
+          luggageSize: luggageSize || 'NONE',
         },
       });
 
