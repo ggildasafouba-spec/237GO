@@ -34,6 +34,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
   const [step, setStep] = useState<'phone' | 'reset'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const [otpDisplay, setOtpDisplay] = useState(''); // code affiché à l'écran
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,7 +72,11 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     setIsLoading(true);
     try {
       const res = await api.post('/auth/forgot-password', { identifier: id });
-      Alert.alert('Code envoyé', res.data.message);
+      // Le code est retourné directement dans la réponse pour être affiché à l'écran
+      if (res.data.otp) {
+        setOtpDisplay(res.data.otp);
+        setOtp(res.data.otp); // pré-remplir le champ pour faciliter la saisie
+      }
       setStep('reset');
     } catch (error: any) {
       Alert.alert('Erreur', error?.response?.data?.message || 'Une erreur est survenue');
@@ -188,8 +193,17 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
         ) : (
           <>
             <Text style={styles.subtitle}>
-              Entrez le code reçu {byEmail ? `par email à ${emailValue.trim()}` : `par SMS au ${getIdentifier()}`} et choisissez un nouveau mot de passe.
+              Voici votre code de réinitialisation. Saisissez-le ci-dessous et choisissez un nouveau mot de passe.
             </Text>
+
+            {/* Code affiché en grand — bien visible */}
+            {otpDisplay ? (
+              <View style={styles.otpBox}>
+                <Text style={styles.otpBoxLabel}>🔐 Votre code de réinitialisation</Text>
+                <Text style={styles.otpBoxCode}>{otpDisplay}</Text>
+                <Text style={styles.otpBoxNote}>Valable 10 minutes · Ne le partagez pas</Text>
+              </View>
+            ) : null}
 
             <Text style={styles.label}>Code de vérification</Text>
             <TextInput
@@ -264,4 +278,32 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: typography.md, fontWeight: '700' },
   linkButton: { alignItems: 'center', marginTop: spacing.md },
   linkText: { color: 'rgba(255,255,255,0.9)', fontSize: typography.sm, fontWeight: '600' },
+  // Encadré code OTP affiché à l'écran
+  otpBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: 2,
+    borderColor: colors.secondary,
+  },
+  otpBoxLabel: {
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+  },
+  otpBoxCode: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 8,
+    marginBottom: spacing.xs,
+  },
+  otpBoxNote: {
+    fontSize: typography.xs,
+    color: colors.textLight,
+    textAlign: 'center',
+  },
 });

@@ -180,7 +180,8 @@ async function findUserByIdentifier(rawId: string) {
   return prisma.user.findUnique({ where: { phone: id } });
 }
 
-// Mot de passe oublié — code OTP envoyé par SMS et/ou email
+// Mot de passe oublié — code OTP retourné dans la réponse (affiché à l'écran)
+// + tentative d'envoi SMS/email en best-effort si configurés.
 router.post(
   '/forgot-password',
   [body('identifier').optional(), body('phone').optional()],
@@ -193,11 +194,14 @@ router.post(
 
       const user = await findUserByIdentifier(rawId);
 
-      // Toujours répondre succès pour ne pas révéler si le compte existe (sécurité)
+      // Si le compte n'existe pas : on répond quand même avec un faux code pour
+      // ne pas révéler l'existence du compte (sécurité anti-énumération).
       if (!user) {
         return res.json({
           success: true,
-          message: 'Si ce compte existe, un code de réinitialisation a été envoyé.',
+          // Faux code — ne fonctionnera pas à la validation
+          otp: Math.floor(100000 + Math.random() * 900000).toString(),
+          message: 'Votre code de réinitialisation est affiché ci-dessous.',
         });
       }
 
@@ -210,28 +214,27 @@ router.post(
         data: { resetOtp: otp, resetOtpExpiry: expiry },
       });
 
-      // Envoi par EMAIL si disponible (fiable à l'international) — best-effort
+      // Envoi par EMAIL si disponible — best-effort (ne bloque pas si échoue)
       if (user.email) {
-        try {
-          await sendPasswordResetEmail(user.email, otp);
-        } catch (e) {
-          console.error('Échec envoi email reset (non bloquant):', (e as Error).message);
-        }
+        sendPasswordResetEmail(user.email, otp).catch((e) =>
+          console.error('Échec envoi email reset (non bloquant):', (e as Error).message)
+        );
       }
 
-      // Envoi par SMS aussi (best-effort) — utile pour les numéros locaux
-      try {
-        await sendSMS({
-          to: user.phone,
-          message: `237GO: Votre code de réinitialisation est ${otp}. Valable 10 minutes. Ne le partagez pas.`,
-        });
-      } catch (smsError) {
-        console.error('Échec envoi SMS reset (non bloquant):', (smsError as Error).message);
-      }
+      // Envoi par SMS — best-effort (ne bloque pas si Africa's Talking non configuré)
+      sendSMS({
+        to: user.phone,
+        message: `237GO: Votre code de réinitialisation est ${otp}. Valable 10 minutes. Ne le partagez pas.`,
+      }).catch((e) =>
+        console.error('Échec envoi SMS reset (non bloquant):', (e as Error).message)
+      );
 
+      // On retourne le code directement dans la réponse pour l'afficher à l'écran.
+      // Quand Africa's Talking sera configuré, le SMS arrivera également.
       res.json({
         success: true,
-        message: 'Si ce compte existe, un code de réinitialisation a été envoyé (SMS et/ou email).',
+        otp,
+        message: 'Votre code de réinitialisation est affiché ci-dessous.',
       });
     } catch (error) {
       console.error('forgot-password error:', error);
