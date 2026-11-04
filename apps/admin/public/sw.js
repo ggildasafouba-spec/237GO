@@ -2,7 +2,7 @@
 // Stratégie "network-first" : on privilégie toujours le réseau pour garder les
 // données à jour ; le cache ne sert que de secours hors-ligne pour la coquille.
 
-const CACHE = '237go-admin-v1';
+const CACHE = '237go-admin-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
