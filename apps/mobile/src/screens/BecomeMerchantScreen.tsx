@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
+import { useLocation } from '../hooks/useLocation';
+import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { colors, spacing, typography } from '../theme';
 
 const CATEGORIES = [
@@ -45,6 +47,11 @@ function UploadBox({ label, uri, loading, onPress, required }: { label: string; 
 export default function BecomeMerchantScreen({ navigation }: { navigation: any }) {
   const [shopName, setShopName] = useState('');
   const [shopAddress, setShopAddress] = useState('');
+  const [shopLat, setShopLat] = useState(4.0511);
+  const [shopLng, setShopLng] = useState(9.7679);
+  const [locationLabel, setLocationLabel] = useState('');
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [category, setCategory] = useState('alimentation');
   const [description, setDescription] = useState('');
   const [ownerIdPhoto, setOwnerIdPhoto] = useState<string | null>(null);
@@ -52,6 +59,36 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
   const [businessRegPhoto, setBusinessRegPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const { getCurrentLocation, reverseGeocode } = useLocation();
+
+  // Utiliser la position GPS actuelle comme position du restaurant
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const loc = await getCurrentLocation();
+      if (loc) {
+        setShopLat(loc.latitude);
+        setShopLng(loc.longitude);
+        const addr = await reverseGeocode(loc.latitude, loc.longitude);
+        setLocationLabel(addr);
+        if (!shopAddress) setShopAddress(addr);
+      } else {
+        Alert.alert('Localisation', "Impossible d'obtenir votre position. Vérifiez que le GPS est activé.");
+      }
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  // Position choisie sur la carte
+  const onLocationPicked = (place: PickedPlace) => {
+    setShopLat(place.lat);
+    setShopLng(place.lng);
+    setLocationLabel(place.label);
+    if (!shopAddress) setShopAddress(place.label);
+    setShowLocationPicker(false);
+  };
 
   const handleUpload = async (which: 'ownerId' | 'shop' | 'businessReg') => {
     setUploading(which);
@@ -84,9 +121,8 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
       await api.post('/users/become-merchant', {
         shopName,
         shopAddress,
-        // Position par défaut (Douala) — à affiner avec le GPS plus tard
-        shopLat: 4.0511,
-        shopLng: 9.7679,
+        shopLat,
+        shopLng,
         category,
         description: description || undefined,
         ownerIdPhoto,
@@ -133,6 +169,50 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
           onChangeText={setShopAddress}
           placeholderTextColor={colors.textLight}
         />
+
+        {/* Localisation GPS du restaurant */}
+        <Text style={styles.label}>Position sur la carte *</Text>
+        <Text style={styles.docHint}>
+          Indispensable pour que les clients vous trouvent et que les chauffeurs viennent livrer.
+        </Text>
+
+        {/* Affichage de la position choisie */}
+        {locationLabel ? (
+          <View style={styles.locationChosen}>
+            <Text style={styles.locationChosenIcon}>📍</Text>
+            <Text style={styles.locationChosenText} numberOfLines={2}>{locationLabel}</Text>
+          </View>
+        ) : (
+          <View style={styles.locationEmpty}>
+            <Text style={styles.locationEmptyText}>⚠️ Aucune position choisie</Text>
+          </View>
+        )}
+
+        {/* Boutons de géolocalisation */}
+        <View style={styles.locationButtons}>
+          <TouchableOpacity
+            style={styles.locationBtn}
+            onPress={useMyLocation}
+            disabled={locating}
+            accessibilityRole="button"
+            accessibilityLabel="Utiliser ma position actuelle"
+          >
+            {locating ? (
+              <ActivityIndicator color={colors.primary} size="small" />
+            ) : (
+              <Text style={styles.locationBtnText}>📡 Ma position</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.locationBtn, styles.locationBtnMap]}
+            onPress={() => setShowLocationPicker(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Choisir sur la carte"
+          >
+            <Text style={[styles.locationBtnText, { color: '#fff' }]}>🗺️ Choisir sur la carte</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.label}>Catégorie *</Text>
         <View style={styles.catGrid}>
@@ -181,6 +261,15 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
           <Text style={styles.backText}>← Annuler</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Sélecteur de position sur la carte */}
+      <DestinationPicker
+        visible={showLocationPicker}
+        initialCenter={{ lat: shopLat, lng: shopLng }}
+        title="Position du restaurant / boutique"
+        onConfirm={onLocationPicked}
+        onClose={() => setShowLocationPicker(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -209,4 +298,25 @@ const styles = StyleSheet.create({
   submitButtonText: { color: '#fff', fontSize: typography.md, fontWeight: '700' },
   backButton: { alignItems: 'center', marginTop: spacing.lg },
   backText: { color: colors.primary, fontSize: typography.md, fontWeight: '600' },
+  // Localisation GPS
+  locationChosen: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9',
+    borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 1, borderColor: colors.primary,
+  },
+  locationChosenIcon: { fontSize: 20, marginRight: spacing.sm },
+  locationChosenText: { flex: 1, fontSize: typography.sm, color: colors.text, fontWeight: '500' },
+  locationEmpty: {
+    backgroundColor: '#FFF8E1', borderRadius: 12, padding: spacing.md,
+    marginBottom: spacing.sm, borderWidth: 1, borderColor: '#FCD116',
+    alignItems: 'center',
+  },
+  locationEmptyText: { fontSize: typography.sm, color: '#B8860B', fontWeight: '600' },
+  locationButtons: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  locationBtn: {
+    flex: 1, padding: spacing.md, borderRadius: 12, alignItems: 'center',
+    backgroundColor: '#E8F5E9', borderWidth: 1, borderColor: colors.primary,
+  },
+  locationBtnMap: { backgroundColor: colors.primary, borderColor: colors.primary },
+  locationBtnText: { fontSize: typography.sm, fontWeight: '700', color: colors.primary },
 });
