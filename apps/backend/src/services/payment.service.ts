@@ -281,9 +281,12 @@ export async function verifyPayment(transactionId: string): Promise<{
       return { success: true, status: 'PENDING', message: 'Authentification CinetPay indisponible' };
     }
 
-    // Statut du paiement : GET /v1/payment/{merchant_transaction_id}/status
+    // Statut du paiement : GET /v1/payment/{merchant_transaction_id}
+    // (documentation CinetPay « Statut du paiement ». Avant, le code ajoutait "/status" à la fin :
+    // l'appel échouait et le paiement restait "en attente" même après un paiement réussi.)
+    // Réponse : { code: 100, status: "SUCCESS" | "FAILED" | "INITIATED" | ..., amount, ... }
     const response = await axios.get(
-      `${cinetPayConfig.baseUrl}/v1/payment/${encodeURIComponent(transactionId)}/status`,
+      `${cinetPayConfig.baseUrl}/v1/payment/${encodeURIComponent(transactionId)}`,
       {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 20000,
