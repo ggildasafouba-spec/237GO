@@ -110,12 +110,14 @@ export async function verifyNotchPay(reference: string): Promise<{
 
 // ========== CINETPAY (API Aurore v1 : OAuth + MoMo/Orange) ==========
 
+// .trim() : une valeur collée avec des espaces dans l'hébergeur (constaté sur Railway pour
+// CINETPAY_BASE_URL) ferait échouer les appels. On retire aussi un "/" final éventuel.
 const cinetPayConfig = {
-  apiKey: process.env.CINETPAY_API_KEY || '',
-  apiPassword: process.env.CINETPAY_API_PASSWORD || process.env.CINETPAY_SECRET_KEY || '',
+  apiKey: (process.env.CINETPAY_API_KEY || '').trim(),
+  apiPassword: (process.env.CINETPAY_API_PASSWORD || process.env.CINETPAY_SECRET_KEY || '').trim(),
   // API "Aurore" (v1). Sandbox: https://api.cinetpay.net ; Production: https://api.cinetpay.net
   // (CinetPay distingue sandbox/prod via les clés, pas via l'URL). Surchargeable par env.
-  baseUrl: process.env.CINETPAY_BASE_URL || 'https://api.cinetpay.net',
+  baseUrl: ((process.env.CINETPAY_BASE_URL || '').trim() || 'https://api.cinetpay.net').replace(/\/+$/, ''),
 };
 
 export interface PaymentRequest {
@@ -482,7 +484,9 @@ export async function verifyDepositTransaction(transaction: {
 }
 
 export async function processPayment(data: PaymentRequest): Promise<PaymentResponse> {
-  const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3002}`;
+  // Nettoyée : c'est l'adresse à laquelle CinetPay envoie la confirmation de paiement (webhook).
+  const apiBaseUrl =
+    ((process.env.API_BASE_URL || '').trim() || `http://localhost:${process.env.PORT || 3002}`).replace(/\/+$/, '');
 
   const useCinetPay = activePaymentProvider() === 'cinetpay';
 
