@@ -12,8 +12,8 @@ import {
   FlatList,
   Image,
   Modal,
+  Vibration,
 } from 'react-native';
-import { Audio } from 'expo-av';
 import { useAuthStore } from '../store/authStore';
 import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
@@ -119,8 +119,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
   const [editingTime, setEditingTime] = useState<{ day: string; field: 'open' | 'close' } | null>(null);
   const [timeInput, setTimeInput] = useState('');
 
-  // Son notification nouvelle commande
-  const soundRef = useRef<Audio.Sound | null>(null);
+  // Détection des nouvelles commandes (vibration d'alerte)
   const prevOrderCountRef = useRef<number>(0);
 
   const loadShop = useCallback(async () => {
@@ -163,28 +162,12 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     return () => clearInterval(interval);
   }, [loadShop, loadOrders]);
 
-  // Nettoyage du son au démontage
-  useEffect(() => {
-    return () => {
-      soundRef.current?.unloadAsync().catch(() => {});
-    };
-  }, []);
-
-  const playNotificationSound = async () => {
+  // Alerte nouvelle commande : vibration en motif (pause, vibre, pause, vibre)
+  const playNotificationSound = () => {
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
-        { shouldPlay: true }
-      );
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync().catch(() => {});
-        }
-      });
+      Vibration.vibrate([0, 400, 200, 400, 200, 400]);
     } catch {
-      // Son indisponible — pas bloquant
+      // Vibration indisponible — pas bloquant
     }
   };
 
