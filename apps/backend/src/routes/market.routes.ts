@@ -237,6 +237,30 @@ router.delete('/products/:id', authenticate, authorize('MERCHANT'), async (req: 
   }
 });
 
+// Mettre à jour les horaires d'ouverture de la boutique
+router.patch('/my-shop/hours', authenticate, authorize('MERCHANT'), async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await prisma.merchantProfile.findUnique({ where: { userId: req.user!.id } });
+    if (!merchant) {
+      throw new AppError('Profil marchand non trouvé', 404);
+    }
+    const { openingHours } = req.body;
+    if (!openingHours || typeof openingHours !== 'object') {
+      throw new AppError('Horaires invalides', 400);
+    }
+    const updated = await prisma.merchantProfile.update({
+      where: { id: merchant.id },
+      data: { openingHours },
+    });
+    res.json({ success: true, data: updated, message: 'Horaires mis à jour' });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // Commandes REÇUES par le marchand connecté
 router.get('/my-orders', authenticate, authorize('MERCHANT'), async (req: AuthRequest, res: Response) => {
   try {

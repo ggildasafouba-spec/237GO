@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,13 @@ import {
   Switch,
   ActivityIndicator,
   FlatList,
+  Image,
+  Modal,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { useAuthStore } from '../store/authStore';
 import api from '../config/api';
+import { pickAndUploadImage } from '../config/upload';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import { formatPhone } from '../utils/phone';
@@ -23,6 +27,7 @@ interface Product {
   price: number;
   category: string;
   description?: string;
+  image?: string;
   isAvailable: boolean;
 }
 
@@ -45,11 +50,16 @@ interface Order {
   items: OrderItem[];
 }
 
+interface OpeningHours {
+  [day: string]: { open: string; close: string; closed: boolean };
+}
+
 interface Shop {
   id: string;
   shopName: string;
   shopAddress: string;
   isOpen: boolean;
+  openingHours?: OpeningHours;
   products: Product[];
 }
 
@@ -64,33 +74,63 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Annulée',
 };
 
-// Prochaine action du marchand selon le statut courant
 const NEXT_STATUS: Record<string, { status: string; label: string }> = {
   PENDING: { status: 'CONFIRMED', label: '✅ Confirmer la commande' },
-  CONFIRMED: { status: 'PREPARING', label: '👨\u200d🍳 Commencer la préparation' },
+  CONFIRMED: { status: 'PREPARING', label: '👨‍🍳 Commencer la préparation' },
   PREPARING: { status: 'READY', label: '📦 Marquer comme prête' },
   READY: { status: 'DELIVERED', label: '🚚 Marquer comme livrée' },
 };
 
+const DAYS = [
+  { key: 'monday', label: 'Lundi' },
+  { key: 'tuesday', label: 'Mardi' },
+  { key: 'wednesday', label: 'Mercredi' },
+  { key: 'thursday', label: 'Jeudi' },
+  { key: 'friday', label: 'Vendredi' },
+  { key: 'saturday', label: 'Samedi' },
+  { key: 'sunday', label: 'Dimanche' },
+];
+
+const DEFAULT_HOURS: OpeningHours = Object.fromEntries(
+  DAYS.map((d) => [d.key, { open: '08:00', close: '20:00', closed: false }])
+);
+
 export default function MerchantScreen({ navigation }: { navigation: any }) {
   const { user, logout } = useAuthStore();
-  const [tab, setTab] = useState<'products' | 'orders'>('orders');
+  const [tab, setTab] = useState<'orders' | 'products' | 'hours'>('orders');
   const [shop, setShop] = useState<Shop | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const safe = useSafeScreen();
 
-  // Formulaire d'ajout de produit
+  // Formulaire ajout produit
   const [showAddForm, setShowAddForm] = useState(false);
   const [pName, setPName] = useState('');
   const [pPrice, setPPrice] = useState('');
   const [pCategory, setPCategory] = useState('');
   const [pDesc, setPDesc] = useState('');
+  const [pImage, setPImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
+
+  // Horaires
+  const [hours, setHours] = useState<OpeningHours>(DEFAULT_HOURS);
+  const [savingHours, setSavingHours] = useState(false);
+  const [editingTime, setEditingTime] = useState<{ day: string; field: 'open' | 'close' } | null>(null);
+  const [timeInput, setTimeInput] = useState('');
+
+  // Son notification nouvelle commande
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const prevOrderCountRef = useRef<number>(0);
 
   const loadShop = useCallback(async () => {
     try {
       const res = await api.get('/market/my-shop');
-      setShop(res.data.data);
+      const data = res.data.data;
+      setShop(data);
+      if (data.openingHours) {
+        setHours({ ...DEFAULT_HOURS, ...data.openingHours });
+      }
     } catch {
       // profil marchand absent
     }
@@ -99,17 +139,54 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
   const loadOrders = useCallback(async () => {
     try {
       const res = await api.get('/market/my-orders');
-      setOrders(res.data.data);
+      const newOrders: Order[] = res.data.data;
+
+      // Détecter une nouvelle commande PENDING et jouer un son
+      const pendingCount = newOrders.filter((o) => o.status === 'PENDING').length;
+      if (pendingCount > prevOrderCountRef.current) {
+        playNotificationSound();
+      }
+      prevOrderCountRef.current = pendingCount;
+      setOrders(newOrders);
     } catch {}
   }, []);
 
+  // Polling toutes les 30s pour les nouvelles commandes
   useEffect(() => {
     (async () => {
       setLoading(true);
       await Promise.all([loadShop(), loadOrders()]);
       setLoading(false);
     })();
+
+    const interval = setInterval(() => loadOrders(), 30000);
+    return () => clearInterval(interval);
   }, [loadShop, loadOrders]);
+
+  // Nettoyage du son au démontage
+  useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
+
+  const playNotificationSound = async () => {
+    try {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
+        { shouldPlay: true }
+      );
+      soundRef.current = sound;
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+        }
+      });
+    } catch {
+      // Son indisponible — pas bloquant
+    }
+  };
 
   const toggleShop = async () => {
     try {
@@ -120,24 +197,41 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  const handlePickImage = async () => {
+    setUploadingImage(true);
+    try {
+      const url = await pickAndUploadImage();
+      if (url) setPImage(url);
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.message || "Impossible d'uploader l'image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const addProduct = async () => {
     if (!pName || !pPrice || !pCategory) {
       Alert.alert('Attention', 'Nom, prix et catégorie sont requis');
       return;
     }
+    setSavingProduct(true);
     try {
       await api.post('/market/products', {
         name: pName,
         price: parseFloat(pPrice),
         category: pCategory,
         description: pDesc || undefined,
+        image: pImage || undefined,
       });
-      setPName(''); setPPrice(''); setPCategory(''); setPDesc('');
+      // Reset formulaire
+      setPName(''); setPPrice(''); setPCategory(''); setPDesc(''); setPImage(null);
       setShowAddForm(false);
       loadShop();
-      Alert.alert('✅ Produit ajouté');
+      Alert.alert('✅ Produit ajouté !');
     } catch {
       Alert.alert('Erreur', "Impossible d'ajouter le produit");
+    } finally {
+      setSavingProduct(false);
     }
   };
 
@@ -154,8 +248,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     Alert.alert('Supprimer ?', `Supprimer "${product.name}" ?`, [
       { text: 'Non' },
       {
-        text: 'Oui',
-        style: 'destructive',
+        text: 'Oui', style: 'destructive',
         onPress: async () => {
           try {
             await api.delete(`/market/products/${product.id}`);
@@ -179,6 +272,32 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  const saveHours = async () => {
+    setSavingHours(true);
+    try {
+      await api.patch('/market/my-shop/hours', { openingHours: hours });
+      Alert.alert('✅ Horaires sauvegardés');
+    } catch {
+      Alert.alert('Erreur', 'Impossible de sauvegarder les horaires');
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  const updateHourField = (day: string, field: 'open' | 'close', value: string) => {
+    setHours((prev) => ({
+      ...prev,
+      [day]: { ...prev[day], [field]: value },
+    }));
+  };
+
+  const toggleDayClosed = (day: string) => {
+    setHours((prev) => ({
+      ...prev,
+      [day]: { ...prev[day], closed: !prev[day].closed },
+    }));
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -191,11 +310,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     return (
       <View style={styles.container}>
         <View style={[styles.header, safe.top]}>
-          <TouchableOpacity
-            style={styles.avatar}
-            onPress={() => navigation.navigate('Profile')}
-            accessibilityLabel="Profil et déconnexion"
-          >
+          <TouchableOpacity style={styles.avatar} onPress={() => navigation.navigate('Profile')}>
             <Text style={styles.avatarText}>{user?.firstName?.[0]}{user?.lastName?.[0]}</Text>
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: spacing.md }}>
@@ -206,10 +321,10 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
         <View style={styles.center}>
           <Text style={styles.emptyIcon}>🏪</Text>
           <Text style={styles.emptyText}>Aucune boutique associée à ce compte pour le moment.</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); Promise.all([loadShop(), loadOrders()]).finally(() => setLoading(false)); }} accessibilityRole="button">
+          <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); Promise.all([loadShop(), loadOrders()]).finally(() => setLoading(false)); }}>
             <Text style={styles.retryBtnText}>🔄 Réessayer</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.logoutBtn} onPress={() => logout()} accessibilityRole="button">
+          <TouchableOpacity style={styles.logoutBtn} onPress={() => logout()}>
             <Text style={styles.logoutBtnText}>Changer de compte</Text>
           </TouchableOpacity>
         </View>
@@ -217,15 +332,13 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     );
   }
 
+  const pendingCount = orders.filter((o) => o.status === 'PENDING').length;
+
   return (
     <View style={styles.container}>
       {/* Header boutique */}
       <View style={[styles.header, safe.top]}>
-        <TouchableOpacity
-          style={styles.avatar}
-          onPress={() => navigation.navigate('Profile')}
-          accessibilityLabel="Profil et déconnexion"
-        >
+        <TouchableOpacity style={styles.avatar} onPress={() => navigation.navigate('Profile')}>
           <Text style={styles.avatarText}>{user?.firstName?.[0]}{user?.lastName?.[0]}</Text>
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: spacing.md }}>
@@ -241,29 +354,36 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
         />
       </View>
 
-      {/* Onglets internes */}
+      {/* Onglets */}
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, tab === 'orders' && styles.tabActive]}
           onPress={() => setTab('orders')}
-          accessibilityRole="button"
         >
           <Text style={[styles.tabText, tab === 'orders' && styles.tabTextActive]}>
-            Commandes ({orders.filter((o) => !['DELIVERED', 'CANCELLED'].includes(o.status)).length})
+            Commandes {pendingCount > 0 ? `🔴 ${pendingCount}` : ''}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === 'products' && styles.tabActive]}
           onPress={() => setTab('products')}
-          accessibilityRole="button"
         >
           <Text style={[styles.tabText, tab === 'products' && styles.tabTextActive]}>
             Produits ({shop.products.length})
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'hours' && styles.tabActive]}
+          onPress={() => setTab('hours')}
+        >
+          <Text style={[styles.tabText, tab === 'hours' && styles.tabTextActive]}>
+            Horaires
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {tab === 'orders' ? (
+      {/* ===== ONGLET COMMANDES ===== */}
+      {tab === 'orders' && (
         <FlatList
           data={orders}
           keyExtractor={(o) => o.id}
@@ -278,19 +398,27 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
           }
           renderItem={({ item }) => {
             const next = NEXT_STATUS[item.status];
+            const isPending = item.status === 'PENDING';
             return (
-              <View style={styles.orderCard}>
+              <View style={[styles.orderCard, isPending && styles.orderCardPending]}>
+                {isPending && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>🔔 NOUVELLE COMMANDE</Text>
+                  </View>
+                )}
                 <View style={styles.orderTop}>
                   <Text style={styles.orderCustomer}>
                     {item.customer.firstName} {item.customer.lastName}
                   </Text>
-                  <View style={styles.statusBadge}>
-                    <Text style={styles.statusBadgeText}>{STATUS_LABELS[item.status] || item.status}</Text>
+                  <View style={[styles.statusBadge, isPending && styles.statusBadgePending]}>
+                    <Text style={[styles.statusBadgeText, isPending && { color: '#E65100' }]}>
+                      {STATUS_LABELS[item.status] || item.status}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.orderPhone}>📞 {formatPhone(item.customer.phone)}</Text>
                 <Text style={styles.orderAddress}>📍 {item.deliveryAddress}</Text>
-                <View style={styles.orderItems}>
+                <View style={styles.orderItemsList}>
                   {item.items.map((it) => (
                     <Text key={it.id} style={styles.orderItemLine}>
                       {it.quantity}× {it.product.name} — {(it.unitPrice * it.quantity).toLocaleString()} F
@@ -302,7 +430,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.orderTotal}>{(item.totalAmount + item.deliveryFee).toLocaleString()} F</Text>
                 </View>
                 {next && (
-                  <TouchableOpacity style={styles.orderAction} onPress={() => advanceOrder(item)} accessibilityRole="button">
+                  <TouchableOpacity style={[styles.orderAction, isPending && styles.orderActionPending]} onPress={() => advanceOrder(item)}>
                     <Text style={styles.orderActionText}>{next.label}</Text>
                   </TouchableOpacity>
                 )}
@@ -310,40 +438,113 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
             );
           }}
         />
-      ) : (
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: safe.insets.bottom + 16 }} keyboardShouldPersistTaps="handled">
+      )}
+
+      {/* ===== ONGLET PRODUITS ===== */}
+      {tab === 'products' && (
+        <ScrollView
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: safe.insets.bottom + 16 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => setShowAddForm(!showAddForm)}
-            accessibilityRole="button"
           >
-            <Text style={styles.addBtnText}>{showAddForm ? 'Annuler' : '+ Ajouter un produit'}</Text>
+            <Text style={styles.addBtnText}>{showAddForm ? '✕ Annuler' : '+ Ajouter un produit'}</Text>
           </TouchableOpacity>
 
           {showAddForm && (
             <View style={styles.form}>
-              <TextInput style={styles.input} placeholder="Nom du produit" value={pName} onChangeText={setPName} />
-              <TextInput style={styles.input} placeholder="Prix (XAF)" value={pPrice} onChangeText={setPPrice} keyboardType="numeric" />
-              <TextInput style={styles.input} placeholder="Catégorie (fruits, plats...)" value={pCategory} onChangeText={setPCategory} />
-              <TextInput style={styles.input} placeholder="Description (optionnel)" value={pDesc} onChangeText={setPDesc} />
-              <TouchableOpacity style={styles.saveBtn} onPress={addProduct} accessibilityRole="button">
-                <Text style={styles.saveBtnText}>Enregistrer</Text>
+              {/* Photo du produit */}
+              <Text style={styles.formLabel}>Photo du produit</Text>
+              <TouchableOpacity style={styles.imagePickerBtn} onPress={handlePickImage} disabled={uploadingImage}>
+                {uploadingImage ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : pImage ? (
+                  <Image source={{ uri: pImage }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Text style={styles.imagePlaceholderIcon}>📷</Text>
+                    <Text style={styles.imagePlaceholderText}>Ajouter une photo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <Text style={styles.formLabel}>Nom du produit *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Poulet DG, Ndolé..."
+                value={pName}
+                onChangeText={setPName}
+                placeholderTextColor={colors.textLight}
+              />
+
+              <Text style={styles.formLabel}>Prix (XAF) *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: 2500"
+                value={pPrice}
+                onChangeText={setPPrice}
+                keyboardType="numeric"
+                placeholderTextColor={colors.textLight}
+              />
+
+              <Text style={styles.formLabel}>Catégorie *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Plats, Boissons, Desserts..."
+                value={pCategory}
+                onChangeText={setPCategory}
+                placeholderTextColor={colors.textLight}
+              />
+
+              <Text style={styles.formLabel}>Description (optionnel)</Text>
+              <TextInput
+                style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
+                placeholder="Ingrédients, allergènes, portions..."
+                value={pDesc}
+                onChangeText={setPDesc}
+                multiline
+                placeholderTextColor={colors.textLight}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveBtn, savingProduct && { opacity: 0.6 }]}
+                onPress={addProduct}
+                disabled={savingProduct}
+              >
+                {savingProduct ? (
+                  <ActivityIndicator color={colors.primaryDark} />
+                ) : (
+                  <Text style={styles.saveBtnText}>✅ Enregistrer le produit</Text>
+                )}
               </TouchableOpacity>
             </View>
           )}
 
           {shop.products.length === 0 ? (
-            <View style={styles.center}>
+            <View style={[styles.center, { marginTop: 40 }]}>
               <Text style={styles.emptyIcon}>📦</Text>
               <Text style={styles.emptyText}>Aucun produit. Ajoutez votre premier article.</Text>
             </View>
           ) : (
             shop.products.map((p) => (
               <View key={p.id} style={styles.productCard}>
-                <View style={{ flex: 1 }}>
+                {/* Image produit */}
+                {p.image ? (
+                  <Image source={{ uri: p.image }} style={styles.productImage} />
+                ) : (
+                  <View style={styles.productImagePlaceholder}>
+                    <Text style={{ fontSize: 24 }}>🍽️</Text>
+                  </View>
+                )}
+                <View style={{ flex: 1, marginLeft: spacing.md }}>
                   <Text style={styles.productName}>{p.name}</Text>
-                  <Text style={styles.productMeta}>{p.price.toLocaleString()} F • {p.category}</Text>
-                  {p.description ? <Text style={styles.productDesc}>{p.description}</Text> : null}
+                  <Text style={styles.productMeta}>{p.price.toLocaleString()} F · {p.category}</Text>
+                  {p.description ? <Text style={styles.productDesc} numberOfLines={2}>{p.description}</Text> : null}
+                  <Text style={{ fontSize: 11, color: p.isAvailable ? colors.success : colors.error, marginTop: 2, fontWeight: '600' }}>
+                    {p.isAvailable ? '✅ Disponible' : '⛔ Indisponible'}
+                  </Text>
                 </View>
                 <View style={styles.productActions}>
                   <Switch
@@ -353,8 +554,8 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
                     thumbColor={p.isAvailable ? colors.primary : '#f4f3f4'}
                     accessibilityLabel={`Disponibilité de ${p.name}`}
                   />
-                  <TouchableOpacity onPress={() => deleteProduct(p)} accessibilityLabel={`Supprimer ${p.name}`}>
-                    <Text style={styles.deleteIcon}>🗑️</Text>
+                  <TouchableOpacity onPress={() => deleteProduct(p)} style={{ padding: spacing.sm }}>
+                    <Text style={{ fontSize: 18 }}>🗑️</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -362,6 +563,116 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
           )}
         </ScrollView>
       )}
+
+      {/* ===== ONGLET HORAIRES ===== */}
+      {tab === 'hours' && (
+        <ScrollView
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: safe.insets.bottom + 80 }}
+        >
+          <Text style={styles.hoursTitle}>⏰ Horaires d'ouverture</Text>
+          <Text style={styles.hoursSubtitle}>
+            Définissez vos horaires pour chaque jour. Les clients verront si vous êtes ouvert.
+          </Text>
+
+          {DAYS.map((day) => {
+            const dayHours = hours[day.key] || { open: '08:00', close: '20:00', closed: false };
+            return (
+              <View key={day.key} style={styles.dayRow}>
+                <View style={styles.dayLeft}>
+                  <Text style={styles.dayLabel}>{day.label}</Text>
+                  <Switch
+                    value={!dayHours.closed}
+                    onValueChange={() => toggleDayClosed(day.key)}
+                    trackColor={{ false: '#ccc', true: colors.primaryLight }}
+                    thumbColor={!dayHours.closed ? colors.primary : '#f4f3f4'}
+                    accessibilityLabel={`${day.label} ouvert ou fermé`}
+                  />
+                </View>
+
+                {dayHours.closed ? (
+                  <Text style={styles.dayClosed}>Fermé</Text>
+                ) : (
+                  <View style={styles.timeRow}>
+                    <TouchableOpacity
+                      style={styles.timeBtn}
+                      onPress={() => { setEditingTime({ day: day.key, field: 'open' }); setTimeInput(dayHours.open); }}
+                    >
+                      <Text style={styles.timeBtnText}>{dayHours.open}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.timeSep}>→</Text>
+                    <TouchableOpacity
+                      style={styles.timeBtn}
+                      onPress={() => { setEditingTime({ day: day.key, field: 'close' }); setTimeInput(dayHours.close); }}
+                    >
+                      <Text style={styles.timeBtnText}>{dayHours.close}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          <TouchableOpacity
+            style={[styles.saveHoursBtn, savingHours && { opacity: 0.6 }]}
+            onPress={saveHours}
+            disabled={savingHours}
+          >
+            {savingHours ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveHoursBtnText}>💾 Sauvegarder les horaires</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
+      {/* Modal saisie heure */}
+      <Modal
+        visible={!!editingTime}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingTime(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>
+              {editingTime?.field === 'open' ? '🌅 Heure d\'ouverture' : '🌙 Heure de fermeture'}
+            </Text>
+            <TextInput
+              style={styles.timeInput}
+              value={timeInput}
+              onChangeText={setTimeInput}
+              placeholder="HH:MM"
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+              autoFocus
+              placeholderTextColor={colors.textLight}
+            />
+            <Text style={styles.modalHint}>Format : HH:MM (ex: 08:00, 22:30)</Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setEditingTime(null)}
+              >
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={() => {
+                  if (editingTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(timeInput)) {
+                    updateHourField(editingTime.day, editingTime.field, timeInput);
+                    setEditingTime(null);
+                  } else {
+                    Alert.alert('Format invalide', 'Entrez une heure au format HH:MM (ex: 08:00)');
+                  }
+                }}
+              >
+                <Text style={styles.modalConfirmText}>✅ Confirmer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -382,39 +693,91 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.border },
   tab: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: colors.primary },
-  tabText: { fontSize: typography.sm, color: colors.textSecondary, fontWeight: '600' },
+  tabText: { fontSize: typography.xs, color: colors.textSecondary, fontWeight: '600' },
   tabTextActive: { color: colors.primary, fontWeight: '800' },
-  // Orders
+
+  // Commandes
   orderCard: { backgroundColor: '#fff', borderRadius: 14, padding: spacing.md, marginBottom: spacing.md, elevation: 2 },
+  orderCardPending: { borderWidth: 2, borderColor: '#FF9800', backgroundColor: '#FFFDE7' },
+  newBadge: { backgroundColor: '#FF9800', borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: spacing.sm },
+  newBadgeText: { color: '#fff', fontWeight: '800', fontSize: typography.xs },
   orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  orderCustomer: { fontSize: typography.md, fontWeight: '800', color: colors.text },
+  orderCustomer: { fontSize: typography.md, fontWeight: '800', color: colors.text, flex: 1 },
   statusBadge: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  statusBadgePending: { backgroundColor: '#FFF3E0' },
   statusBadgeText: { fontSize: typography.xs, color: colors.primary, fontWeight: '700' },
   orderPhone: { fontSize: typography.sm, color: colors.textSecondary },
   orderAddress: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 2 },
-  orderItems: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  orderItemsList: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   orderItemLine: { fontSize: typography.sm, color: colors.text, marginBottom: 2 },
   orderTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
   orderTotalLabel: { fontSize: typography.xs, color: colors.textSecondary, flex: 1 },
   orderTotal: { fontSize: typography.lg, fontWeight: '900', color: colors.primary },
   orderAction: { backgroundColor: colors.primary, padding: spacing.md, borderRadius: 10, alignItems: 'center', marginTop: spacing.md },
+  orderActionPending: { backgroundColor: '#FF9800' },
   orderActionText: { color: '#fff', fontWeight: '700' },
-  // Products
+
+  // Produits
   addBtn: { backgroundColor: colors.primary, padding: spacing.md, borderRadius: 10, alignItems: 'center', marginBottom: spacing.md },
   addBtnText: { color: '#fff', fontWeight: '700' },
   form: { backgroundColor: '#fff', padding: spacing.md, borderRadius: 12, marginBottom: spacing.md },
+  formLabel: { fontSize: typography.sm, fontWeight: '600', color: colors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
   input: {
     backgroundColor: colors.background, padding: spacing.md, borderRadius: 10,
-    fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm,
+    fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs,
   },
-  saveBtn: { backgroundColor: colors.secondary, padding: spacing.md, borderRadius: 10, alignItems: 'center' },
+  imagePickerBtn: {
+    width: '100%', height: 140, borderRadius: 12, overflow: 'hidden',
+    backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border,
+    borderStyle: 'dashed', marginBottom: spacing.sm,
+  },
+  imagePreview: { width: '100%', height: '100%' },
+  imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  imagePlaceholderIcon: { fontSize: 32, marginBottom: spacing.xs },
+  imagePlaceholderText: { fontSize: typography.sm, color: colors.textSecondary },
+  saveBtn: { backgroundColor: colors.secondary, padding: spacing.md, borderRadius: 10, alignItems: 'center', marginTop: spacing.sm },
   saveBtnText: { color: colors.primaryDark, fontWeight: '800' },
   productCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm },
+  productImage: { width: 64, height: 64, borderRadius: 10 },
+  productImagePlaceholder: { width: 64, height: 64, borderRadius: 10, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
   productName: { fontSize: typography.md, fontWeight: '700', color: colors.text },
   productMeta: { fontSize: typography.sm, color: colors.primary, marginTop: 2, fontWeight: '600' },
   productDesc: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
   productActions: { alignItems: 'center' },
-  deleteIcon: { fontSize: 18, marginTop: spacing.sm },
+
+  // Horaires
+  hoursTitle: { fontSize: typography.lg, fontWeight: '800', color: colors.text, marginBottom: spacing.xs },
+  hoursSubtitle: { fontSize: typography.sm, color: colors.textSecondary, marginBottom: spacing.lg, lineHeight: 18 },
+  dayRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#fff', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm,
+  },
+  dayLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  dayLabel: { fontSize: typography.sm, fontWeight: '700', color: colors.text, width: 80 },
+  dayClosed: { fontSize: typography.sm, color: colors.error, fontWeight: '600' },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  timeBtn: { backgroundColor: '#E8F5E9', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 8, borderWidth: 1, borderColor: colors.primary },
+  timeBtnText: { fontSize: typography.sm, fontWeight: '700', color: colors.primary },
+  timeSep: { fontSize: typography.sm, color: colors.textSecondary },
+  saveHoursBtn: { backgroundColor: colors.primary, padding: spacing.md + 2, borderRadius: 12, alignItems: 'center', marginTop: spacing.lg },
+  saveHoursBtnText: { color: '#fff', fontWeight: '800', fontSize: typography.md },
+
+  // Modal heure
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { backgroundColor: '#fff', borderRadius: 16, padding: spacing.xl, width: '80%' },
+  modalTitle: { fontSize: typography.lg, fontWeight: '800', color: colors.text, marginBottom: spacing.lg, textAlign: 'center' },
+  timeInput: {
+    backgroundColor: colors.background, padding: spacing.md, borderRadius: 10,
+    fontSize: 28, fontWeight: '800', color: colors.primary, textAlign: 'center',
+    borderWidth: 2, borderColor: colors.primary, letterSpacing: 4,
+  },
+  modalHint: { fontSize: typography.xs, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  modalCancelBtn: { flex: 1, padding: spacing.md, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  modalCancelText: { color: colors.text, fontWeight: '600' },
+  modalConfirmBtn: { flex: 1, padding: spacing.md, borderRadius: 10, alignItems: 'center', backgroundColor: colors.primary },
+  modalConfirmText: { color: '#fff', fontWeight: '800' },
+
   retryBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: 10, marginTop: spacing.lg },
   retryBtnText: { color: '#fff', fontWeight: '700' },
   logoutBtn: { borderWidth: 1, borderColor: colors.error, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: 10, marginTop: spacing.md },
