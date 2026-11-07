@@ -65,6 +65,12 @@ interface MarketState {
     deliveryLng: number;
     paymentMethod: string;
   }) => Promise<void>;
+  // Devis exact (produits + livraison) calculé par le serveur
+  quoteOrder: (data: {
+    merchantId: string;
+    deliveryLat: number;
+    deliveryLng: number;
+  }) => Promise<{ totalAmount: number; deliveryFee: number; grandTotal: number }>;
   fetchOrders: () => Promise<void>;
 }
 
@@ -149,6 +155,15 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       set({ isLoading: false });
       throw error;
     }
+  },
+
+  quoteOrder: async (data) => {
+    const items = get().cart.map((item) => ({
+      productId: item.product.id,
+      quantity: item.quantity,
+    }));
+    const response = await api.post('/market/orders/quote', { ...data, items });
+    return response.data.data;
   },
 
   fetchOrders: async () => {

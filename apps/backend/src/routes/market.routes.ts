@@ -8,6 +8,75 @@ import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMe
 
 const router = Router();
 
+/**
+ * Calcul UNIQUE du montant d'une commande (produits + livraison).
+ * Utilisé par le devis ET par la création : le montant payé par paiement direct
+ * est donc exactement celui qui sera bloqué en séquestre.
+ */
+async function computeOrderTotals(
+  merchantId: string,
+  items: { productId: string; quantity: number }[],
+  deliveryLat: number,
+  deliveryLng: number
+) {
+  const merchant = await prisma.merchantProfile.findUnique({ where: { id: merchantId } });
+  if (!merchant) {
+    throw new AppError('Marchand non trouvé', 404);
+  }
+
+  let totalAmount = 0;
+  const orderItems: { productId: string; quantity: number; unitPrice: number }[] = [];
+
+  for (const item of items) {
+    const product = await prisma.product.findUnique({ where: { id: item.productId } });
+    // Le produit doit exister, être disponible ET appartenir à CETTE boutique
+    // (sinon on pourrait commander chez un marchand les produits d'un autre).
+    if (!product || !product.isAvailable || product.merchantId !== merchant.id) {
+      throw new AppError(`Produit ${item.productId} non disponible`, 400);
+    }
+    totalAmount += product.price * item.quantity;
+    orderItems.push({ productId: item.productId, quantity: item.quantity, unitPrice: product.price });
+  }
+
+  const distance = calculateDistance(merchant.shopLat, merchant.shopLng, deliveryLat, deliveryLng);
+  const deliveryFee = Math.ceil((300 + distance * 100) / 50) * 50;
+
+  return { merchant, totalAmount, deliveryFee, orderItems };
+}
+
+// Devis exact d'une commande (avant paiement)
+router.post(
+  '/orders/quote',
+  authenticate,
+  [
+    body('merchantId').isUUID(),
+    body('items').isArray({ min: 1 }),
+    body('items.*.productId').isUUID(),
+    body('items.*.quantity').isInt({ min: 1 }),
+    body('deliveryLat').isFloat(),
+    body('deliveryLng').isFloat(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+      const { merchantId, items, deliveryLat, deliveryLng } = req.body;
+      const { totalAmount, deliveryFee } = await computeOrderTotals(merchantId, items, deliveryLat, deliveryLng);
+      res.json({
+        success: true,
+        data: { totalAmount, deliveryFee, grandTotal: totalAmount + deliveryFee, currency: 'XAF' },
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur de calcul' });
+    }
+  }
+);
+
 // Lister les marchands à proximité
 router.get('/merchants', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -311,31 +380,9 @@ router.post(
 
       const { merchantId, items, deliveryAddress, deliveryLat, deliveryLng, paymentMethod } = req.body;
 
-      const merchant = await prisma.merchantProfile.findUnique({ where: { id: merchantId } });
-      if (!merchant) {
-        throw new AppError('Marchand non trouvé', 404);
-      }
-
-      // Calculer le total
-      let totalAmount = 0;
-      const orderItems: { productId: string; quantity: number; unitPrice: number }[] = [];
-
-      for (const item of items) {
-        const product = await prisma.product.findUnique({ where: { id: item.productId } });
-        if (!product || !product.isAvailable) {
-          throw new AppError(`Produit ${item.productId} non disponible`, 400);
-        }
-        totalAmount += product.price * item.quantity;
-        orderItems.push({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: product.price,
-        });
-      }
-
-      // Frais de livraison
-      const distance = calculateDistance(merchant.shopLat, merchant.shopLng, deliveryLat, deliveryLng);
-      const deliveryFee = Math.ceil((300 + distance * 100) / 50) * 50;
+      const { merchant, totalAmount, deliveryFee, orderItems } = await computeOrderTotals(
+        merchantId, items, deliveryLat, deliveryLng
+      );
 
       if (merchant.userId === req.user!.id) {
         throw new AppError('Vous ne pouvez pas commander dans votre propre boutique', 400);

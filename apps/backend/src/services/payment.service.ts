@@ -441,16 +441,50 @@ export async function initiateOrangeMoneyPayment(data: {
 
 // ========== PAIEMENT UNIFIÉ ==========
 
+/**
+ * Passerelle réellement utilisée. UNE seule source de vérité, partagée par le lancement
+ * du paiement ET par sa vérification (avant, la vérification interrogeait toujours NotchPay,
+ * même quand le paiement avait été lancé chez CinetPay : il restait donc "en attente").
+ *
+ * PAYMENT_PROVIDER (cinetpay | notchpay) ; repli automatique si l'un n'est pas configuré.
+ */
+export function activePaymentProvider(): 'cinetpay' | 'notchpay' | 'direct' {
+  const provider = (process.env.PAYMENT_PROVIDER || 'notchpay').toLowerCase();
+  if ((provider === 'cinetpay' && isCinetPayConfigured()) || (!isNotchPayConfigured() && isCinetPayConfigured())) {
+    return 'cinetpay';
+  }
+  if (isNotchPayConfigured()) return 'notchpay';
+  return 'direct';
+}
+
+/**
+ * Vérifie auprès de la BONNE passerelle l'état d'un dépôt.
+ * - CinetPay : interrogé avec NOTRE merchant_transaction_id (= id de la transaction).
+ * - NotchPay : interrogé avec sa référence trx.xxx (metadata.notchRef) si on l'a.
+ */
+export async function verifyDepositTransaction(transaction: {
+  id: string;
+  reference: string | null;
+  metadata: unknown;
+}): Promise<{ status: 'COMPLETED' | 'PENDING' | 'FAILED' }> {
+  const provider = activePaymentProvider();
+  if (provider === 'cinetpay') {
+    const r = await verifyPayment(transaction.reference || transaction.id);
+    return { status: r.status };
+  }
+  if (provider === 'notchpay') {
+    const meta = (transaction.metadata as { notchRef?: string }) || {};
+    const r = await verifyNotchPay(meta.notchRef || transaction.reference || transaction.id);
+    return { status: r.status };
+  }
+  // Passerelles directes (MoMo / Orange) : confirmation par webhook uniquement
+  return { status: 'PENDING' };
+}
+
 export async function processPayment(data: PaymentRequest): Promise<PaymentResponse> {
   const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3002}`;
 
-  // Choix de la passerelle via PAYMENT_PROVIDER (cinetpay | notchpay).
-  // Par défaut : notchpay (comportement historique), avec repli automatique si l'un n'est pas configuré.
-  const provider = (process.env.PAYMENT_PROVIDER || 'notchpay').toLowerCase();
-
-  const useCinetPay =
-    (provider === 'cinetpay' && isCinetPayConfigured()) ||
-    (!isNotchPayConfigured() && isCinetPayConfigured());
+  const useCinetPay = activePaymentProvider() === 'cinetpay';
 
   if (useCinetPay) {
     return initiatePayment({

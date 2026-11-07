@@ -15,6 +15,12 @@ import EscrowActions from '../components/EscrowActions';
 import { pickAndUploadImage } from '../config/upload';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+import {
+  useDirectPayment,
+  isDirectMethod,
+  directPaymentFailureMessage,
+  DIRECT_PAYMENT_OPTIONS,
+} from '../hooks/useDirectPayment';
 
 type ViewMode = 'search' | 'detail' | 'book' | 'publish' | 'my-vehicles' | 'my-bookings';
 
@@ -27,9 +33,10 @@ const vehicleTypes = [
   { id: 'TRUCK', name: 'Camion', icon: '🚛' },
 ];
 
-// Orange Money / MTN se paient via le portefeuille (rechargé par Mobile Money).
+// Orange Money / MTN : paiement direct CinetPay (encaissé AVANT la réservation).
 const paymentMethods = [
-  { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
+  ...DIRECT_PAYMENT_OPTIONS,
+  { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
   { id: 'CASH', name: 'Espèces', icon: '💵' },
 ];
 
@@ -68,8 +75,10 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     bookVehicle,
     fetchMyVehicles,
     fetchMyBookings,
+    quoteRental,
   } = useRentalStore();
   const safe = useSafeScreen();
+  const { pay: payDirect, overlay: directPaymentOverlay } = useDirectPayment();
 
   useEffect(() => {
     searchVehicles({ lat: 4.0511, lng: 9.7679 });
@@ -93,29 +102,57 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
       return;
     }
 
-    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const totalPrice = days * selectedVehicle.pricePerDay;
+    // Montant EXACT calculé par le serveur (inclut le chauffeur si le véhicule le propose).
+    // Avant, l'app affichait seulement jours × prix/jour alors que le serveur ajoutait le chauffeur.
+    let quote: { days: number; vehicleTotal: number; driverTotal: number; driverIncluded: boolean; totalPrice: number };
+    try {
+      quote = await quoteRental({ vehicleId: selectedVehicle.id, startDate, endDate, withDriver: true });
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.response?.data?.message || 'Impossible de calculer le prix');
+      return;
+    }
+
+    const detail = quote.driverIncluded
+      ? `${quote.days} jour(s) × ${selectedVehicle.pricePerDay.toLocaleString()} XAF\n` +
+        `+ chauffeur : ${quote.driverTotal.toLocaleString()} XAF`
+      : `${quote.days} jour(s) × ${selectedVehicle.pricePerDay.toLocaleString()} XAF (sans chauffeur)`;
 
     Alert.alert(
       'Confirmer la réservation',
-      `${days} jour(s) × ${selectedVehicle.pricePerDay.toLocaleString()} XAF (chauffeur inclus)\n\nTotal: ${totalPrice.toLocaleString()} XAF`,
+      `${detail}\n\nTotal : ${quote.totalPrice.toLocaleString()} XAF`,
       [
         { text: 'Annuler' },
         {
           text: 'Réserver',
           onPress: async () => {
             try {
+              // PAIEMENT DIRECT Orange Money / MTN : on encaisse D'ABORD le montant exact.
+              let methodToSend: string = selectedPayment;
+              if (isDirectMethod(selectedPayment)) {
+                const result = await payDirect(quote.totalPrice, selectedPayment);
+                if (result !== 'COMPLETED') {
+                  Alert.alert('Réservation non faite', directPaymentFailureMessage(result) || '');
+                  return;
+                }
+                methodToSend = 'WALLET';
+              }
+
               await bookVehicle({
                 vehicleId: selectedVehicle.id,
                 startDate,
                 endDate,
                 withDriver: true,
-                paymentMethod: selectedPayment,
+                paymentMethod: methodToSend,
               });
-              Alert.alert('✅ Réservation confirmée !', `Véhicule réservé pour ${days} jour(s).`);
+              Alert.alert('✅ Réservation confirmée !', `Véhicule réservé pour ${quote.days} jour(s).`);
               setView('search');
-            } catch {
-              Alert.alert('Erreur', 'Impossible de réserver');
+            } catch (error: any) {
+              Alert.alert(
+                'Erreur',
+                error?.response?.data?.message ||
+                  error?.response?.data?.errors?.[0]?.msg ||
+                  'Impossible de réserver'
+              );
             }
           },
         },
@@ -397,7 +434,10 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
     const days = startDate && endDate
       ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))
       : 0;
-    const totalPrice = days > 0 ? days * selectedVehicle.pricePerDay : 0;
+    // Aperçu du prix : la réservation inclut le chauffeur quand le véhicule le propose
+    // (+10 000 XAF/jour côté serveur). Le montant définitif vient du devis serveur à la confirmation.
+    const driverPerDay = selectedVehicle.withDriver ? 10000 : 0;
+    const totalPrice = days > 0 ? days * (selectedVehicle.pricePerDay + driverPerDay) : 0;
 
     return (
       <ScrollView style={styles.container} contentContainerStyle={safe.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -405,6 +445,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
           <Text style={styles.backText}>← Détails</Text>
         </TouchableOpacity>
 
+        {directPaymentOverlay}
         <Text style={styles.title}>Réserver</Text>
         <Text style={styles.subtitle}>
           {selectedVehicle.brand} {selectedVehicle.model} • {selectedVehicle.pricePerDay.toLocaleString()} XAF/jour

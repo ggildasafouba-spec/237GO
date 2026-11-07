@@ -9,6 +9,72 @@ import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMe
 
 const router = Router();
 
+// Tarif du chauffeur ajouté par jour quand le véhicule est loué avec chauffeur
+const DRIVER_FEE_PER_DAY = 10000;
+
+/**
+ * Calcul UNIQUE du prix d'une location. Utilisé par le devis ET par la réservation :
+ * le montant payé (et affiché) est exactement celui qui sera bloqué en séquestre.
+ * (Avant, l'app affichait "jours × prix/jour, chauffeur inclus" alors que le serveur
+ * ajoutait 10 000 XAF/jour pour le chauffeur : le client payait plus que le prix affiché.)
+ */
+function computeRentalPrice(
+  vehicle: { pricePerDay: number; withDriver: boolean },
+  startDate: string,
+  endDate: string,
+  withDriver?: boolean
+) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  if (!isFinite(days) || days < 1) throw new AppError('Durée minimum: 1 jour', 400);
+
+  const driverIncluded = Boolean(withDriver && vehicle.withDriver);
+  const vehicleTotal = days * vehicle.pricePerDay;
+  const driverTotal = driverIncluded ? days * DRIVER_FEE_PER_DAY : 0;
+
+  return { start, end, days, vehicleTotal, driverTotal, driverIncluded, totalPrice: vehicleTotal + driverTotal };
+}
+
+// Devis exact d'une location (avant paiement)
+router.post(
+  '/vehicles/:id/quote',
+  authenticate,
+  [
+    body('startDate').isISO8601(),
+    body('endDate').isISO8601(),
+    body('withDriver').optional().isBoolean(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: req.params.id } });
+      if (!vehicle) throw new AppError('Véhicule non trouvé', 404);
+
+      const q = computeRentalPrice(vehicle, req.body.startDate, req.body.endDate, req.body.withDriver);
+      res.json({
+        success: true,
+        data: {
+          days: q.days,
+          vehicleTotal: q.vehicleTotal,
+          driverTotal: q.driverTotal,
+          driverIncluded: q.driverIncluded,
+          totalPrice: q.totalPrice,
+          currency: 'XAF',
+        },
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur de calcul' });
+    }
+  }
+);
+
 // Rechercher des véhicules à louer
 router.get('/vehicles', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -164,17 +230,8 @@ router.post(
         throw new AppError('Vous ne pouvez pas louer votre propre véhicule', 400);
       }
 
-      // Calculer le prix total
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (days < 1) throw new AppError('Durée minimum: 1 jour', 400);
-
-      let totalPrice = days * vehicle.pricePerDay;
-      if (withDriver && vehicle.withDriver) {
-        totalPrice += days * 10000; // 10,000 XAF/jour pour le chauffeur
-      }
+      // Calculer le prix total (même calcul que le devis)
+      const { start, end, totalPrice, days } = computeRentalPrice(vehicle, startDate, endDate, withDriver);
 
       // VÉRIFICATION + CRÉATION ATOMIQUES : on verrouille la ligne du véhicule
       // (SELECT ... FOR UPDATE) pendant la transaction. Deux réservations simultanées

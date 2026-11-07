@@ -18,6 +18,7 @@ import { useLocation } from '../hooks/useLocation';
 import RideMap from '../components/RideMap';
 import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { colors, spacing, typography } from '../theme';
+import { useDirectPayment, isDirectMethod, directPaymentFailureMessage } from '../hooks/useDirectPayment';
 
 type VehicleType = 'MOTO' | 'CAR_ECONOMY' | 'CAR_COMFORT' | 'CAR_VIP';
 
@@ -37,10 +38,11 @@ const vehicleOptions: VehicleOption[] = [
 
 type PaymentMethod = 'ORANGE_MONEY' | 'MTN_MOMO' | 'CASH' | 'WALLET';
 
-// Orange Money / MTN se paient via le portefeuille (rechargé par Mobile Money) :
-// le paiement direct d'une course en Mobile Money n'est pas encore encaissé côté serveur.
+// Orange Money / MTN : paiement direct CinetPay (encaissé AVANT la commande, voir useDirectPayment).
 const paymentMethods: { id: PaymentMethod; name: string; icon: string }[] = [
-  { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
+  { id: 'ORANGE_MONEY', name: 'Orange Money', icon: '🟠' },
+  { id: 'MTN_MOMO', name: 'MTN MoMo', icon: '🟡' },
+  { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
   { id: 'CASH', name: 'Espèces', icon: '💵' },
 ];
 
@@ -73,6 +75,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   } = useRideStore();
 
   const { getCurrentLocation, reverseGeocode } = useLocation();
+  const { pay: payDirect, overlay: directPaymentOverlay } = useDirectPayment();
   const insets = useSafeAreaInsets();
   // Marges de sécurité adaptatives (encoche en haut, barre gestuelle en bas)
   const safeTop = { paddingTop: insets.top + spacing.md };
@@ -228,18 +231,43 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
       const dropoffWithLandmark = landmark.trim()
         ? `${dropoffAddress} — Repère : ${landmark.trim()}`
         : dropoffAddress;
+
+      // PAIEMENT DIRECT Orange Money / MTN : on encaisse D'ABORD le prix de la course.
+      // Le montant est celui qui sera bloqué à l'acceptation : prix proposé, sinon prix estimé.
+      let methodToSend: string = selectedPayment;
+      if (isDirectMethod(selectedPayment)) {
+        const proposed = proposedPrice ? parseFloat(proposedPrice) : NaN;
+        const amount = !isNaN(proposed) && proposed > 0 ? proposed : selectedEstimate?.estimatedPrice;
+        if (!amount) {
+          Alert.alert('Prix indisponible', 'Impossible de calculer le prix de la course. Réessayez.');
+          return;
+        }
+        const result = await payDirect(amount, selectedPayment);
+        if (result !== 'COMPLETED') {
+          Alert.alert('Course non commandée', directPaymentFailureMessage(result) || '');
+          return;
+        }
+        // L'argent a été reçu et crédité : la course est payée depuis le portefeuille.
+        methodToSend = 'WALLET';
+      }
+
       await createRide({
         pickup: { ...pickup, address: pickupWithLandmark },
         dropoff: { ...dropoff, address: dropoffWithLandmark },
         vehicleType: selectedVehicle,
-        paymentMethod: selectedPayment,
+        paymentMethod: methodToSend,
         proposedPrice: proposedPrice ? parseFloat(proposedPrice) : undefined,
         passengerCount,
         luggageSize,
       });
       setStep('waiting');
-    } catch {
-      Alert.alert('Erreur', 'Impossible de créer la course. Réessayez.');
+    } catch (error: any) {
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          error?.response?.data?.errors?.[0]?.msg ||
+          'Impossible de créer la course. Réessayez.'
+      );
     }
   };
 
@@ -472,6 +500,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     return (
       <ScrollView style={styles.scrollBg} contentContainerStyle={[styles.confirmScroll, safeScroll]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Confirmer votre course</Text>
+        {directPaymentOverlay}
 
         {/* Résumé */}
         <View style={styles.summaryCard}>

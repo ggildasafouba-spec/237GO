@@ -17,6 +17,12 @@ import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+import {
+  useDirectPayment,
+  isDirectMethod,
+  directPaymentFailureMessage,
+  DIRECT_PAYMENT_OPTIONS,
+} from '../hooks/useDirectPayment';
 
 const categories = [
   { id: 'all', name: 'Tout', icon: '🏪' },
@@ -52,9 +58,23 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     clearCart,
     getCartTotal,
     placeOrder,
+    quoteOrder,
     fetchOrders,
   } = useMarketStore();
   const safe = useSafeScreen();
+  const { pay: payDirect, overlay: directPaymentOverlay } = useDirectPayment();
+  // Vrais frais de livraison (calculés par le serveur), affichés à la place de l'estimation
+  const [quotedFee, setQuotedFee] = useState<number | null>(null);
+
+  // Au passage à l'étape "Finaliser", demander les vrais frais de livraison au serveur
+  useEffect(() => {
+    if (view !== 'checkout' || !selectedMerchant || cart.length === 0) return;
+    let cancelled = false;
+    quoteOrder({ merchantId: selectedMerchant.id, deliveryLat: deliveryCoords.lat, deliveryLng: deliveryCoords.lng })
+      .then((q) => { if (!cancelled) setQuotedFee(q.deliveryFee); })
+      .catch(() => { if (!cancelled) setQuotedFee(null); });
+    return () => { cancelled = true; };
+  }, [view, selectedMerchant?.id, cart, deliveryCoords.lat, deliveryCoords.lng]);
 
   useEffect(() => {
     (async () => {
@@ -95,18 +115,41 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     }
 
     try {
+      // PAIEMENT DIRECT Orange Money / MTN : on encaisse D'ABORD le montant exact
+      // (produits + vrais frais de livraison calculés par le serveur pour CETTE adresse).
+      let methodToSend: string = selectedPayment;
+      if (isDirectMethod(selectedPayment)) {
+        const quote = await quoteOrder({
+          merchantId: selectedMerchant.id,
+          deliveryLat: coords.lat,
+          deliveryLng: coords.lng,
+        });
+        setQuotedFee(quote.deliveryFee);
+        const result = await payDirect(quote.grandTotal, selectedPayment);
+        if (result !== 'COMPLETED') {
+          Alert.alert('Commande non passée', directPaymentFailureMessage(result) || '');
+          return;
+        }
+        methodToSend = 'WALLET';
+      }
+
       await placeOrder({
         merchantId: selectedMerchant.id,
         deliveryAddress,
         deliveryLat: coords.lat,
         deliveryLng: coords.lng,
-        paymentMethod: selectedPayment,
+        paymentMethod: methodToSend,
       });
       Alert.alert('🎉 Commande passée !', 'Le marchand prépare votre commande.', [
         { text: 'OK', onPress: () => setView('merchants') },
       ]);
-    } catch {
-      Alert.alert('Erreur', 'Impossible de passer la commande');
+    } catch (error: any) {
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          error?.response?.data?.errors?.[0]?.msg ||
+          'Impossible de passer la commande'
+      );
     }
   };
 
@@ -472,8 +515,10 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
       />
 
       <Text style={styles.sectionLabel}>Paiement</Text>
+      {directPaymentOverlay}
       {[
-        { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
+        ...DIRECT_PAYMENT_OPTIONS,
+        { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
         { id: 'CASH', name: 'Espèces', icon: '💵' },
       ].map((method) => (
         <TouchableOpacity
@@ -496,11 +541,15 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
         </View>
         <View style={styles.orderRow}>
           <Text>Frais de livraison</Text>
-          <Text style={{ fontWeight: '600' }}>~500 XAF</Text>
+          <Text style={{ fontWeight: '600' }}>
+            {quotedFee !== null ? `${quotedFee.toLocaleString()} XAF` : 'calcul…'}
+          </Text>
         </View>
         <View style={[styles.orderRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm }]}>
           <Text style={styles.orderTotalLabel}>Total</Text>
-          <Text style={styles.orderTotalValue}>{(getCartTotal() + 500).toLocaleString()} XAF</Text>
+          <Text style={styles.orderTotalValue}>
+            {quotedFee !== null ? `${(getCartTotal() + quotedFee).toLocaleString()} XAF` : '…'}
+          </Text>
         </View>
       </View>
 

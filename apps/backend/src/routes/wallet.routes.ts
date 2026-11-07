@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { processPayment, verifyNotchPay, confirmDeposit } from '../services/payment.service';
+import { processPayment, verifyDepositTransaction, confirmDeposit } from '../services/payment.service';
 import { redeemLoyaltyPoints, addLoyaltyPoints, computeTier } from '../services/loyalty.service';
 
 const router = Router();
@@ -35,11 +35,9 @@ router.post('/verify/:transactionId', authenticate, async (req: AuthRequest, res
       });
     }
 
-    // Interroger NotchPay : la référence qu'il comprend est la ref NotchPay (trx.xxx)
-    // mémorisée dans metadata.notchRef, sinon on retombe sur notre référence.
-    const meta = (transaction.metadata as { notchRef?: string }) || {};
-    const notchRef = meta.notchRef;
-    const check = await verifyNotchPay(notchRef || transaction.reference || transaction.id);
+    // Interroger la passerelle RÉELLEMENT utilisée (CinetPay ou NotchPay).
+    // Avant : toujours NotchPay, donc un paiement CinetPay restait "en attente" côté app.
+    const check = await verifyDepositTransaction(transaction);
 
     if (check.status === 'COMPLETED') {
       await confirmDeposit(transaction.reference || transaction.id);
@@ -98,6 +96,8 @@ router.post(
     body('amount').isFloat({ min: 100 }).withMessage('Montant minimum: 100 XAF'),
     body('paymentMethod').isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CARD']),
     body('phone').optional().matches(/^6[0-9]{8}$/),
+    // TOPUP = recharge classique (bonus possible) ; SERVICE = paiement direct d'un service
+    body('purpose').optional().isIn(['TOPUP', 'SERVICE']),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
@@ -107,9 +107,11 @@ router.post(
       }
 
       const { amount, paymentMethod, phone } = req.body;
+      const isServicePayment = req.body.purpose === 'SERVICE';
 
-      // Le numéro est requis pour MoMo / Orange Money
-      if ((paymentMethod === 'MTN_MOMO' || paymentMethod === 'ORANGE_MONEY') && !phone) {
+      // Le numéro est requis pour une recharge MoMo / Orange Money.
+      // Pour un paiement direct CinetPay, le client saisit son numéro sur la page de paiement.
+      if ((paymentMethod === 'MTN_MOMO' || paymentMethod === 'ORANGE_MONEY') && !phone && !isServicePayment) {
         throw new AppError('Numéro de téléphone requis pour ce mode de paiement', 400);
       }
 
@@ -123,10 +125,11 @@ router.post(
 
       const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
 
-      // Bonus de recharge : 5% pour les recharges >= 5000 XAF
-      const bonus = amount >= 5000 ? Math.floor(amount * 0.05) : 0;
+      // Bonus de recharge : 5% pour les recharges >= 5000 XAF.
+      // Pas de bonus sur un paiement direct de service (sinon 5% offerts sur chaque course).
+      const bonus = !isServicePayment && amount >= 5000 ? Math.floor(amount * 0.05) : 0;
 
-      // Créer la transaction EN ATTENTE (le crédit se fera via le webhook)
+      // Créer la transaction EN ATTENTE (le crédit se fera via le webhook ou la vérification)
       const transaction = await prisma.transaction.create({
         data: {
           walletId: wallet.id,
@@ -134,8 +137,10 @@ router.post(
           amount,
           paymentMethod,
           status: 'PENDING',
-          description: `Recharge ${paymentMethod}${bonus > 0 ? ` (+${bonus} XAF bonus)` : ''}`,
-          metadata: { bonus, originalAmount: amount },
+          description: isServicePayment
+            ? `Paiement direct ${paymentMethod}`
+            : `Recharge ${paymentMethod}${bonus > 0 ? ` (+${bonus} XAF bonus)` : ''}`,
+          metadata: { bonus, originalAmount: amount, purpose: isServicePayment ? 'SERVICE' : 'TOPUP' },
         },
       });
 
@@ -151,7 +156,7 @@ router.post(
         amount,
         currency: 'XAF',
         transactionId: transaction.id,
-        description: `Recharge portefeuille 237GO`,
+        description: isServicePayment ? 'Paiement 237GO' : 'Recharge portefeuille 237GO',
         customerPhone: phone || user?.phone || '',
         customerName: user ? `${user.firstName} ${user.lastName}` : 'Client 237GO',
         paymentMethod: paymentMethod === 'CARD' ? 'MTN_MOMO' : paymentMethod,
@@ -174,7 +179,12 @@ router.post(
         await prisma.transaction.update({
           where: { id: transaction.id },
           data: {
-            metadata: { bonus, originalAmount: amount, notchRef: payment.transactionRef },
+            metadata: {
+              bonus,
+              originalAmount: amount,
+              purpose: isServicePayment ? 'SERVICE' : 'TOPUP',
+              notchRef: payment.transactionRef,
+            },
           },
         });
       }

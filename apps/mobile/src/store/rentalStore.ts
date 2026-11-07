@@ -93,9 +93,26 @@ interface RentalState {
 
   fetchMyVehicles: () => Promise<void>;
   fetchMyBookings: () => Promise<void>;
+
+  // Devis exact d'une location, calculé par le serveur
+  quoteRental: (data: {
+    vehicleId: string;
+    startDate: string;
+    endDate: string;
+    withDriver?: boolean;
+  }) => Promise<{ days: number; vehicleTotal: number; driverTotal: number; driverIncluded: boolean; totalPrice: number }>;
 }
 
 export const useRentalStore = create<RentalState>((set) => ({
+  quoteRental: async (data) => {
+    const response = await api.post(`/rentals/vehicles/${data.vehicleId}/quote`, {
+      startDate: data.startDate,
+      endDate: data.endDate,
+      withDriver: data.withDriver,
+    });
+    return response.data.data;
+  },
+
   vehicles: [],
   selectedVehicle: null,
   myVehicles: [],

@@ -15,6 +15,12 @@ import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+import {
+  useDirectPayment,
+  isDirectMethod,
+  directPaymentFailureMessage,
+  DIRECT_PAYMENT_OPTIONS,
+} from '../hooks/useDirectPayment';
 
 type PackageType = 'DOCUMENT' | 'SMALL_PACKAGE' | 'MEDIUM_PACKAGE' | 'LARGE_PACKAGE' | 'FOOD' | 'FRAGILE';
 
@@ -27,9 +33,10 @@ const packageTypes: { id: PackageType; name: string; icon: string; desc: string 
   { id: 'FRAGILE', name: 'Fragile', icon: '⚠️', desc: 'Manipulation délicate' },
 ];
 
-// Orange Money / MTN se paient via le portefeuille (rechargé par Mobile Money).
+// Orange Money / MTN : paiement direct CinetPay (encaissé AVANT la commande).
 const paymentMethods = [
-  { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
+  ...DIRECT_PAYMENT_OPTIONS,
+  { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
   { id: 'CASH', name: 'Espèces', icon: '💵' },
 ];
 
@@ -49,6 +56,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   const { getCurrentLocation, reverseGeocode } = useLocation();
 
   const { currentDelivery, estimate, isLoading, getEstimate, createDelivery, clearDelivery } = useDeliveryStore();
+  const { pay: payDirect, overlay: directPaymentOverlay } = useDirectPayment();
   const safe = useSafeScreen();
 
   // Récupérer la position réelle au démarrage pour pré-remplir le point de retrait
@@ -121,6 +129,26 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
 
   const handleCreate = async () => {
     try {
+      // PAIEMENT DIRECT Orange Money / MTN : on encaisse D'ABORD le prix exact.
+      // On redemande le devis au serveur avec les coordonnées qui seront envoyées,
+      // pour payer exactement le montant qui sera bloqué.
+      let methodToSend: string = selectedPayment;
+      if (isDirectMethod(selectedPayment)) {
+        const quote = await getEstimate({
+          pickupLat: pickupCoords.lat,
+          pickupLng: pickupCoords.lng,
+          dropoffLat: dropoffCoords.lat,
+          dropoffLng: dropoffCoords.lng,
+          packageType: selectedType,
+        });
+        const result = await payDirect(quote.estimatedPrice, selectedPayment);
+        if (result !== 'COMPLETED') {
+          Alert.alert('Livraison non commandée', directPaymentFailureMessage(result) || '');
+          return;
+        }
+        methodToSend = 'WALLET';
+      }
+
       await createDelivery({
         pickupLat: pickupCoords.lat,
         pickupLng: pickupCoords.lng,
@@ -132,11 +160,16 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
         dropoffContact,
         packageType: selectedType,
         packageDesc: packageDesc || undefined,
-        paymentMethod: selectedPayment,
+        paymentMethod: methodToSend,
       });
       setStep('tracking');
-    } catch {
-      Alert.alert('Erreur', 'Impossible de créer la livraison');
+    } catch (error: any) {
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          error?.response?.data?.errors?.[0]?.msg ||
+          'Impossible de créer la livraison'
+      );
     }
   };
 
@@ -290,6 +323,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
             <Text style={styles.summaryLabel}>Distance</Text>
             <Text style={styles.summaryValue}>{estimate?.distance} km</Text>
           </View>
+          {directPaymentOverlay}
           <View style={[styles.summaryRow, styles.priceRow]}>
             <Text style={styles.priceLabel}>Prix</Text>
             <Text style={styles.priceValue}>{estimate?.estimatedPrice.toLocaleString()} XAF</Text>
