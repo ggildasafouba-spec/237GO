@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
+import { authenticate, authorize, AuthRequest, invalidateUserCache } from '../middleware/auth.middleware';
 import { releaseFunds, refundFunds } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiVision, aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
@@ -128,6 +128,8 @@ router.patch('/users/:id/toggle', async (req: AuthRequest, res: Response) => {
       where: { id: req.params.id },
       data: { isActive: !user.isActive },
     });
+    // Effet immédiat : le compte désactivé ne doit pas rester valide dans le cache d'authentification
+    invalidateUserCache(req.params.id);
 
     res.json({ success: true, message: `Utilisateur ${user.isActive ? 'désactivé' : 'activé'}` });
   } catch {
@@ -170,6 +172,7 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
       });
       await tx.user.delete({ where: { id: userId } });
     });
+    invalidateUserCache(userId);
 
     res.json({ success: true, message: `Compte "${user.firstName} ${user.lastName}" supprimé` });
   } catch (error: any) {
@@ -298,6 +301,7 @@ router.patch('/drivers/:id/verify', async (req: AuthRequest, res: Response) => {
         where: { id: profile.userId },
         data: { role: 'DRIVER' },
       });
+      invalidateUserCache(profile.userId);
       io.to(`user:${profile.userId}`).emit('driver_verified', { status: 'VERIFIED' });
       await sendPushNotification({
         userId: profile.userId,
@@ -311,6 +315,7 @@ router.patch('/drivers/:id/verify', async (req: AuthRequest, res: Response) => {
         where: { id: profile.userId },
         data: { role: 'PASSENGER' },
       }).catch(() => {});
+      invalidateUserCache(profile.userId);
       io.to(`user:${profile.userId}`).emit('driver_verified', { status: 'REJECTED' });
       await sendPushNotification({
         userId: profile.userId,
@@ -425,6 +430,7 @@ router.patch('/merchants/:id/verify', async (req: AuthRequest, res: Response) =>
         where: { id: merchant.userId },
         data: { role: 'MERCHANT' },
       });
+      invalidateUserCache(merchant.userId);
       io.to(`user:${merchant.userId}`).emit('merchant_verified', { status: 'VERIFIED' });
       await sendPushNotification({
         userId: merchant.userId,
@@ -437,6 +443,7 @@ router.patch('/merchants/:id/verify', async (req: AuthRequest, res: Response) =>
         where: { id: merchant.userId },
         data: { role: 'PASSENGER' },
       }).catch(() => {});
+      invalidateUserCache(merchant.userId);
       io.to(`user:${merchant.userId}`).emit('merchant_verified', { status: 'REJECTED' });
       await sendPushNotification({
         userId: merchant.userId,

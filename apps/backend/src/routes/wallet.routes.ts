@@ -4,7 +4,7 @@ import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
 import { processPayment, verifyNotchPay, confirmDeposit } from '../services/payment.service';
-import { redeemLoyaltyPoints, computeTier } from '../services/loyalty.service';
+import { redeemLoyaltyPoints, addLoyaltyPoints, computeTier } from '../services/loyalty.service';
 
 const router = Router();
 
@@ -223,16 +223,22 @@ router.post(
         where: { userId: req.user!.id },
       });
 
-      if (!wallet || wallet.balance < amount) {
+      if (!wallet) {
         throw new AppError('Solde insuffisant', 400);
       }
 
-      await prisma.$transaction([
-        prisma.wallet.update({
-          where: { id: wallet.id },
+      // Débit ATOMIQUE : ne réussit que si le solde couvre le montant au moment du débit.
+      // Deux retraits simultanés ne peuvent plus vider deux fois le même solde.
+      const newBalance = await prisma.$transaction(async (tx) => {
+        const debited = await tx.wallet.updateMany({
+          where: { id: wallet.id, balance: { gte: amount } },
           data: { balance: { decrement: amount } },
-        }),
-        prisma.transaction.create({
+        });
+        if (debited.count !== 1) {
+          throw new AppError('Solde insuffisant', 400);
+        }
+
+        await tx.transaction.create({
           data: {
             walletId: wallet.id,
             type: 'WITHDRAWAL',
@@ -241,13 +247,16 @@ router.post(
             status: 'COMPLETED',
             description: `Retrait vers ${paymentMethod} (${phone})`,
           },
-        }),
-      ]);
+        });
+
+        const fresh = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
+        return fresh.balance;
+      });
 
       res.json({
         success: true,
         message: `Retrait de ${amount} XAF envoyé vers ${phone}`,
-        data: { newBalance: wallet.balance - amount },
+        data: { newBalance },
       });
     } catch (error) {
       if (error instanceof AppError) {
@@ -333,14 +342,6 @@ router.post(
     try {
       const { points } = req.body;
 
-      const loyalty = await prisma.loyaltyPoints.findUnique({
-        where: { userId: req.user!.id },
-      });
-
-      if (!loyalty || loyalty.points < points) {
-        throw new AppError('Points insuffisants', 400);
-      }
-
       // 1 point = 10 XAF
       const creditAmount = points * 10;
 
@@ -352,34 +353,43 @@ router.post(
         throw new AppError('Portefeuille non trouvé', 404);
       }
 
-      // Créditer le wallet et enregistrer la transaction
-      await prisma.$transaction([
-        prisma.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: creditAmount } },
-        }),
-        prisma.transaction.create({
-          data: {
-            walletId: wallet.id,
-            type: 'LOYALTY_REDEEM',
-            amount: creditAmount,
-            paymentMethod: 'WALLET',
-            status: 'COMPLETED',
-            description: `Échange de ${points} points fidélité`,
-          },
-        }),
-      ]);
-
-      // Retirer les points et recalculer le palier
+      // 1) Retirer les points EN PREMIER, de façon atomique. Si deux échanges arrivent en
+      //    même temps avec les mêmes points, un seul passe : l'autre reçoit null.
       const result = await redeemLoyaltyPoints(req.user!.id, points);
+      if (!result) {
+        throw new AppError('Points insuffisants', 400);
+      }
+
+      // 2) Créditer le wallet. Si cette étape échoue, on rend les points (pas de perte pour l'utilisateur).
+      try {
+        await prisma.$transaction([
+          prisma.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: creditAmount } },
+          }),
+          prisma.transaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'LOYALTY_REDEEM',
+              amount: creditAmount,
+              paymentMethod: 'WALLET',
+              status: 'COMPLETED',
+              description: `Échange de ${points} points fidélité`,
+            },
+          }),
+        ]);
+      } catch (creditError) {
+        await addLoyaltyPoints(req.user!.id, points).catch(() => {});
+        throw creditError;
+      }
 
       res.json({
         success: true,
         message: `${points} points échangés contre ${creditAmount} XAF !`,
         data: {
           creditAmount,
-          remainingPoints: result?.points ?? loyalty.points - points,
-          tier: result?.tier,
+          remainingPoints: result.points,
+          tier: result.tier,
         },
       });
     } catch (error) {

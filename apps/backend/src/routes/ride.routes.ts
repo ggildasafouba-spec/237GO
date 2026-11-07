@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
 import { submitRating, RatingError } from '../services/rating.service';
@@ -204,12 +204,49 @@ router.patch(
         }
       }
 
-      const updatedRide = await prisma.ride.update({
+      // PRISE EN CHARGE ATOMIQUE : si deux chauffeurs appuient sur "Accepter" en même temps,
+      // un seul obtient count = 1. L'autre reçoit "déjà prise" au lieu d'écraser le premier.
+      const claimed = await prisma.ride.updateMany({
+        where: { id, status: 'PENDING', driverId: null },
+        data: { driverId: req.user!.id, status: 'ACCEPTED' },
+      });
+      if (claimed.count !== 1) {
+        throw new AppError('Course déjà prise par un autre chauffeur', 409);
+      }
+
+      // ESCROW : bloquer le prix de la course (prix négocié ou estimé)
+      let escrow;
+      try {
+        escrow = await holdFunds({
+          amount: ridePrice,
+          payerId: ride.passengerId,
+          payeeId: req.user!.id,
+          paymentMethod: ride.paymentMethod,
+          serviceType: 'RIDE',
+          serviceId: id,
+        });
+      } catch (holdError) {
+        // Blocage impossible (ex. solde du passager insuffisant) : on remet la course
+        // en attente au lieu de la laisser "acceptée" sans paiement.
+        await prisma.ride.updateMany({
+          where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+          data: { driverId: null, status: 'PENDING' },
+        });
+        throw holdError;
+      }
+
+      // Le passager a pu annuler pendant l'opération : dans ce cas on rend l'argent.
+      const stillAccepted = await prisma.ride.findFirst({
+        where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+        select: { id: true },
+      });
+      if (!stillAccepted) {
+        await refundFunds(escrow.id, 'auto').catch(() => {});
+        throw new AppError('Cette course vient d\'être annulée par le passager', 409);
+      }
+
+      const updatedRide = await prisma.ride.findUniqueOrThrow({
         where: { id },
-        data: {
-          driverId: req.user!.id,
-          status: 'ACCEPTED',
-        },
         include: {
           driver: {
             include: { driverProfile: true },
@@ -218,16 +255,6 @@ router.patch(
             select: { firstName: true, lastName: true, phone: true },
           },
         },
-      });
-
-      // ESCROW : bloquer le prix de la course (prix négocié ou estimé)
-      await holdFunds({
-        amount: ridePrice,
-        payerId: ride.passengerId,
-        payeeId: req.user!.id,
-        paymentMethod: ride.paymentMethod,
-        serviceType: 'RIDE',
-        serviceId: id,
       });
 
       // Notifier le passager (temps réel + push)
@@ -363,21 +390,32 @@ router.patch(
         throw new AppError(`Impossible d'annuler une course en statut ${ride.status}`, 400);
       }
 
-      const updated = await prisma.ride.update({
-        where: { id },
+      // Annulation ATOMIQUE : ne passe que si la course est encore PENDING/ACCEPTED
+      // (évite d'annuler une course qu'un chauffeur vient de démarrer).
+      const cancelled = await prisma.ride.updateMany({
+        where: { id, status: { in: ['PENDING', 'ACCEPTED'] } },
         data: {
           status: 'CANCELLED',
           cancelledAt: new Date(),
           cancelReason: reason || 'Annulé par le passager',
         },
       });
+      if (cancelled.count !== 1) {
+        throw new AppError('Cette course ne peut plus être annulée', 409);
+      }
+      const updated = await prisma.ride.findUniqueOrThrow({ where: { id } });
 
-      // Rembourser l'escrow si créé
+      // Rembourser l'escrow s'il existe. (Avant : refundFunds('RIDE', id) recevait un type de
+      // service à la place d'un identifiant d'escrow, donc le remboursement n'avait jamais lieu.)
       const io = req.app.get('io');
       try {
-        const { refundFunds } = await import('../services/escrow.service');
-        await refundFunds('RIDE', id);
-      } catch { /* pas d'escrow à rembourser */ }
+        const escrow = await getEscrowForService('RIDE', id);
+        if (escrow && (escrow.status === 'HELD' || escrow.status === 'DISPUTED')) {
+          await refundFunds(escrow.id, 'auto');
+        }
+      } catch (refundError) {
+        console.error(`Remboursement escrow course ${id} échoué:`, (refundError as Error).message);
+      }
 
       // Notifier le chauffeur si assigné
       if (ride.driverId) {

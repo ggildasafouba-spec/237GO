@@ -17,6 +17,12 @@ export const PLATFORM_COMMISSION_RATE = 0.15;
  * 3. releaseFunds() → l'argent (−commission) est versé au prestataire (status RELEASED)
  * 4. refundFunds()  → l'argent est rendu au client (status REFUNDED)
  * 5. openDispute()  → litige, décision admin requise (status DISPUTED)
+ *
+ * CONCURRENCE : chaque transition d'état est ATOMIQUE. On "réclame" d'abord
+ * l'escrow avec un updateMany conditionnel (WHERE status = état attendu) ; seule
+ * la requête qui obtient count = 1 a le droit de bouger l'argent. Deux appels
+ * simultanés ne peuvent donc jamais payer deux fois. Les mouvements d'argent et le
+ * changement de statut se font dans UNE seule transaction : tout passe ou rien.
  */
 
 export interface HoldFundsParams {
@@ -30,7 +36,8 @@ export interface HoldFundsParams {
 
 /**
  * Bloque les fonds du client dans l'escrow.
- * Si paiement WALLET → débite immédiatement le portefeuille du client.
+ * Si paiement WALLET → débite immédiatement le portefeuille du client, de façon
+ * atomique (le débit n'a lieu que si le solde est suffisant AU MOMENT du débit).
  * Pour les autres méthodes (MoMo, Orange, Cash) → l'escrow est créé en attente
  * de confirmation du paiement externe (ou cash remis au prestataire).
  */
@@ -39,19 +46,32 @@ export async function holdFunds(params: HoldFundsParams) {
 
   const commission = Math.round(amount * PLATFORM_COMMISSION_RATE);
 
-  // Débiter le client si paiement par portefeuille
-  if (paymentMethod === 'WALLET') {
-    const wallet = await prisma.wallet.findUnique({ where: { userId: payerId } });
-    if (!wallet || wallet.balance < amount) {
-      throw new AppError('Solde insuffisant pour effectuer cette réservation', 400);
+  return prisma.$transaction(async (tx) => {
+    // Un seul escrow actif par service : évite un double blocage d'argent.
+    const existing = await tx.escrow.findFirst({
+      where: { serviceType, serviceId, status: { in: ['HELD', 'DISPUTED'] } },
+    });
+    if (existing) {
+      throw new AppError('Un paiement est déjà en séquestre pour ce service', 409);
     }
 
-    await prisma.$transaction([
-      prisma.wallet.update({
-        where: { id: wallet.id },
+    if (paymentMethod === 'WALLET') {
+      const wallet = await tx.wallet.findUnique({ where: { userId: payerId } });
+      if (!wallet) {
+        throw new AppError('Solde insuffisant pour effectuer cette réservation', 400);
+      }
+
+      // Débit conditionnel : ne réussit que si balance >= amount, même si
+      // plusieurs réservations arrivent en même temps.
+      const debited = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: amount } },
         data: { balance: { decrement: amount } },
-      }),
-      prisma.transaction.create({
+      });
+      if (debited.count !== 1) {
+        throw new AppError('Solde insuffisant pour effectuer cette réservation', 400);
+      }
+
+      await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type: 'PAYMENT',
@@ -61,25 +81,22 @@ export async function holdFunds(params: HoldFundsParams) {
           description: `Blocage escrow ${serviceType} ${serviceId.substring(0, 8)}`,
           reference: serviceId,
         },
-      }),
-    ]);
-  }
+      });
+    }
 
-  // Créer l'enregistrement escrow
-  const escrow = await prisma.escrow.create({
-    data: {
-      serviceType,
-      serviceId,
-      amount,
-      commission,
-      payerId,
-      payeeId,
-      paymentMethod,
-      status: 'HELD',
-    },
+    return tx.escrow.create({
+      data: {
+        serviceType,
+        serviceId,
+        amount,
+        commission,
+        payerId,
+        payeeId,
+        paymentMethod,
+        status: 'HELD',
+      },
+    });
   });
-
-  return escrow;
 }
 
 /**
@@ -115,7 +132,16 @@ export async function confirmSide(
 
   // Si les deux ont confirmé → libérer automatiquement
   if (updated.clientConfirmed && updated.providerConfirmed) {
-    return releaseFunds(escrow.id, 'auto');
+    try {
+      return await releaseFunds(escrow.id, 'auto');
+    } catch (error) {
+      // L'autre côté vient de déclencher la libération en même temps : c'est normal,
+      // les fonds ont déjà été versés une fois. On renvoie l'état actuel.
+      if (error instanceof AppError && error.statusCode === 400) {
+        return prisma.escrow.findUniqueOrThrow({ where: { id: escrow.id } });
+      }
+      throw error;
+    }
   }
 
   return updated;
@@ -124,63 +150,74 @@ export async function confirmSide(
 /**
  * Libère les fonds vers le prestataire (−commission).
  * Appelé automatiquement (double confirmation) ou manuellement par un admin.
+ * Atomique : un escrow ne peut être libéré qu'UNE seule fois.
  */
 export async function releaseFunds(escrowId: string, releasedBy: string) {
-  const escrow = await prisma.escrow.findUnique({ where: { id: escrowId } });
-  if (!escrow) {
-    throw new AppError('Escrow non trouvé', 404);
-  }
-  if (escrow.status !== 'HELD' && escrow.status !== 'DISPUTED') {
-    throw new AppError(`Escrow déjà traité (${escrow.status})`, 400);
-  }
+  const escrow = await prisma.$transaction(async (tx) => {
+    const current = await tx.escrow.findUnique({ where: { id: escrowId } });
+    if (!current) {
+      throw new AppError('Escrow non trouvé', 404);
+    }
 
-  const payeeEarnings = escrow.amount - escrow.commission;
-  const payeeWallet = await prisma.wallet.findUnique({ where: { userId: escrow.payeeId } });
+    // Réclamation atomique : une seule requête peut passer HELD/DISPUTED → RELEASED.
+    const claimed = await tx.escrow.updateMany({
+      where: { id: escrowId, status: { in: ['HELD', 'DISPUTED'] } },
+      data: {
+        status: 'RELEASED',
+        releasedAt: new Date(),
+        resolvedBy: releasedBy === 'auto' ? null : releasedBy,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new AppError('Escrow déjà traité', 400);
+    }
 
-  if (escrow.paymentMethod === 'CASH') {
-    // CASH : le client a payé le prestataire en liquide (de la main à la main).
-    // Le prestataire doit donc la commission à la plateforme → on la PRÉLÈVE de son wallet.
+    const payeeEarnings = current.amount - current.commission;
+    const payeeWallet = await tx.wallet.findUnique({ where: { userId: current.payeeId } });
+
     if (payeeWallet) {
-      await prisma.$transaction([
-        prisma.wallet.update({
+      if (current.paymentMethod === 'CASH') {
+        // CASH : le client a payé le prestataire en liquide (de la main à la main).
+        // Le prestataire doit donc la commission à la plateforme → on la PRÉLÈVE de son wallet.
+        await tx.wallet.update({
           where: { id: payeeWallet.id },
-          data: { balance: { decrement: escrow.commission } },
-        }),
-        prisma.transaction.create({
+          data: { balance: { decrement: current.commission } },
+        });
+        await tx.transaction.create({
           data: {
             walletId: payeeWallet.id,
             type: 'PAYMENT',
-            amount: escrow.commission,
+            amount: current.commission,
             paymentMethod: 'CASH',
             status: 'COMPLETED',
-            description: `Commission 237GO (${escrow.commission} XAF) sur ${escrow.serviceType} ${escrow.serviceId.substring(0, 8)} payé en espèces`,
-            reference: escrow.serviceId,
+            description: `Commission 237GO (${current.commission} XAF) sur ${current.serviceType} ${current.serviceId.substring(0, 8)} payé en espèces`,
+            reference: current.serviceId,
           },
-        }),
-      ]);
-    }
-  } else {
-    // Paiement électronique (WALLET, MoMo, Orange...) : on CRÉDITE le prestataire (−commission)
-    if (payeeWallet) {
-      await prisma.$transaction([
-        prisma.wallet.update({
+        });
+      } else {
+        // Paiement électronique (WALLET, MoMo, Orange...) : on CRÉDITE le prestataire (−commission)
+        await tx.wallet.update({
           where: { id: payeeWallet.id },
           data: { balance: { increment: payeeEarnings } },
-        }),
-        prisma.transaction.create({
+        });
+        await tx.transaction.create({
           data: {
             walletId: payeeWallet.id,
             type: 'PAYMENT',
             amount: payeeEarnings,
-            paymentMethod: escrow.paymentMethod,
+            paymentMethod: current.paymentMethod,
             status: 'COMPLETED',
-            description: `Libération escrow ${escrow.serviceType} ${escrow.serviceId.substring(0, 8)} (commission ${escrow.commission} XAF)`,
-            reference: escrow.serviceId,
+            description: `Libération escrow ${current.serviceType} ${current.serviceId.substring(0, 8)} (commission ${current.commission} XAF)`,
+            reference: current.serviceId,
           },
-        }),
-      ]);
+        });
+      }
     }
-  }
+
+    return current;
+  });
+
+  // --- Effets secondaires APRÈS la transaction (un échec ici ne doit pas annuler le paiement) ---
 
   // Points de fidélité au client (1 point / 100 XAF) + recalcul du palier
   const loyaltyPoints = Math.floor(escrow.amount / 100);
@@ -189,6 +226,7 @@ export async function releaseFunds(escrowId: string, releasedBy: string) {
   }
 
   // Notifier le prestataire
+  const payeeEarnings = escrow.amount - escrow.commission;
   const payNotif = escrow.paymentMethod === 'CASH'
     ? { title: '✅ Service validé', body: `Course réglée en espèces. Commission 237GO : ${escrow.commission.toLocaleString()} XAF prélevée.` }
     : { title: '💰 Paiement reçu !', body: `Vous avez reçu ${payeeEarnings.toLocaleString()} XAF pour votre prestation.` };
@@ -200,64 +238,64 @@ export async function releaseFunds(escrowId: string, releasedBy: string) {
     data: { serviceType: escrow.serviceType, serviceId: escrow.serviceId },
   }).catch(() => {});
 
-  return prisma.escrow.update({
-    where: { id: escrowId },
-    data: {
-      status: 'RELEASED',
-      releasedAt: new Date(),
-      resolvedBy: releasedBy === 'auto' ? null : releasedBy,
-    },
-  });
+  return prisma.escrow.findUniqueOrThrow({ where: { id: escrowId } });
 }
 
 /**
  * Rembourse les fonds au client. Appelé en cas d'annulation ou de litige tranché
  * en faveur du client (par un admin).
+ * Atomique : un escrow ne peut être remboursé qu'UNE seule fois, et jamais après libération.
  */
 export async function refundFunds(escrowId: string, refundedBy: string) {
-  const escrow = await prisma.escrow.findUnique({ where: { id: escrowId } });
-  if (!escrow) {
-    throw new AppError('Escrow non trouvé', 404);
-  }
-  if (escrow.status === 'RELEASED') {
-    throw new AppError('Impossible de rembourser : fonds déjà versés au prestataire', 400);
-  }
-  if (escrow.status === 'REFUNDED') {
-    throw new AppError('Escrow déjà remboursé', 400);
-  }
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.escrow.findUnique({ where: { id: escrowId } });
+    if (!current) {
+      throw new AppError('Escrow non trouvé', 404);
+    }
+    if (current.status === 'RELEASED') {
+      throw new AppError('Impossible de rembourser : fonds déjà versés au prestataire', 400);
+    }
+    if (current.status === 'REFUNDED') {
+      throw new AppError('Escrow déjà remboursé', 400);
+    }
 
-  // Recréditer le client (uniquement si payé par wallet au départ)
-  if (escrow.paymentMethod === 'WALLET') {
-    const payerWallet = await prisma.wallet.findUnique({ where: { userId: escrow.payerId } });
-    if (payerWallet) {
-      await prisma.$transaction([
-        prisma.wallet.update({
+    // Réclamation atomique : une seule requête peut passer HELD/DISPUTED → REFUNDED.
+    const claimed = await tx.escrow.updateMany({
+      where: { id: escrowId, status: { in: ['HELD', 'DISPUTED'] } },
+      data: {
+        status: 'REFUNDED',
+        refundedAt: new Date(),
+        resolvedBy: refundedBy === 'auto' ? null : refundedBy,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new AppError('Escrow déjà traité', 400);
+    }
+
+    // Recréditer le client (uniquement si payé par wallet au départ)
+    if (current.paymentMethod === 'WALLET') {
+      const payerWallet = await tx.wallet.findUnique({ where: { userId: current.payerId } });
+      if (payerWallet) {
+        await tx.wallet.update({
           where: { id: payerWallet.id },
-          data: { balance: { increment: escrow.amount } },
-        }),
-        prisma.transaction.create({
+          data: { balance: { increment: current.amount } },
+        });
+        await tx.transaction.create({
           data: {
             walletId: payerWallet.id,
             type: 'REFUND',
-            amount: escrow.amount,
+            amount: current.amount,
             paymentMethod: 'WALLET',
             status: 'COMPLETED',
-            description: `Remboursement escrow ${escrow.serviceType} ${escrow.serviceId.substring(0, 8)}`,
-            reference: escrow.serviceId,
+            description: `Remboursement escrow ${current.serviceType} ${current.serviceId.substring(0, 8)}`,
+            reference: current.serviceId,
           },
-        }),
-      ]);
+        });
+      }
     }
-  }
-
-  return prisma.escrow.update({
-    where: { id: escrowId },
-    data: {
-      status: 'REFUNDED',
-      refundedAt: new Date(),
-      resolvedBy: refundedBy === 'auto' ? null : refundedBy,
-    },
   });
+
+  return prisma.escrow.findUniqueOrThrow({ where: { id: escrowId } });
 }
 
 /**
@@ -283,10 +321,17 @@ export async function openDispute(
     throw new AppError('Vous n\'êtes pas concerné par ce service', 403);
   }
 
-  return prisma.escrow.update({
-    where: { id: escrow.id },
+  // Bascule atomique HELD → DISPUTED : si les fonds viennent d'être libérés
+  // entre-temps, le litige ne doit pas écraser ce statut.
+  const claimed = await prisma.escrow.updateMany({
+    where: { id: escrow.id, status: 'HELD' },
     data: { status: 'DISPUTED', disputeReason: reason },
   });
+  if (claimed.count !== 1) {
+    throw new AppError('Ce paiement a déjà été traité, litige impossible', 409);
+  }
+
+  return prisma.escrow.findUniqueOrThrow({ where: { id: escrow.id } });
 }
 
 /**

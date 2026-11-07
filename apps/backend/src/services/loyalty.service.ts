@@ -31,19 +31,25 @@ export async function addLoyaltyPoints(
 ): Promise<{ points: number; tier: LoyaltyTier; tierChanged: boolean } | null> {
   if (pointsToAdd <= 0) return null;
 
-  const loyalty = await prisma.loyaltyPoints.findUnique({ where: { userId } });
-  if (!loyalty) return null;
+  // Incrément ATOMIQUE côté base : deux gains simultanés s'additionnent tous les deux
+  // (l'ancienne lecture puis écriture pouvait en perdre un).
+  let updated;
+  try {
+    updated = await prisma.loyaltyPoints.update({
+      where: { userId },
+      data: { points: { increment: pointsToAdd } },
+    });
+  } catch {
+    return null; // pas de ligne de fidélité pour cet utilisateur
+  }
 
-  const newPoints = loyalty.points + pointsToAdd;
-  const newTier = computeTier(newPoints);
-  const tierChanged = newTier !== loyalty.tier;
+  const newTier = computeTier(updated.points);
+  const tierChanged = newTier !== updated.tier;
+  if (tierChanged) {
+    await prisma.loyaltyPoints.update({ where: { userId }, data: { tier: newTier } });
+  }
 
-  await prisma.loyaltyPoints.update({
-    where: { userId },
-    data: { points: newPoints, tier: newTier },
-  });
-
-  return { points: newPoints, tier: newTier, tierChanged };
+  return { points: updated.points, tier: newTier, tierChanged };
 }
 
 /**
@@ -53,16 +59,21 @@ export async function redeemLoyaltyPoints(
   userId: string,
   pointsToRemove: number
 ): Promise<{ points: number; tier: LoyaltyTier } | null> {
-  const loyalty = await prisma.loyaltyPoints.findUnique({ where: { userId } });
-  if (!loyalty || loyalty.points < pointsToRemove) return null;
-
-  const newPoints = loyalty.points - pointsToRemove;
-  const newTier = computeTier(newPoints);
-
-  await prisma.loyaltyPoints.update({
-    where: { userId },
-    data: { points: newPoints, tier: newTier },
+  // Retrait ATOMIQUE : ne réussit que s'il reste assez de points AU MOMENT du retrait.
+  // Renvoie null sinon (ex. deux échanges simultanés avec les mêmes points).
+  const claimed = await prisma.loyaltyPoints.updateMany({
+    where: { userId, points: { gte: pointsToRemove } },
+    data: { points: { decrement: pointsToRemove } },
   });
+  if (claimed.count !== 1) return null;
 
-  return { points: newPoints, tier: newTier };
+  const loyalty = await prisma.loyaltyPoints.findUnique({ where: { userId } });
+  if (!loyalty) return null;
+
+  const newTier = computeTier(loyalty.points);
+  if (newTier !== loyalty.tier) {
+    await prisma.loyaltyPoints.update({ where: { userId }, data: { tier: newTier } });
+  }
+
+  return { points: loyalty.points, tier: newTier };
 }

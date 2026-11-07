@@ -533,17 +533,28 @@ export async function confirmDeposit(reference: string): Promise<boolean> {
   const bonus = metadata.bonus || 0;
   const totalCredit = transaction.amount + bonus;
 
-  // Créditer le wallet et marquer la transaction comme complétée
-  await prisma.$transaction([
-    prisma.wallet.update({
+  // Créditer le wallet et marquer la transaction comme complétée.
+  // ATOMIQUE : le webhook du prestataire et la vérification faite par l'app peuvent
+  // arriver en même temps. On "réclame" la transaction avec un updateMany conditionnel :
+  // seule la requête qui obtient count = 1 crédite le wallet, l'autre ne fait rien.
+  const credited = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.transaction.updateMany({
+      where: { id: transaction.id, status: { not: 'COMPLETED' } },
+      data: { status: 'COMPLETED' },
+    });
+    if (claimed.count !== 1) return false;
+
+    await tx.wallet.update({
       where: { id: transaction.walletId },
       data: { balance: { increment: totalCredit } },
-    }),
-    prisma.transaction.update({
-      where: { id: transaction.id },
-      data: { status: 'COMPLETED' },
-    }),
-  ]);
+    });
+    return true;
+  });
+
+  // Déjà crédité par l'autre requête : rien à refaire (et pas de points en double).
+  if (!credited) {
+    return true;
+  }
 
   // Ajouter les points de fidélité (1 point / 500 XAF rechargés) + recalcul du palier
   const loyaltyPointsEarned = Math.floor(transaction.amount / 500);

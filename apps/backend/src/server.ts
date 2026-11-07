@@ -1,4 +1,5 @@
-import express from 'express';
+import express, { Request } from 'express';
+import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createServer } from 'http';
@@ -62,9 +63,32 @@ app.use(express.urlencoded({ extended: true }));
 // surtout plusieurs utilisateurs derrière une même IP (réseau mobile/wifi public).
 // Surchargeable via RATE_LIMIT_MAX. On n'applique PAS de limite aux webhooks
 // (prestataires de paiement) ni au health check.
+// CLÉ DE LIMITATION : l'utilisateur connecté, pas l'IP.
+// Au Cameroun, des centaines d'utilisateurs partagent la même IP publique (réseau mobile
+// partagé, "CGNAT"). Limiter par IP bloquerait de vrais clients à cause de leurs voisins.
+// On vérifie la signature du token (jwt.verify, pas jwt.decode) : sinon un attaquant
+// pourrait fabriquer de faux identifiants pour contourner la limite.
+// Les visiteurs sans token valide (login, inscription...) restent limités par IP.
+const rateLimitKey = (req: Request): string => {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(
+        header.split(' ')[1],
+        process.env.JWT_SECRET || 'default-secret'
+      ) as { userId?: string };
+      if (decoded?.userId) return `user:${decoded.userId}`;
+    } catch {
+      /* token invalide ou expiré : on retombe sur l'IP */
+    }
+  }
+  return `ip:${req.ip}`;
+};
+
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: Number(process.env.RATE_LIMIT_MAX || 300), // 300 req/min/IP par défaut
+  max: Number(process.env.RATE_LIMIT_MAX || 300), // 300 req/min par utilisateur (ou par IP si anonyme)
+  keyGenerator: rateLimitKey,
   standardHeaders: true,
   legacyHeaders: false,
   // Ne pas limiter le health check (pings d'uptime de Railway).
@@ -72,10 +96,48 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Trop de requêtes, veuillez réessayer dans un instant.' },
 });
 
-// Limiteur strict anti-bruteforce pour l'authentification (login, register, reset).
+// Limiteur anti-bruteforce pour l'authentification (login, register, reset).
+// Clé = IP + identifiant saisi : un attaquant qui vise UN compte est bloqué rapidement,
+// mais les autres utilisateurs derrière la même IP partagée ne sont pas touchés.
+// skipSuccessfulRequests : seules les tentatives ÉCHOUÉES comptent (un login réussi ne consomme rien).
+const authAccountKey = (req: Request): string => {
+  const id = String(req.body?.identifier || req.body?.phone || req.body?.email || '')
+    .trim()
+    .toLowerCase();
+  return `auth:${req.ip}|${id}`;
+};
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 30), // 30 tentatives / 15 min / IP
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 10), // 10 échecs / 15 min / (IP + compte)
+  keyGenerator: authAccountKey,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de tentatives. Réessayez dans quelques minutes.' },
+});
+
+// "Mot de passe oublié" répond toujours succès (pour ne pas révéler si un compte existe) :
+// le limiteur ci-dessus, qui ne compte que les échecs, ne l'arrêterait donc jamais.
+// Cette limite compte TOUTES les demandes : elle évite le spam de codes (et de SMS payants).
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.FORGOT_PASSWORD_RATE_LIMIT_MAX || 5),
+  keyGenerator: authAccountKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de demandes de code. Réessayez dans quelques minutes.' },
+});
+
+// Filet de sécurité par IP sur les routes d'authentification (très large, pour les
+// IP partagées) : stoppe quand même un script qui tenterait des milliers de comptes.
+const authIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_IP_RATE_LIMIT_MAX || 500),
+  keyGenerator: (req: Request) => `authip:${req.ip}`,
+  // Les requêtes déjà identifiées par un token valide (ex. /auth/me à l'ouverture de l'app)
+  // sont limitées par le limiteur global par utilisateur, pas ici.
+  skip: (req: Request) => rateLimitKey(req).startsWith('user:'),
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Trop de tentatives. Réessayez dans quelques minutes.' },
@@ -89,7 +151,8 @@ app.use('/api/webhooks', webhookRouter);
 app.use('/api/', globalLimiter);
 
 // Routes
-app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/auth/forgot-password', forgotPasswordLimiter);
+app.use('/api/auth', authIpLimiter, authLimiter, authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/rides', rideRouter);
 app.use('/api/deliveries', deliveryRouter);
