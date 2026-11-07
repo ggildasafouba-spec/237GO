@@ -27,11 +27,10 @@ const vehicleTypes = [
   { id: 'TRUCK', name: 'Camion', icon: '🚛' },
 ];
 
+// Orange Money / MTN se paient via le portefeuille (rechargé par Mobile Money).
 const paymentMethods = [
-  { id: 'ORANGE_MONEY', name: 'Orange Money', icon: '🟠' },
-  { id: 'MTN_MOMO', name: 'MTN MoMo', icon: '🟡' },
+  { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
   { id: 'CASH', name: 'Espèces', icon: '💵' },
-  { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
 ];
 
 export default function RentalScreen({ navigation }: { navigation: any }) {
@@ -39,7 +38,7 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   const [filterType, setFilterType] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState('ORANGE_MONEY');
+  const [selectedPayment, setSelectedPayment] = useState('WALLET');
 
   // Publish form
   const [pubBrand, setPubBrand] = useState('');

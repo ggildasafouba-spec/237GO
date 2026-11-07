@@ -738,6 +738,137 @@ router.get('/escrows/disputes', async (_req: AuthRequest, res: Response) => {
   }
 });
 
+// ========== DEMANDES DE RETRAIT ==========
+// Aucun versement automatique n'est branché : l'admin envoie l'argent par Orange Money / MTN,
+// puis marque la demande comme payée. S'il la refuse, le montant est rendu au portefeuille.
+
+router.get('/withdrawals', async (req: AuthRequest, res: Response) => {
+  try {
+    const status = (req.query.status as string) || 'PENDING';
+    const withdrawals = await prisma.transaction.findMany({
+      where: { type: 'WITHDRAWAL', ...(status !== 'ALL' ? { status: status as any } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        wallet: {
+          select: {
+            balance: true,
+            user: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          },
+        },
+      },
+    });
+    res.json({ success: true, data: withdrawals });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Marquer un retrait comme payé (l'admin a envoyé l'argent)
+router.post('/withdrawals/:id/complete', async (req: AuthRequest, res: Response) => {
+  try {
+    const { operatorRef } = req.body || {};
+    const tx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+    if (!tx || tx.type !== 'WITHDRAWAL') {
+      return res.status(404).json({ success: false, message: 'Demande de retrait introuvable' });
+    }
+
+    // Bascule ATOMIQUE PENDING → COMPLETED : deux admins ne peuvent pas la traiter deux fois
+    const claimed = await prisma.transaction.updateMany({
+      where: { id: tx.id, type: 'WITHDRAWAL', status: 'PENDING' },
+      data: {
+        status: 'COMPLETED',
+        metadata: {
+          ...((tx.metadata as object) || {}),
+          processedBy: req.user!.id,
+          processedAt: new Date().toISOString(),
+          ...(operatorRef ? { operatorRef: String(operatorRef) } : {}),
+        },
+      },
+    });
+    if (claimed.count !== 1) {
+      return res.status(409).json({ success: false, message: 'Demande déjà traitée' });
+    }
+
+    const wallet = await prisma.wallet.findUnique({ where: { id: tx.walletId }, select: { userId: true } });
+    if (wallet) {
+      await sendPushNotification({
+        userId: wallet.userId,
+        title: '💸 Retrait effectué',
+        body: `Votre retrait de ${tx.amount.toLocaleString()} XAF a été envoyé.`,
+        type: 'payment',
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, message: 'Retrait marqué comme payé' });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Refuser un retrait : le montant réservé est recrédité au portefeuille
+router.post('/withdrawals/:id/reject', async (req: AuthRequest, res: Response) => {
+  try {
+    const { reason } = req.body || {};
+    const tx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+    if (!tx || tx.type !== 'WITHDRAWAL') {
+      return res.status(404).json({ success: false, message: 'Demande de retrait introuvable' });
+    }
+
+    // Annulation + recrédit dans UNE transaction : soit les deux, soit rien
+    const done = await prisma.$transaction(async (db) => {
+      const claimed = await db.transaction.updateMany({
+        where: { id: tx.id, type: 'WITHDRAWAL', status: 'PENDING' },
+        data: {
+          status: 'CANCELLED',
+          metadata: {
+            ...((tx.metadata as object) || {}),
+            processedBy: req.user!.id,
+            processedAt: new Date().toISOString(),
+            rejectReason: reason ? String(reason) : null,
+          },
+        },
+      });
+      if (claimed.count !== 1) return false;
+
+      await db.wallet.update({
+        where: { id: tx.walletId },
+        data: { balance: { increment: tx.amount } },
+      });
+      await db.transaction.create({
+        data: {
+          walletId: tx.walletId,
+          type: 'REFUND',
+          amount: tx.amount,
+          paymentMethod: 'WALLET',
+          status: 'COMPLETED',
+          description: `Retrait refusé, montant recrédité${reason ? ` (${String(reason)})` : ''}`,
+          reference: tx.id,
+        },
+      });
+      return true;
+    });
+
+    if (!done) {
+      return res.status(409).json({ success: false, message: 'Demande déjà traitée' });
+    }
+
+    const wallet = await prisma.wallet.findUnique({ where: { id: tx.walletId }, select: { userId: true } });
+    if (wallet) {
+      await sendPushNotification({
+        userId: wallet.userId,
+        title: 'Retrait refusé',
+        body: `Votre retrait de ${tx.amount.toLocaleString()} XAF a été refusé. Le montant a été recrédité sur votre portefeuille.`,
+        type: 'payment',
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, message: 'Retrait refusé, montant recrédité' });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // L'admin libère les fonds au prestataire (constat de service effectué)
 router.post('/escrows/:id/release', async (req: AuthRequest, res: Response) => {
   try {

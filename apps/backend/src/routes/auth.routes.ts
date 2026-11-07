@@ -7,6 +7,7 @@ import { AppError } from '../middleware/error.middleware';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { sendSMS } from '../services/sms.service';
 import { sendPasswordResetEmail } from '../services/mail.service';
+import { JWT_SECRET } from '../lib/jwtSecret';
 
 const router = Router();
 
@@ -81,7 +82,7 @@ router.post(
 
       const token = jwt.sign(
         { userId: user.id },
-        process.env.JWT_SECRET || 'default-secret',
+        JWT_SECRET,
         { expiresIn: '7d' } as any
       );
 
@@ -142,7 +143,7 @@ router.post(
 
       const token = jwt.sign(
         { userId: user.id },
-        process.env.JWT_SECRET || 'default-secret',
+        JWT_SECRET,
         { expiresIn: '7d' } as any
       );
 

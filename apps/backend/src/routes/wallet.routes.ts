@@ -238,14 +238,21 @@ router.post(
           throw new AppError('Solde insuffisant', 400);
         }
 
+        // DEMANDE DE RETRAIT (statut PENDING) : le montant est réservé sur le solde tout de suite,
+        // mais aucun versement automatique n'existe encore vers Orange Money / MTN.
+        // Un administrateur envoie l'argent puis valide la demande (COMPLETED),
+        // ou la refuse (le montant est alors recrédité automatiquement).
+        // Avant : la transaction était marquée "COMPLETED" et l'app affichait "envoyé"
+        // alors qu'aucun argent ne partait réellement.
         await tx.transaction.create({
           data: {
             walletId: wallet.id,
             type: 'WITHDRAWAL',
             amount,
             paymentMethod,
-            status: 'COMPLETED',
-            description: `Retrait vers ${paymentMethod} (${phone})`,
+            status: 'PENDING',
+            description: `Demande de retrait vers ${paymentMethod} (${phone})`,
+            metadata: { phone, requestedAt: new Date().toISOString() },
           },
         });
 
@@ -253,10 +260,18 @@ router.post(
         return fresh.balance;
       });
 
+      // Prévenir les admins en temps réel qu'une demande attend un versement
+      req.app.get('io')?.to('admins').emit('withdrawal_requested', {
+        userId: req.user!.id,
+        amount,
+        paymentMethod,
+        phone,
+      });
+
       res.json({
         success: true,
-        message: `Retrait de ${amount} XAF envoyé vers ${phone}`,
-        data: { newBalance },
+        message: `Demande de retrait de ${amount} XAF enregistrée. Le versement vers ${phone} sera effectué sous 24 h ouvrées.`,
+        data: { newBalance, status: 'PENDING' },
       });
     } catch (error) {
       if (error instanceof AppError) {

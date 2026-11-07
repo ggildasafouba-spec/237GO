@@ -3,9 +3,10 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { submitRating, RatingError } from '../services/rating.service';
+import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { dispatchToNearbyDrivers } from '../services/matching.service';
 
 const router = Router();
@@ -74,7 +75,7 @@ router.post(
     body('dropoffAddress').trim().notEmpty(),
     body('dropoffContact').matches(/^6[0-9]{8}$/),
     body('packageType').isIn(['DOCUMENT', 'SMALL_PACKAGE', 'MEDIUM_PACKAGE', 'LARGE_PACKAGE', 'FOOD', 'FRAGILE']),
-    body('paymentMethod').isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CASH', 'WALLET']),
+    body('paymentMethod').isIn([...SERVICE_PAYMENT_METHODS]).withMessage(SERVICE_PAYMENT_ERROR),
     body('packageDesc').optional().trim(),
     body('packageWeight').optional().isFloat({ min: 0 }),
   ],
@@ -189,20 +190,47 @@ router.patch(
         }
       }
 
-      const updated = await prisma.delivery.update({
-        where: { id },
+      // PRISE EN CHARGE ATOMIQUE : un seul livreur peut obtenir la livraison,
+      // même si plusieurs appuient sur "Accepter" en même temps.
+      const claimed = await prisma.delivery.updateMany({
+        where: { id, status: 'PENDING', driverId: null },
         data: { driverId: req.user!.id, status: 'ACCEPTED' },
       });
+      if (claimed.count !== 1) {
+        throw new AppError('Livraison déjà prise par un autre livreur', 409);
+      }
 
       // ESCROW : bloquer le prix de la livraison (versé au livreur après validation)
-      await holdFunds({
-        amount: delivery.estimatedPrice,
-        payerId: delivery.senderId,
-        payeeId: req.user!.id,
-        paymentMethod: delivery.paymentMethod,
-        serviceType: 'DELIVERY',
-        serviceId: id,
+      let escrow;
+      try {
+        escrow = await holdFunds({
+          amount: delivery.estimatedPrice,
+          payerId: delivery.senderId,
+          payeeId: req.user!.id,
+          paymentMethod: delivery.paymentMethod,
+          serviceType: 'DELIVERY',
+          serviceId: id,
+        });
+      } catch (holdError) {
+        // Blocage impossible (ex. solde insuffisant de l'expéditeur) : on remet en attente.
+        await prisma.delivery.updateMany({
+          where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+          data: { driverId: null, status: 'PENDING' },
+        });
+        throw holdError;
+      }
+
+      // L'expéditeur a pu annuler pendant l'opération : on rend l'argent.
+      const stillAccepted = await prisma.delivery.findFirst({
+        where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+        select: { id: true },
       });
+      if (!stillAccepted) {
+        await refundFunds(escrow.id, 'auto').catch(() => {});
+        throw new AppError('Cette livraison vient d\'être annulée', 409);
+      }
+
+      const updated = await prisma.delivery.findUniqueOrThrow({ where: { id } });
 
       // Infos du livreur pour le passager (affichage + chat)
       const driverUser = await prisma.user.findUnique({
@@ -269,6 +297,19 @@ router.patch(
         where: { id },
         data: updateData,
       });
+
+      // Annulation par le livreur : l'argent bloqué doit revenir à l'expéditeur.
+      // (Avant : aucun remboursement, l'argent restait bloqué en séquestre.)
+      if (status === 'CANCELLED') {
+        try {
+          const escrow = await getEscrowForService('DELIVERY', id);
+          if (escrow && (escrow.status === 'HELD' || escrow.status === 'DISPUTED')) {
+            await refundFunds(escrow.id, 'auto');
+          }
+        } catch (refundError) {
+          console.error(`Remboursement livraison ${id} échoué:`, (refundError as Error).message);
+        }
+      }
 
       const io = req.app.get('io');
       io.to(`user:${delivery.senderId}`).emit('delivery_status_update', {

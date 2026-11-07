@@ -12,6 +12,7 @@ const navItems = [
   { path: '/vehicles', label: 'Locations', icon: '🔑' },
   { path: '/finance', label: 'Finance', icon: '💰' },
   { path: '/disputes', label: 'Litiges', icon: '⚖️' },
+  { path: '/withdrawals', label: 'Retraits', icon: '💸' },
   { path: '/settings', label: 'Paramètres', icon: '⚙️' },
 ];
 

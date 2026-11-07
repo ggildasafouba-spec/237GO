@@ -22,6 +22,8 @@ import { uploadRouter, UPLOAD_DIR } from './routes/upload.routes';
 import { aiRouter } from './routes/ai.routes';
 import { chatRouter } from './routes/chat.routes';
 import { setupSocketHandlers } from './socket';
+import { JWT_SECRET } from './lib/jwtSecret';
+import { resumePendingDispatches } from './services/matching.service';
 import { errorHandler } from './middleware/error.middleware';
 
 dotenv.config();
@@ -73,10 +75,7 @@ const rateLimitKey = (req: Request): string => {
   const header = req.headers.authorization;
   if (header && header.startsWith('Bearer ')) {
     try {
-      const decoded = jwt.verify(
-        header.split(' ')[1],
-        process.env.JWT_SECRET || 'default-secret'
-      ) as { userId?: string };
+      const decoded = jwt.verify(header.split(' ')[1], JWT_SECRET) as { userId?: string };
       if (decoded?.userId) return `user:${decoded.userId}`;
     } catch {
       /* token invalide ou expiré : on retombe sur l'IP */
@@ -193,6 +192,15 @@ const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
   console.log(`🚀 237GO API démarrée sur le port ${PORT}`);
   console.log(`📍 Environnement: ${process.env.NODE_ENV || 'development'}`);
+
+  // Relancer la recherche de chauffeurs pour les demandes restées en attente
+  // (les timers d'élargissement du rayon sont perdus à chaque redémarrage).
+  // Petit délai pour laisser les chauffeurs se reconnecter au socket d'abord.
+  setTimeout(() => {
+    resumePendingDispatches(io)
+      .then((n) => { if (n > 0) console.log(`🔁 Recherche relancée pour ${n} demande(s) en attente`); })
+      .catch((e) => console.error('Reprise des recherches échouée:', (e as Error).message));
+  }, 15_000);
 });
 
 export { app, io };

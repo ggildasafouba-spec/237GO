@@ -8,6 +8,7 @@ import { sendPushNotification } from '../services/notification.service';
 import { aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
 import { submitRating, RatingError } from '../services/rating.service';
 import { dispatchToNearbyDrivers } from '../services/matching.service';
+import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 
 const router = Router();
 
@@ -77,7 +78,7 @@ router.post(
     body('dropoffLng').isFloat(),
     body('dropoffAddress').trim().notEmpty(),
     body('vehicleType').isIn(['MOTO', 'CAR_ECONOMY', 'CAR_COMFORT', 'CAR_VIP']),
-    body('paymentMethod').isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CASH', 'WALLET']),
+    body('paymentMethod').isIn([...SERVICE_PAYMENT_METHODS]).withMessage(SERVICE_PAYMENT_ERROR),
     body('proposedPrice').optional().isFloat({ min: 0 }),
     body('passengerCount').optional().isInt({ min: 1, max: 4 }),
     body('luggageSize').optional().isIn(['NONE', 'SMALL', 'LARGE']),

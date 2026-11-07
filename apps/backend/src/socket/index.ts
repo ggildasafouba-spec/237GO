@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
+import { JWT_SECRET } from '../lib/jwtSecret';
 import { sendSOSAlert, sendTripShareLink } from '../services/sms.service';
 
 interface AuthSocket extends Socket {
@@ -17,7 +18,7 @@ export function setupSocketHandlers(io: Server) {
         return next(new Error('Token requis'));
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { userId: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
         select: { id: true, role: true },
@@ -47,6 +48,13 @@ export function setupSocketHandlers(io: Server) {
     }
 
     // === CHAUFFEUR ===
+    // État propre à CE chauffeur connecté (une connexion = un chauffeur)
+    const LOCATION_PERSIST_INTERVAL_MS = 30_000;
+    let lastPersistedAt = 0;
+    let lastLocation: { lat: number; lng: number } | null = null;
+    // rideId -> passengerId (null = course invalide pour ce chauffeur)
+    const rideCache = new Map<string, string | null>();
+
     if (socket.userRole === 'DRIVER') {
       // Le chauffeur se met en ligne
       socket.on('driver:online', async (data: { vehicleType: string; lat: number; lng: number }) => {
@@ -65,25 +73,50 @@ export function setupSocketHandlers(io: Server) {
         console.log(`🚗 Chauffeur en ligne: ${socket.userId} (${vehicleType})`);
       });
 
-      // Mise à jour de position du chauffeur
+      // Mise à jour de position du chauffeur.
+      // Avant : 1 écriture + 1 lecture en base à CHAQUE position (toutes les ~5 s par chauffeur),
+      // soit environ 20 écritures/s avec 100 chauffeurs en ligne.
+      // Maintenant :
+      //  - la position est relayée au passager EN TEMPS RÉEL, sans toucher la base ;
+      //  - le passager de la course est mis en cache (1 lecture par course, pas par position) ;
+      //  - la base n'est mise à jour qu'au plus toutes les 30 s par chauffeur
+      //    (suffisant pour trouver les chauffeurs proches lors d'une nouvelle demande).
       socket.on('driver:location', async (data: { lat: number; lng: number; rideId?: string }) => {
-        const { lat, lng, rideId } = data;
+        const { lat, lng, rideId } = data || ({} as any);
+        if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
+          return;
+        }
 
-        await prisma.driverProfile.update({
-          where: { userId: socket.userId },
-          data: { currentLat: lat, currentLng: lng },
-        });
+        try {
+          // 1) Relais temps réel au passager (le passager est vérifié une fois puis mis en cache)
+          if (rideId) {
+            let passengerId = rideCache.get(rideId);
+            if (passengerId === undefined) {
+              const ride = await prisma.ride.findUnique({
+                where: { id: rideId },
+                select: { passengerId: true, driverId: true },
+              });
+              // On ne relaie QUE si ce chauffeur est bien celui de la course
+              passengerId = ride && ride.driverId === socket.userId ? ride.passengerId : null;
+              rideCache.set(rideId, passengerId);
+            }
+            if (passengerId) {
+              io.to(`user:${passengerId}`).emit('driver:location_update', { rideId, lat, lng });
+            }
+          }
 
-        // Si en course, envoyer la position au passager
-        if (rideId) {
-          const ride = await prisma.ride.findUnique({ where: { id: rideId } });
-          if (ride) {
-            io.to(`user:${ride.passengerId}`).emit('driver:location_update', {
-              rideId,
-              lat,
-              lng,
+          // 2) Écriture en base limitée (au plus toutes les 30 s par chauffeur)
+          const now = Date.now();
+          if (now - lastPersistedAt >= LOCATION_PERSIST_INTERVAL_MS) {
+            lastPersistedAt = now;
+            await prisma.driverProfile.update({
+              where: { userId: socket.userId },
+              data: { currentLat: lat, currentLng: lng },
             });
           }
+          lastLocation = { lat, lng };
+        } catch {
+          // Une position perdue n'est pas grave : la suivante arrive dans quelques secondes.
         }
       });
 
@@ -190,10 +223,15 @@ export function setupSocketHandlers(io: Server) {
     // === DÉCONNEXION ===
     socket.on('disconnect', async () => {
       if (socket.userRole === 'DRIVER') {
+        // On enregistre la dernière position connue (qui n'a peut-être pas encore été écrite)
         await prisma.driverProfile.update({
           where: { userId: socket.userId },
-          data: { isOnline: false },
+          data: {
+            isOnline: false,
+            ...(lastLocation ? { currentLat: lastLocation.lat, currentLng: lastLocation.lng } : {}),
+          },
         }).catch(() => {}); // Ignorer si profil pas trouvé
+        rideCache.clear();
       }
       console.log(`❌ Déconnecté: ${socket.userId}`);
     });

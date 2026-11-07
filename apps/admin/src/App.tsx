@@ -10,6 +10,7 @@ import Merchants from './pages/Merchants';
 import Vehicles from './pages/Vehicles';
 import Finance from './pages/Finance';
 import Disputes from './pages/Disputes';
+import Withdrawals from './pages/Withdrawals';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 
@@ -39,6 +40,7 @@ export default function App() {
                   <Route path="/vehicles" element={<Vehicles />} />
                   <Route path="/finance" element={<Finance />} />
                   <Route path="/disputes" element={<Disputes />} />
+                  <Route path="/withdrawals" element={<Withdrawals />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </Layout>

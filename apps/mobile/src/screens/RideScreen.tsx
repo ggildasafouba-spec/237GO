@@ -37,11 +37,11 @@ const vehicleOptions: VehicleOption[] = [
 
 type PaymentMethod = 'ORANGE_MONEY' | 'MTN_MOMO' | 'CASH' | 'WALLET';
 
+// Orange Money / MTN se paient via le portefeuille (rechargé par Mobile Money) :
+// le paiement direct d'une course en Mobile Money n'est pas encore encaissé côté serveur.
 const paymentMethods: { id: PaymentMethod; name: string; icon: string }[] = [
-  { id: 'ORANGE_MONEY', name: 'Orange Money', icon: '🟠' },
-  { id: 'MTN_MOMO', name: 'MTN MoMo', icon: '🟡' },
+  { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
   { id: 'CASH', name: 'Espèces', icon: '💵' },
-  { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
 ];
 
 export default function RideScreen({ navigation, route }: { navigation: any; route: any }) {
@@ -52,7 +52,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   const [pickupLandmark, setPickupLandmark] = useState(''); // repère pour le point de DÉPART
   const [showDestPicker, setShowDestPicker] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleType>(route?.params?.vehicleType || 'MOTO');
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('ORANGE_MONEY');
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('WALLET');
   const [proposedPrice, setProposedPrice] = useState('');
   const [passengerCount, setPassengerCount] = useState(1);
   const [luggageSize, setLuggageSize] = useState<'NONE' | 'SMALL' | 'LARGE'>('NONE');

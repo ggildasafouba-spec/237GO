@@ -121,3 +121,73 @@ export async function dispatchToNearbyDrivers(params: DispatchParams) {
 
   return alreadyNotified.size;
 }
+
+/**
+ * REPRISE APRÈS REDÉMARRAGE
+ *
+ * L'élargissement du rayon repose sur des timers en mémoire : si le serveur redémarre
+ * (redéploiement Railway, crash), ces timers sont perdus et une demande récente restait
+ * bloquée sur son premier rayon. Au démarrage, on relance donc la recherche pour les
+ * courses et livraisons ENCORE en attente et créées récemment.
+ *
+ * On ne relance que les demandes de moins de 10 minutes : au-delà, le client a
+ * certainement abandonné ou réessayé, inutile de spammer les chauffeurs.
+ */
+const RESUME_MAX_AGE_MS = 10 * 60 * 1000;
+
+export async function resumePendingDispatches(io: Server): Promise<number> {
+  const since = new Date(Date.now() - RESUME_MAX_AGE_MS);
+  let resumed = 0;
+
+  const [rides, deliveries] = await Promise.all([
+    prisma.ride.findMany({ where: { status: 'PENDING', createdAt: { gte: since } } }),
+    prisma.delivery.findMany({ where: { status: 'PENDING', createdAt: { gte: since } } }),
+  ]);
+
+  for (const ride of rides) {
+    await dispatchToNearbyDrivers({
+      io,
+      event: 'new_ride_request',
+      vehicleType: ride.vehicleType,
+      pickupLat: ride.pickupLat,
+      pickupLng: ride.pickupLng,
+      serviceType: 'ride',
+      serviceId: ride.id,
+      payload: {
+        rideId: ride.id,
+        pickup: { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress },
+        dropoff: { lat: ride.dropoffLat, lng: ride.dropoffLng, address: ride.dropoffAddress },
+        estimatedPrice: ride.estimatedPrice,
+        proposedPrice: ride.proposedPrice,
+        vehicleType: ride.vehicleType,
+        distance: ride.distance,
+        duration: ride.duration,
+        passengerCount: ride.passengerCount,
+        luggageSize: ride.luggageSize,
+      },
+    }).catch(() => {});
+    resumed++;
+  }
+
+  for (const d of deliveries) {
+    await dispatchToNearbyDrivers({
+      io,
+      event: 'new_delivery_request',
+      pickupLat: d.pickupLat,
+      pickupLng: d.pickupLng,
+      serviceType: 'delivery',
+      serviceId: d.id,
+      payload: {
+        deliveryId: d.id,
+        pickup: { lat: d.pickupLat, lng: d.pickupLng, address: d.pickupAddress },
+        dropoff: { lat: d.dropoffLat, lng: d.dropoffLng, address: d.dropoffAddress },
+        packageType: d.packageType,
+        estimatedPrice: d.estimatedPrice,
+        distance: d.distance,
+      },
+    }).catch(() => {});
+    resumed++;
+  }
+
+  return resumed;
+}

@@ -47,6 +47,13 @@ export async function holdFunds(params: HoldFundsParams) {
   const commission = Math.round(amount * PLATFORM_COMMISSION_RATE);
 
   return prisma.$transaction(async (tx) => {
+    // VERROU par service : sans lui, deux transactions simultanées lisent toutes les deux
+    // "aucun escrow" puis en créent chacune un (le test de concurrence l'a démontré :
+    // 20 appels simultanés créaient 10 escrows). pg_advisory_xact_lock sérialise les
+    // blocages d'un MÊME service ; il est libéré automatiquement en fin de transaction.
+    // Les services différents ne s'attendent pas entre eux.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`escrow:${serviceType}:${serviceId}`}))`;
+
     // Un seul escrow actif par service : évite un double blocage d'argent.
     const existing = await tx.escrow.findFirst({
       where: { serviceType, serviceId, status: { in: ['HELD', 'DISPUTED'] } },

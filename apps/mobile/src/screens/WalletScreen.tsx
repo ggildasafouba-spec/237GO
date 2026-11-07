@@ -180,10 +180,15 @@ export default function WalletScreen() {
     setIsProcessing(true);
     try {
       await withdraw(numAmount, selectedProvider, phone);
-      Alert.alert('✅ Retrait effectué', `${numAmount.toLocaleString()} XAF envoyés vers ${phone}`);
+      // Le versement est fait par l'équipe 237GO (pas encore automatique) : on l'indique clairement.
+      Alert.alert(
+        '⏳ Demande de retrait envoyée',
+        `${numAmount.toLocaleString()} XAF seront envoyés vers ${phone} sous 24 h ouvrées. ` +
+        'Le montant est déjà réservé sur votre solde. Vous serez notifié dès le versement.'
+      );
       setAmount('');
-    } catch {
-      Alert.alert('Erreur', 'Le retrait a échoué. Vérifiez votre solde.');
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.response?.data?.message || 'Le retrait a échoué. Vérifiez votre solde.');
     } finally {
       setIsProcessing(false);
     }

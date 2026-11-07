@@ -5,6 +5,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth.middlew
 import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
+import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 
 const router = Router();
 
@@ -94,10 +95,15 @@ router.post(
   authenticate,
   [
     body('seats').optional().isInt({ min: 1 }),
-    body('paymentMethod').optional().isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CASH', 'WALLET']),
+    body('paymentMethod').optional().isIn([...SERVICE_PAYMENT_METHODS]).withMessage(SERVICE_PAYMENT_ERROR),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
+
       const { id } = req.params;
       const seats = req.body.seats || 1;
       const paymentMethod = req.body.paymentMethod || 'CASH';
@@ -111,39 +117,63 @@ router.post(
         throw new AppError('Vous ne pouvez pas réserver votre propre trajet', 400);
       }
 
-      if (carpool.availableSeats < seats) {
-        throw new AppError(`Seulement ${carpool.availableSeats} place(s) disponible(s)`, 400);
-      }
-
       const totalPrice = seats * carpool.pricePerSeat;
 
-      // ESCROW : bloquer l'argent du passager (versé au chauffeur après validation)
-      await holdFunds({
-        amount: totalPrice,
-        payerId: req.user!.id,
-        payeeId: carpool.driverId,
-        paymentMethod,
-        serviceType: 'CARPOOL',
-        serviceId: id,
+      // 1) RÉSERVATION ATOMIQUE DES PLACES : on décrémente seulement s'il reste assez de
+      //    places AU MOMENT de l'écriture. Deux passagers ne peuvent plus obtenir la
+      //    même dernière place.
+      const reserved = await prisma.carpool.updateMany({
+        where: { id, status: 'ACTIVE', availableSeats: { gte: seats } },
+        data: { availableSeats: { decrement: seats } },
       });
+      if (reserved.count !== 1) {
+        const fresh = await prisma.carpool.findUnique({ where: { id }, select: { availableSeats: true } });
+        throw new AppError(`Seulement ${fresh?.availableSeats ?? 0} place(s) disponible(s)`, 409);
+      }
 
-      const booking = await prisma.carpoolBooking.create({
-        data: {
-          carpoolId: id,
-          passengerId: req.user!.id,
-          seats,
-          status: 'CONFIRMED',
-        },
-      });
+      // Rendre les places si une étape suivante échoue
+      const releaseSeats = () =>
+        prisma.carpool.update({
+          where: { id },
+          data: { availableSeats: { increment: seats }, status: 'ACTIVE' },
+        }).catch(() => {});
 
-      // Mettre à jour les places disponibles
-      const newSeats = carpool.availableSeats - seats;
-      await prisma.carpool.update({
-        where: { id },
-        data: {
-          availableSeats: newSeats,
-          status: newSeats === 0 ? 'FULL' : 'ACTIVE',
-        },
+      let booking;
+      try {
+        // 2) La réservation est créée d'abord : l'escrow est rattaché à ELLE (et non au
+        //    trajet), car un même trajet a plusieurs passagers, chacun avec son paiement.
+        booking = await prisma.carpoolBooking.create({
+          data: {
+            carpoolId: id,
+            passengerId: req.user!.id,
+            seats,
+            status: 'CONFIRMED',
+          },
+        });
+
+        // 3) ESCROW : bloquer l'argent du passager (versé au chauffeur après validation)
+        try {
+          await holdFunds({
+            amount: totalPrice,
+            payerId: req.user!.id,
+            payeeId: carpool.driverId,
+            paymentMethod,
+            serviceType: 'CARPOOL',
+            serviceId: booking.id,
+          });
+        } catch (holdError) {
+          await prisma.carpoolBooking.delete({ where: { id: booking.id } }).catch(() => {});
+          throw holdError;
+        }
+      } catch (error) {
+        await releaseSeats();
+        throw error;
+      }
+
+      // 4) Marquer le trajet complet s'il ne reste plus de place
+      await prisma.carpool.updateMany({
+        where: { id, availableSeats: 0, status: 'ACTIVE' },
+        data: { status: 'FULL' },
       });
 
       // Notifier le chauffeur
@@ -206,11 +236,34 @@ router.get('/my-bookings', authenticate, async (req: AuthRequest, res: Response)
   }
 });
 
+/**
+ * L'escrow d'un covoiturage est rattaché à la RÉSERVATION (un paiement par passager).
+ * Pour rester compatible avec les anciennes versions de l'app qui envoient l'id du TRAJET,
+ * on retrouve la réservation du passager connecté sur ce trajet.
+ */
+async function resolvePassengerBookingId(idParam: string, passengerId: string): Promise<string> {
+  const direct = await prisma.carpoolBooking.findFirst({
+    where: { id: idParam, passengerId },
+    select: { id: true },
+  });
+  if (direct) return direct.id;
+
+  const byTrip = await prisma.carpoolBooking.findFirst({
+    where: { carpoolId: idParam, passengerId, status: { in: ['CONFIRMED', 'COMPLETED'] } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  });
+  if (byTrip) return byTrip.id;
+
+  throw new AppError('Réservation non trouvée', 404);
+}
+
 // Le passager confirme son arrivée (libère l'escrow si le chauffeur a aussi confirmé)
 router.post('/:id/confirm-arrival', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const result = await confirmSide('CARPOOL', id, 'client', req.user!.id);
+    const bookingId = await resolvePassengerBookingId(req.params.id, req.user!.id);
+    const id = bookingId;
+    const result = await confirmSide('CARPOOL', bookingId, 'client', req.user!.id);
 
     const io = req.app.get('io');
     io.to(`user:${req.user!.id}`).emit('carpool_confirmed', { carpoolId: id, status: result.status });
@@ -230,18 +283,48 @@ router.post('/:id/confirm-arrival', authenticate, async (req: AuthRequest, res: 
   }
 });
 
-// Le chauffeur confirme la fin du trajet
+// Le chauffeur confirme la fin du trajet : cela vaut pour TOUS ses passagers du trajet
+// (chaque réservation a son propre paiement en séquestre).
 router.post('/:id/confirm-completion', authenticate, authorize('DRIVER'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await confirmSide('CARPOOL', id, 'provider', req.user!.id);
+
+    const carpool = await prisma.carpool.findUnique({ where: { id }, select: { driverId: true } });
+    if (!carpool) {
+      throw new AppError('Trajet non trouvé', 404);
+    }
+    if (carpool.driverId !== req.user!.id) {
+      throw new AppError('Vous n\'êtes pas le chauffeur de ce trajet', 403);
+    }
+
+    const bookings = await prisma.carpoolBooking.findMany({
+      where: { carpoolId: id, status: 'CONFIRMED' },
+      select: { id: true },
+    });
+
+    let released = 0;
+    let waiting = 0;
+    for (const b of bookings) {
+      try {
+        const result = await confirmSide('CARPOOL', b.id, 'provider', req.user!.id);
+        if (result.status === 'RELEASED') released++;
+        else waiting++;
+      } catch {
+        // Réservation sans séquestre actif (déjà payée, remboursée ou en litige) : on passe.
+      }
+    }
+
+    await prisma.carpool.updateMany({
+      where: { id, status: { in: ['ACTIVE', 'FULL', 'DEPARTED'] } },
+      data: { status: 'COMPLETED' },
+    });
 
     res.json({
       success: true,
-      message: result.status === 'RELEASED'
-        ? 'Trajet terminé ! Paiement reçu.'
-        : 'Fin de trajet confirmée. En attente de la validation du passager.',
-      data: result,
+      message: waiting === 0
+        ? `Trajet terminé ! ${released} paiement(s) reçu(s).`
+        : `Fin de trajet confirmée. ${released} paiement(s) reçu(s), ${waiting} en attente de la validation des passagers.`,
+      data: { released, waiting },
     });
   } catch (error) {
     if (error instanceof AppError) {
@@ -262,7 +345,7 @@ router.post(
       if (!errors.isEmpty()) {
         return res.status(400).json({ success: false, errors: errors.array() });
       }
-      const { id } = req.params;
+      const id = await resolvePassengerBookingId(req.params.id, req.user!.id);
       const result = await openDispute('CARPOOL', id, req.user!.id, req.body.reason);
 
       // Notifier les admins
@@ -282,7 +365,8 @@ router.post(
 // Consulter le statut de l'escrow d'un trajet
 router.get('/:id/escrow', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const escrow = await getEscrowForService('CARPOOL', req.params.id);
+    const bookingId = await resolvePassengerBookingId(req.params.id, req.user!.id).catch(() => req.params.id);
+    const escrow = await getEscrowForService('CARPOOL', bookingId);
     res.json({ success: true, data: escrow });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
@@ -317,8 +401,11 @@ router.post(
         throw new AppError('Réservation non trouvée', 404);
       }
 
-      // Garde "terminé" : l'escrow du trajet (clé = carpool) doit être libéré
-      const completed = await isServiceCompleted('CARPOOL', booking.carpool.id);
+      // Garde "terminé" : l'escrow de CETTE réservation doit être libéré.
+      // (On accepte aussi l'ancien schéma où l'escrow était rattaché au trajet.)
+      const completed =
+        (await isServiceCompleted('CARPOOL', bookingId)) ||
+        (await isServiceCompleted('CARPOOL', booking.carpool.id));
       if (!completed) {
         throw new AppError('Vous ne pouvez noter qu\'un trajet terminé', 400);
       }

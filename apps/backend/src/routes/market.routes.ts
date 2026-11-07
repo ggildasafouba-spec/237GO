@@ -3,7 +3,8 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
+import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 
 const router = Router();
 
@@ -299,7 +300,7 @@ router.post(
     body('deliveryAddress').trim().notEmpty(),
     body('deliveryLat').isFloat(),
     body('deliveryLng').isFloat(),
-    body('paymentMethod').isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CASH', 'WALLET']),
+    body('paymentMethod').isIn([...SERVICE_PAYMENT_METHODS]).withMessage(SERVICE_PAYMENT_ERROR),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
@@ -336,6 +337,10 @@ router.post(
       const distance = calculateDistance(merchant.shopLat, merchant.shopLng, deliveryLat, deliveryLng);
       const deliveryFee = Math.ceil((300 + distance * 100) / 50) * 50;
 
+      if (merchant.userId === req.user!.id) {
+        throw new AppError('Vous ne pouvez pas commander dans votre propre boutique', 400);
+      }
+
       const order = await prisma.marketOrder.create({
         data: {
           customerId: req.user!.id,
@@ -355,14 +360,24 @@ router.post(
 
       // ESCROW : bloquer le montant total (produits + livraison) à la commande.
       // Libéré au marchand quand le client confirme la réception.
-      await holdFunds({
-        amount: totalAmount + deliveryFee,
-        payerId: req.user!.id,
-        payeeId: merchant.userId,
-        paymentMethod,
-        serviceType: 'MARKET',
-        serviceId: order.id,
-      });
+      // Si le blocage échoue (solde insuffisant), on supprime la commande : sinon le
+      // marchand recevrait une commande NON payée.
+      try {
+        await holdFunds({
+          amount: totalAmount + deliveryFee,
+          payerId: req.user!.id,
+          payeeId: merchant.userId,
+          paymentMethod,
+          serviceType: 'MARKET',
+          serviceId: order.id,
+        });
+      } catch (holdError) {
+        await prisma.$transaction([
+          prisma.orderItem.deleteMany({ where: { orderId: order.id } }),
+          prisma.marketOrder.delete({ where: { id: order.id } }),
+        ]).catch(() => {});
+        throw holdError;
+      }
 
       // Notifier le marchand
       const io = req.app.get('io');
@@ -413,10 +428,29 @@ router.patch(
         throw new AppError('Vous n\'êtes pas le marchand de cette commande', 403);
       }
 
+      // Une commande déjà livrée ou annulée ne doit plus changer d'état
+      // (ex. annuler une commande livrée rembourserait le client à tort).
+      if (existingOrder.status === 'DELIVERED' || existingOrder.status === 'CANCELLED') {
+        throw new AppError(`Commande déjà ${existingOrder.status === 'DELIVERED' ? 'livrée' : 'annulée'}`, 409);
+      }
+
       const order = await prisma.marketOrder.update({
         where: { id },
         data: { status },
       });
+
+      // Annulation par le marchand : rembourser le client.
+      // (Avant : aucun remboursement, l'argent restait bloqué en séquestre.)
+      if (status === 'CANCELLED') {
+        try {
+          const escrow = await getEscrowForService('MARKET', id);
+          if (escrow && (escrow.status === 'HELD' || escrow.status === 'DISPUTED')) {
+            await refundFunds(escrow.id, 'auto');
+          }
+        } catch (refundError) {
+          console.error(`Remboursement commande ${id} échoué:`, (refundError as Error).message);
+        }
+      }
 
       const io = req.app.get('io');
       io.to(`user:${order.customerId}`).emit('order_status_update', {

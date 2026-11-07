@@ -5,6 +5,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
+import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 
 const router = Router();
 
@@ -139,7 +140,7 @@ router.post(
     body('startDate').isISO8601(),
     body('endDate').isISO8601(),
     body('withDriver').optional().isBoolean(),
-    body('paymentMethod').isIn(['ORANGE_MONEY', 'MTN_MOMO', 'EXPRESS_UNION', 'CASH', 'WALLET']),
+    body('paymentMethod').isIn([...SERVICE_PAYMENT_METHODS]).withMessage(SERVICE_PAYMENT_ERROR),
   ],
   async (req: AuthRequest, res: Response) => {
     try {
@@ -175,43 +176,57 @@ router.post(
         totalPrice += days * 10000; // 10,000 XAF/jour pour le chauffeur
       }
 
-      // Vérifier disponibilité sur la période
-      const conflicting = await prisma.rentalBooking.findFirst({
-        where: {
-          vehicleId: id,
-          status: { in: ['CONFIRMED', 'ACTIVE'] },
-          OR: [
-            { startDate: { lte: end }, endDate: { gte: start } },
-          ],
-        },
+      // VÉRIFICATION + CRÉATION ATOMIQUES : on verrouille la ligne du véhicule
+      // (SELECT ... FOR UPDATE) pendant la transaction. Deux réservations simultanées
+      // sur le même véhicule passent donc l'une APRÈS l'autre : la seconde voit la
+      // première et est refusée. Avant, les deux pouvaient réserver les mêmes dates.
+      const booking = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "vehicles" WHERE id = ${id} FOR UPDATE`;
+
+        const conflicting = await tx.rentalBooking.findFirst({
+          where: {
+            vehicleId: id,
+            status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
+            startDate: { lte: end },
+            endDate: { gte: start },
+          },
+        });
+        if (conflicting) {
+          throw new AppError('Véhicule déjà réservé sur cette période', 409);
+        }
+
+        return tx.rentalBooking.create({
+          data: {
+            vehicleId: id,
+            renterId: req.user!.id,
+            startDate: start,
+            endDate: end,
+            totalPrice,
+            withDriver: withDriver || false,
+            paymentMethod,
+            status: 'CONFIRMED',
+          },
+        });
       });
 
-      if (conflicting) {
-        throw new AppError('Véhicule déjà réservé sur cette période', 409);
-      }
-
-      const booking = await prisma.rentalBooking.create({
-        data: {
-          vehicleId: id,
-          renterId: req.user!.id,
-          startDate: start,
-          endDate: end,
-          totalPrice,
-          withDriver: withDriver || false,
+      // ESCROW : bloquer l'argent du locataire (versé au propriétaire après validation).
+      // Si le blocage échoue (solde insuffisant), on annule la réservation pour libérer les dates.
+      try {
+        await holdFunds({
+          amount: totalPrice,
+          payerId: req.user!.id,
+          payeeId: vehicle.ownerId,
           paymentMethod,
-          status: 'CONFIRMED',
-        },
-      });
-
-      // ESCROW : bloquer l'argent du locataire (versé au propriétaire après validation)
-      await holdFunds({
-        amount: totalPrice,
-        payerId: req.user!.id,
-        payeeId: vehicle.ownerId,
-        paymentMethod,
-        serviceType: 'RENTAL',
-        serviceId: booking.id,
-      });
+          serviceType: 'RENTAL',
+          serviceId: booking.id,
+        });
+      } catch (holdError) {
+        await prisma.rentalBooking.update({
+          where: { id: booking.id },
+          data: { status: 'CANCELLED' },
+        }).catch(() => {});
+        throw holdError;
+      }
 
       // Notifier le propriétaire
       const io = req.app.get('io');

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
+import { JWT_SECRET } from '../lib/jwtSecret';
 import { AppError } from './error.middleware';
 
 export interface AuthRequest extends Request {
@@ -65,9 +66,8 @@ export const authenticate = async (
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'default-secret';
 
-    const decoded = jwt.verify(token, secret) as { userId: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
 
     // 1) Cache : évite une requête SQL pour les utilisateurs actifs récemment vus
     const cached = userCache.get(decoded.userId);

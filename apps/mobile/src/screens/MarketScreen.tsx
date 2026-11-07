@@ -33,7 +33,7 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState('ORANGE_MONEY');
+  const [selectedPayment, setSelectedPayment] = useState('WALLET');
   const [myCoords, setMyCoords] = useState({ lat: 4.0511, lng: 9.7679 });
   const [deliveryCoords, setDeliveryCoords] = useState({ lat: 4.055, lng: 9.77 });
   const { getCurrentLocation, reverseGeocode } = useLocation();
@@ -473,10 +473,8 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
 
       <Text style={styles.sectionLabel}>Paiement</Text>
       {[
-        { id: 'ORANGE_MONEY', name: 'Orange Money', icon: '🟠' },
-        { id: 'MTN_MOMO', name: 'MTN MoMo', icon: '🟡' },
+        { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
         { id: 'CASH', name: 'Espèces', icon: '💵' },
-        { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
       ].map((method) => (
         <TouchableOpacity
           key={method.id}

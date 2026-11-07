@@ -27,11 +27,10 @@ const packageTypes: { id: PackageType; name: string; icon: string; desc: string 
   { id: 'FRAGILE', name: 'Fragile', icon: '⚠️', desc: 'Manipulation délicate' },
 ];
 
+// Orange Money / MTN se paient via le portefeuille (rechargé par Mobile Money).
 const paymentMethods = [
-  { id: 'ORANGE_MONEY', name: 'Orange Money', icon: '🟠' },
-  { id: 'MTN_MOMO', name: 'MTN MoMo', icon: '🟡' },
+  { id: 'WALLET', name: 'Portefeuille 237GO (rechargé par Orange Money / MTN)', icon: '👛' },
   { id: 'CASH', name: 'Espèces', icon: '💵' },
-  { id: 'WALLET', name: 'Portefeuille 237GO', icon: '👛' },
 ];
 
 export default function DeliveryScreen({ navigation }: { navigation: any }) {
@@ -42,7 +41,7 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
   const [pickupContact, setPickupContact] = useState('');
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [dropoffContact, setDropoffContact] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState('ORANGE_MONEY');
+  const [selectedPayment, setSelectedPayment] = useState('WALLET');
 
   // Coordonnées réelles (GPS pour le retrait, géocodage pour la destination). Fallback Douala.
   const [pickupCoords, setPickupCoords] = useState({ lat: 4.0511, lng: 9.7679 });

@@ -508,7 +508,7 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
             {item.status === 'CONFIRMED' && (
               <EscrowActions
                 serviceType="carpool"
-                serviceId={item.carpool.id}
+                serviceId={item.id}
                 amount={item.seats * item.carpool.pricePerSeat}
                 onDone={fetchMyBookings}
               />
