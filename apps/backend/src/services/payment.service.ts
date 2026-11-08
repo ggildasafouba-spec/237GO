@@ -254,12 +254,24 @@ export async function initiatePayment(data: PaymentRequest): Promise<PaymentResp
       };
     }
 
+    // Refus de CinetPay : on journalise SA réponse complète (code, statut, détails) et ce
+    // qu'on lui a envoyé (sans aucun secret), sinon impossible de savoir pourquoi il refuse.
+    console.error('CinetPay a refusé le paiement:', JSON.stringify({
+      reponse: body,
+      envoye: {
+        merchant_transaction_id: data.transactionId,
+        amount,
+        currency: data.currency || 'XAF',
+        client_phone_number: data.customerPhone || '(vide)',
+        notify_url: data.notifyUrl,
+      },
+    }));
     return {
       success: false,
       message: body.message || body.details?.message || 'Erreur CinetPay',
     };
   } catch (error: any) {
-    console.error('CinetPay Error:', error.response?.data || error.message);
+    console.error('CinetPay Error:', JSON.stringify(error.response?.data || error.message));
     return { success: false, message: 'Service de paiement indisponible' };
   }
 }
