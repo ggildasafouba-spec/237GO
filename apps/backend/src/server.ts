@@ -150,8 +150,16 @@ app.use('/api/webhooks', webhookRouter);
 app.use('/api/', globalLimiter);
 
 // Routes
-app.use('/api/auth/forgot-password', forgotPasswordLimiter);
-app.use('/api/auth', authIpLimiter, authLimiter, authRouter);
+// Limiteurs anti-force-brute UNIQUEMENT sur les routes qui reçoivent un identifiant.
+// Avant, ils couvraient tout /api/auth, y compris GET /auth/me (appelé à chaque ouverture
+// de l'app) : pour /auth/me l'identifiant est vide, donc TOUS les utilisateurs derrière une
+// même IP partageaient un compteur de 10. Le test de charge l'a montré : à 600 utilisateurs,
+// 100 % des /auth/me étaient refusés (429) pendant 15 min. /auth/me reste couvert par le
+// limiteur global (par utilisateur).
+const CREDENTIAL_ROUTES = ['/api/auth/login', '/api/auth/register', '/api/auth/reset-password'];
+app.use('/api/auth/forgot-password', authIpLimiter, forgotPasswordLimiter);
+app.use(CREDENTIAL_ROUTES, authIpLimiter, authLimiter);
+app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/rides', rideRouter);
 app.use('/api/deliveries', deliveryRouter);
