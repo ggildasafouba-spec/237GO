@@ -63,11 +63,18 @@ export function setupSocketHandlers(io: Server) {
     {
       // Le chauffeur se met en ligne
       socket.on('driver:online', async (data: { vehicleType?: string; lat: number; lng: number }) => {
+        // Journalisée systématiquement : sans cette ligne, impossible de savoir si une mise
+        // en ligne n'est jamais arrivée ou si elle a été refusée.
+        console.log(`📡 Demande de mise en ligne reçue: ${socket.userId} (lat=${data?.lat}, lng=${data?.lng})`);
+        const refuse = (reason: string, message: string) => {
+          console.log(`⛔ Mise en ligne refusée: ${socket.userId} — ${reason}`);
+          socket.emit('driver:online_error', { message });
+        };
         try {
           const lat = Number(data?.lat);
           const lng = Number(data?.lng);
           if (!isFinite(lat) || !isFinite(lng)) {
-            socket.emit('driver:online_error', { message: 'Position GPS invalide. Activez la localisation.' });
+            refuse('position GPS invalide', 'Position GPS invalide. Activez la localisation.');
             return;
           }
 
@@ -78,11 +85,12 @@ export function setupSocketHandlers(io: Server) {
           });
           const profile = user?.driverProfile;
           if (!user?.isActive || !profile || profile.verificationStatus !== 'VERIFIED') {
-            socket.emit('driver:online_error', {
-              message: profile?.verificationStatus === 'PENDING'
+            refuse(
+              !user?.isActive ? 'compte désactivé' : !profile ? 'aucun profil chauffeur' : `dossier ${profile.verificationStatus}`,
+              profile?.verificationStatus === 'PENDING'
                 ? 'Votre dossier chauffeur est en cours de vérification. Vous pourrez vous mettre en ligne après validation.'
-                : 'Votre compte chauffeur n\'est pas validé.',
-            });
+                : 'Votre compte chauffeur n\'est pas validé.'
+            );
             return;
           }
           socket.userRole = 'DRIVER';
