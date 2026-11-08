@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
 import { JWT_KEY, JWT_VERIFY_OPTIONS } from '../lib/jwtSecret';
+import { sendPendingRequestsToDriver } from '../services/matching.service';
 import { sendSOSAlert, sendTripShareLink } from '../services/sms.service';
 
 interface AuthSocket extends Socket {
@@ -55,22 +56,60 @@ export function setupSocketHandlers(io: Server) {
     // rideId -> passengerId (null = course invalide pour ce chauffeur)
     const rideCache = new Map<string, string | null>();
 
-    if (socket.userRole === 'DRIVER') {
+    // Les événements chauffeur sont TOUJOURS écoutés, et le droit est vérifié en base à la
+    // mise en ligne. Avant, ils n'étaient écoutés que si le rôle valait DRIVER au moment de
+    // la connexion : un chauffeur approuvé APRÈS s'être connecté voyait sa mise en ligne
+    // ignorée sans aucun message, et ne recevait jamais de course.
+    {
       // Le chauffeur se met en ligne
-      socket.on('driver:online', async (data: { vehicleType: string; lat: number; lng: number }) => {
-        const { vehicleType, lat, lng } = data;
+      socket.on('driver:online', async (data: { vehicleType?: string; lat: number; lng: number }) => {
+        try {
+          const lat = Number(data?.lat);
+          const lng = Number(data?.lng);
+          if (!isFinite(lat) || !isFinite(lng)) {
+            socket.emit('driver:online_error', { message: 'Position GPS invalide. Activez la localisation.' });
+            return;
+          }
 
-        // Rejoindre la room des chauffeurs par type
-        socket.join(`drivers:${vehicleType}`);
-        socket.join('drivers:delivery');
+          // Rôle et validation relus en base (et non figés à la connexion)
+          const user = await prisma.user.findUnique({
+            where: { id: socket.userId },
+            select: { role: true, isActive: true, driverProfile: { select: { verificationStatus: true, vehicleType: true } } },
+          });
+          const profile = user?.driverProfile;
+          if (!user?.isActive || !profile || profile.verificationStatus !== 'VERIFIED') {
+            socket.emit('driver:online_error', {
+              message: profile?.verificationStatus === 'PENDING'
+                ? 'Votre dossier chauffeur est en cours de vérification. Vous pourrez vous mettre en ligne après validation.'
+                : 'Votre compte chauffeur n\'est pas validé.',
+            });
+            return;
+          }
+          socket.userRole = 'DRIVER';
 
-        // Mettre à jour la position
-        await prisma.driverProfile.update({
-          where: { userId: socket.userId },
-          data: { isOnline: true, currentLat: lat, currentLng: lng },
-        });
+          // Le type de véhicule vient du profil (source de vérité), pas de l'app
+          const vehicleType = profile.vehicleType;
+          socket.join(`drivers:${vehicleType}`);
+          socket.join('drivers:delivery');
 
-        console.log(`🚗 Chauffeur en ligne: ${socket.userId} (${vehicleType})`);
+          await prisma.driverProfile.update({
+            where: { userId: socket.userId },
+            data: { isOnline: true, currentLat: lat, currentLng: lng },
+          });
+          lastLocation = { lat, lng };
+          lastPersistedAt = Date.now();
+
+          // Rattrapage : les clients qui attendaient déjà
+          const pending = await sendPendingRequestsToDriver({
+            io, driverUserId: socket.userId!, vehicleType, lat, lng,
+          });
+          socket.emit('driver:online_ok', { vehicleType, ...pending });
+
+          console.log(`🚗 Chauffeur en ligne: ${socket.userId} (${vehicleType}) — ${pending.rides} course(s) et ${pending.deliveries} livraison(s) en attente envoyée(s)`);
+        } catch (error) {
+          console.error('driver:online échoué:', (error as Error).message);
+          socket.emit('driver:online_error', { message: 'Mise en ligne impossible, réessayez.' });
+        }
       });
 
       // Mise à jour de position du chauffeur.
@@ -82,6 +121,8 @@ export function setupSocketHandlers(io: Server) {
       //  - la base n'est mise à jour qu'au plus toutes les 30 s par chauffeur
       //    (suffisant pour trouver les chauffeurs proches lors d'une nouvelle demande).
       socket.on('driver:location', async (data: { lat: number; lng: number; rideId?: string }) => {
+        // Réservé aux chauffeurs (rôle lu à la connexion OU confirmé par une mise en ligne)
+        if (socket.userRole !== 'DRIVER') return;
         const { lat, lng, rideId } = data || ({} as any);
         if (typeof lat !== 'number' || typeof lng !== 'number' || !isFinite(lat) || !isFinite(lng)) {
           return;
@@ -109,9 +150,11 @@ export function setupSocketHandlers(io: Server) {
           const now = Date.now();
           if (now - lastPersistedAt >= LOCATION_PERSIST_INTERVAL_MS) {
             lastPersistedAt = now;
+            // isOnline: true = auto-réparation. Un chauffeur qui envoie sa position est en ligne,
+            // même si une coupure réseau l'avait fait passer hors ligne côté serveur.
             await prisma.driverProfile.update({
               where: { userId: socket.userId },
-              data: { currentLat: lat, currentLng: lng },
+              data: { currentLat: lat, currentLng: lng, isOnline: true },
             });
           }
           lastLocation = { lat, lng };
@@ -122,10 +165,12 @@ export function setupSocketHandlers(io: Server) {
 
       // Chauffeur hors ligne
       socket.on('driver:offline', async () => {
-        await prisma.driverProfile.update({
+        if (socket.userRole !== 'DRIVER') return;
+        // updateMany : pas d'erreur (et pas de crash) si le profil n'existe pas
+        await prisma.driverProfile.updateMany({
           where: { userId: socket.userId },
           data: { isOnline: false },
-        });
+        }).catch(() => {});
         console.log(`🔴 Chauffeur hors ligne: ${socket.userId}`);
       });
     }

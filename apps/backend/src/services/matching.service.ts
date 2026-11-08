@@ -153,18 +153,7 @@ export async function resumePendingDispatches(io: Server): Promise<number> {
       pickupLng: ride.pickupLng,
       serviceType: 'ride',
       serviceId: ride.id,
-      payload: {
-        rideId: ride.id,
-        pickup: { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress },
-        dropoff: { lat: ride.dropoffLat, lng: ride.dropoffLng, address: ride.dropoffAddress },
-        estimatedPrice: ride.estimatedPrice,
-        proposedPrice: ride.proposedPrice,
-        vehicleType: ride.vehicleType,
-        distance: ride.distance,
-        duration: ride.duration,
-        passengerCount: ride.passengerCount,
-        luggageSize: ride.luggageSize,
-      },
+      payload: rideRequestPayload(ride),
     }).catch(() => {});
     resumed++;
   }
@@ -177,17 +166,102 @@ export async function resumePendingDispatches(io: Server): Promise<number> {
       pickupLng: d.pickupLng,
       serviceType: 'delivery',
       serviceId: d.id,
-      payload: {
-        deliveryId: d.id,
-        pickup: { lat: d.pickupLat, lng: d.pickupLng, address: d.pickupAddress },
-        dropoff: { lat: d.dropoffLat, lng: d.dropoffLng, address: d.dropoffAddress },
-        packageType: d.packageType,
-        estimatedPrice: d.estimatedPrice,
-        distance: d.distance,
-      },
+      payload: deliveryRequestPayload(d),
     }).catch(() => {});
     resumed++;
   }
 
   return resumed;
+}
+
+// Contenu d'une demande de course / livraison envoyée aux chauffeurs (format unique)
+type RideRow = Awaited<ReturnType<typeof prisma.ride.findMany>>[number];
+type DeliveryRow = Awaited<ReturnType<typeof prisma.delivery.findMany>>[number];
+
+export function rideRequestPayload(ride: RideRow) {
+  return {
+    rideId: ride.id,
+    pickup: { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress },
+    dropoff: { lat: ride.dropoffLat, lng: ride.dropoffLng, address: ride.dropoffAddress },
+    estimatedPrice: ride.estimatedPrice,
+    proposedPrice: ride.proposedPrice,
+    vehicleType: ride.vehicleType,
+    distance: ride.distance,
+    duration: ride.duration,
+    passengerCount: ride.passengerCount,
+    luggageSize: ride.luggageSize,
+  };
+}
+
+export function deliveryRequestPayload(d: DeliveryRow) {
+  return {
+    deliveryId: d.id,
+    pickup: { lat: d.pickupLat, lng: d.pickupLng, address: d.pickupAddress },
+    dropoff: { lat: d.dropoffLat, lng: d.dropoffLng, address: d.dropoffAddress },
+    packageType: d.packageType,
+    estimatedPrice: d.estimatedPrice,
+    distance: d.distance,
+  };
+}
+
+/**
+ * RATTRAPAGE À LA MISE EN LIGNE
+ *
+ * Une demande n'était envoyée qu'au moment de sa création (+ 2 relances à 25 s et 50 s).
+ * Un chauffeur qui se mettait en ligne APRÈS ne voyait donc jamais les clients qui
+ * attendaient déjà. Désormais, à sa mise en ligne, il reçoit les courses (de son type
+ * de véhicule) et livraisons encore en attente, dans le plus grand rayon de recherche.
+ */
+export async function sendPendingRequestsToDriver(params: {
+  io: Server;
+  driverUserId: string;
+  vehicleType: string;
+  lat: number;
+  lng: number;
+}): Promise<{ rides: number; deliveries: number }> {
+  const { io, driverUserId, vehicleType, lat, lng } = params;
+  const since = new Date(Date.now() - RESUME_MAX_AGE_MS);
+
+  const rideSteps = RADIUS_STEPS[vehicleType] || RADIUS_STEPS.CAR_ECONOMY;
+  const rideMaxKm = rideSteps[rideSteps.length - 1];
+  const deliveryMaxKm = RADIUS_STEPS.DELIVERY[RADIUS_STEPS.DELIVERY.length - 1];
+
+  const [rides, deliveries] = await Promise.all([
+    prisma.ride.findMany({
+      where: { status: 'PENDING', driverId: null, vehicleType: vehicleType as any, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    }),
+    prisma.delivery.findMany({
+      where: { status: 'PENDING', driverId: null, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    }),
+  ]);
+
+  let rideCount = 0;
+  for (const r of rides) {
+    const dist = distanceKm(lat, lng, r.pickupLat, r.pickupLng);
+    if (dist <= rideMaxKm && r.passengerId !== driverUserId) {
+      io.to(`user:${driverUserId}`).emit('new_ride_request', {
+        ...rideRequestPayload(r),
+        distanceToPickup: Math.round(dist * 10) / 10,
+      });
+      rideCount++;
+    }
+  }
+
+  let deliveryCount = 0;
+  for (const d of deliveries) {
+    const dist = distanceKm(lat, lng, d.pickupLat, d.pickupLng);
+    if (dist <= deliveryMaxKm && d.senderId !== driverUserId) {
+      io.to(`user:${driverUserId}`).emit('new_delivery_request', {
+        ...deliveryRequestPayload(d),
+        distanceToPickup: Math.round(dist * 10) / 10,
+      });
+      deliveryCount++;
+    }
+  }
+
+  return { rides: rideCount, deliveries: deliveryCount };
 }

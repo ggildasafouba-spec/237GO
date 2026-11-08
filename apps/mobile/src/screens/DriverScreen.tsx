@@ -86,32 +86,80 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
     };
   }, [activeJob?.id]);
 
+  // Copie de isOnline lisible depuis les écouteurs du socket (qui ne voient pas l'état à jour)
+  const isOnlineRef = useRef(false);
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
+
+  // Envoie au serveur la mise en ligne avec la position GPS actuelle
+  const emitOnline = async (): Promise<boolean> => {
+    const socket = socketRef.current;
+    const loc = await getCurrentLocation();
+    if (!socket || !loc) return false;
+    socket.emit('driver:online', { lat: loc.latitude, lng: loc.longitude });
+    return true;
+  };
+
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
     socketRef.current = socket;
 
-    // Écouter les nouvelles demandes de course
+    // Écouter les nouvelles demandes de course (sans doublon si le rattrapage la renvoie)
     socket.on('new_ride_request', (data: RideRequest) => {
       Vibration.vibrate([0, 300, 100, 300]);
-      setRideRequests((prev) => [data, ...prev]);
+      setRideRequests((prev) => [data, ...prev.filter((r) => r.rideId !== data.rideId)]);
     });
 
     // Écouter les nouvelles demandes de livraison
     socket.on('new_delivery_request', (data: DeliveryRequest) => {
       Vibration.vibrate([0, 200, 100, 200]);
-      setDeliveryRequests((prev) => [data, ...prev]);
+      setDeliveryRequests((prev) => [data, ...prev.filter((d) => d.deliveryId !== data.deliveryId)]);
     });
+
+    // Mise en ligne refusée par le serveur (dossier non validé, GPS invalide...) : on l'affiche
+    // au lieu de laisser croire au chauffeur qu'il est en ligne.
+    socket.on('driver:online_error', (data: { message?: string }) => {
+      setIsOnline(false);
+      Alert.alert('Mise en ligne impossible', data?.message || 'Réessayez dans un instant.');
+    });
+
+    // RECONNEXION : après une coupure (veille, changement de réseau), le serveur considère
+    // le chauffeur hors ligne. Avant, l'app affichait toujours "En ligne" sans rien recevoir.
+    // On se remet donc en ligne automatiquement.
+    const onReconnect = () => {
+      if (isOnlineRef.current) emitOnline();
+    };
+    socket.on('connect', onReconnect);
 
     return () => {
       socket.off('new_ride_request');
       socket.off('new_delivery_request');
+      socket.off('driver:online_error');
+      socket.off('connect', onReconnect);
     };
   }, []);
 
+  // En ligne SANS course : position envoyée toutes les 30 s, pour rester visible et être
+  // trouvé au bon endroit par les clients (avant, la position n'était envoyée que pendant
+  // une course, donc celle de la mise en ligne restait figée).
+  useEffect(() => {
+    if (!isOnline || activeJob) return;
+    const interval = setInterval(async () => {
+      const loc = await getCurrentLocation();
+      if (loc && socketRef.current) {
+        socketRef.current.emit('driver:location', { lat: loc.latitude, lng: loc.longitude });
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOnline, !!activeJob]);
+
   const toggleOnline = async () => {
-    const socket = socketRef.current;
-    if (!socket) return;
+    const socket = socketRef.current || getSocket();
+    if (!socket) {
+      Alert.alert('Connexion indisponible', 'Connexion au serveur impossible. Vérifiez votre réseau puis réessayez.');
+      return;
+    }
+    socketRef.current = socket;
 
     if (!isOnline) {
       // 1) Récupérer la VRAIE position GPS du chauffeur (indispensable pour le

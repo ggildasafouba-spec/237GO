@@ -88,6 +88,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await connectSocket();
         registerForPushNotifications();
         set({ user, token, isAuthenticated: true, isLoading: false });
+
+        // Rafraîchir le profil depuis le serveur : le RÔLE peut avoir changé depuis la
+        // dernière connexion (ex. chauffeur ou marchand approuvé par l'admin). Sans ça,
+        // l'app gardait l'ancien rôle et n'affichait pas l'écran chauffeur.
+        api.get('/auth/me')
+          .then(async (res) => {
+            const fresh = res.data?.data;
+            if (!fresh?.id) return;
+            const updated = {
+              ...user,
+              id: fresh.id,
+              phone: fresh.phone,
+              email: fresh.email,
+              firstName: fresh.firstName,
+              lastName: fresh.lastName,
+              role: fresh.role,
+              language: fresh.language,
+            };
+            set({ user: updated });
+            await AsyncStorage.setItem('user', JSON.stringify(updated));
+          })
+          .catch(() => {
+            /* hors ligne : on garde le profil enregistré */
+          });
       } else {
         set({ isLoading: false });
       }
