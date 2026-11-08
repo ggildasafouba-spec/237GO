@@ -188,6 +188,17 @@ async function getCinetPayToken(): Promise<string | null> {
 }
 
 /**
+ * Normalise un numéro en mobile camerounais international (+2376XXXXXXXX).
+ * Retourne null si ce n'est pas un mobile camerounais (ex. numéro étranger).
+ */
+export function toCameroonMobile(phone?: string | null): string | null {
+  let digits = (phone || '').replace(/[^0-9]/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('237')) digits = digits.slice(3);
+  return /^6\d{8}$/.test(digits) ? `+237${digits}` : null;
+}
+
+/**
  * Initialise un paiement CinetPay (API Aurore, POST /v1/payment).
  * Flux : login OAuth -> création du paiement -> on récupère payment_url.
  * L'utilisateur est redirigé vers payment_url pour choisir MoMo / Orange.
@@ -213,6 +224,12 @@ export async function initiatePayment(data: PaymentRequest): Promise<PaymentResp
 
     const returnUrl = data.returnUrl || '';
 
+    // CinetPay valide le numéro au format international (+237…) : un numéro local
+    // « 6XXXXXXXX » est refusé (code 2010 « The client phone number is not mobile »).
+    // Le champ est optionnel : s'il n'est pas un mobile camerounais valide, on ne
+    // l'envoie pas et le client saisit son numéro sur la page CinetPay.
+    const cmPhone = toCameroonMobile(data.customerPhone);
+
     const response = await axios.post(
       `${cinetPayConfig.baseUrl}/v1/payment`,
       {
@@ -222,7 +239,7 @@ export async function initiatePayment(data: PaymentRequest): Promise<PaymentResp
         lang: 'fr',
         designation: data.description,
         client_email: customerEmail,
-        client_phone_number: data.customerPhone || '',
+        ...(cmPhone ? { client_phone_number: cmPhone } : {}),
         client_first_name: firstName,
         client_last_name: lastName,
         success_url: returnUrl,
@@ -262,7 +279,7 @@ export async function initiatePayment(data: PaymentRequest): Promise<PaymentResp
         merchant_transaction_id: data.transactionId,
         amount,
         currency: data.currency || 'XAF',
-        client_phone_number: data.customerPhone || '(vide)',
+        client_phone_number: cmPhone || `(non envoyé, brut: ${data.customerPhone || 'vide'})`,
         notify_url: data.notifyUrl,
       },
     }));
