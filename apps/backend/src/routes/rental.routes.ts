@@ -6,6 +6,7 @@ import { AppError } from '../middleware/error.middleware';
 import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
+import { PUBLIC_VEHICLE_SELECT } from '../lib/publicSelects';
 
 const router = Router();
 
@@ -89,12 +90,16 @@ router.get('/vehicles', authenticate, async (req: AuthRequest, res: Response) =>
       if (maxPrice) (where.pricePerDay as Record<string, number>).lte = parseFloat(maxPrice as string);
     }
 
+    // Champs publics uniquement (avant : CNI du propriétaire, carte grise, assurance et
+    // téléphone du mandataire envoyés à tous les utilisateurs).
     let vehicles = await prisma.vehicle.findMany({
       where,
-      include: {
+      select: {
+        ...PUBLIC_VEHICLE_SELECT,
         owner: { select: { firstName: true, lastName: true } },
       },
       orderBy: { pricePerDay: 'asc' },
+      take: 200,
     });
 
     // Filtrer par proximité
@@ -120,7 +125,8 @@ router.get('/vehicles/:id', authenticate, async (req: AuthRequest, res: Response
   try {
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: req.params.id },
-      include: {
+      select: {
+        ...PUBLIC_VEHICLE_SELECT,
         owner: { select: { id: true, firstName: true, lastName: true, phone: true } },
         bookings: { where: { status: { in: ['CONFIRMED', 'ACTIVE'] } }, select: { startDate: true, endDate: true } },
       },

@@ -9,6 +9,7 @@ import { aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
 import { submitRating, RatingError } from '../services/rating.service';
 import { dispatchToNearbyDrivers } from '../services/matching.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
+import { PUBLIC_USER_SELECT, PUBLIC_DRIVER_PROFILE_SELECT } from '../lib/publicSelects';
 
 const router = Router();
 
@@ -248,9 +249,12 @@ router.patch(
 
       const updatedRide = await prisma.ride.findUniqueOrThrow({
         where: { id },
+        // Ces données partent au PASSAGER (réponse + temps réel) : uniquement le public.
+        // Avant : utilisateur complet (mot de passe chiffré, code de réinitialisation) et
+        // profil chauffeur complet (CNI, permis, photos des documents).
         include: {
           driver: {
-            include: { driverProfile: true },
+            select: { ...PUBLIC_USER_SELECT, driverProfile: { select: PUBLIC_DRIVER_PROFILE_SELECT } },
           },
           passenger: {
             select: { firstName: true, lastName: true, phone: true },

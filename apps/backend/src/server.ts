@@ -22,7 +22,7 @@ import { uploadRouter, UPLOAD_DIR } from './routes/upload.routes';
 import { aiRouter } from './routes/ai.routes';
 import { chatRouter } from './routes/chat.routes';
 import { setupSocketHandlers } from './socket';
-import { JWT_SECRET } from './lib/jwtSecret';
+import { JWT_KEY, JWT_VERIFY_OPTIONS } from './lib/jwtSecret';
 import { resumePendingDispatches } from './services/matching.service';
 import { errorHandler } from './middleware/error.middleware';
 
@@ -75,8 +75,17 @@ const rateLimitKey = (req: Request): string => {
   const header = req.headers.authorization;
   if (header && header.startsWith('Bearer ')) {
     try {
-      const decoded = jwt.verify(header.split(' ')[1], JWT_SECRET) as { userId?: string };
-      if (decoded?.userId) return `user:${decoded.userId}`;
+      const token = header.split(' ')[1];
+      // Déjà vérifié pour cette requête (plusieurs limiteurs appellent cette fonction)
+      const cached = (req as any).jwtVerified as { token: string; userId: string } | undefined;
+      if (cached && cached.token === token) return `user:${cached.userId}`;
+
+      const decoded = jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS) as { userId?: string };
+      if (decoded?.userId) {
+        // Mémorisé sur la requête : authenticate() ne revérifiera pas le même jeton.
+        (req as any).jwtVerified = { token, userId: decoded.userId };
+        return `user:${decoded.userId}`;
+      }
     } catch {
       /* token invalide ou expiré : on retombe sur l'IP */
     }

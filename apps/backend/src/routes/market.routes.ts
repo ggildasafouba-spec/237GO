@@ -5,6 +5,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth.middlew
 import { AppError } from '../middleware/error.middleware';
 import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
+import { PUBLIC_MERCHANT_SELECT } from '../lib/publicSelects';
 
 const router = Router();
 
@@ -87,26 +88,34 @@ router.get('/merchants', authenticate, async (req: AuthRequest, res: Response) =
       where.category = category as string;
     }
 
+    const userLat = lat ? parseFloat(lat as string) : NaN;
+    const userLng = lng ? parseFloat(lng as string) : NaN;
+    const maxRadius = Math.min(Math.max(parseFloat(radius as string) || 5, 0.5), 50);
+    const hasPosition = isFinite(userLat) && isFinite(userLng);
+
+    // PRÉFILTRE EN BASE par un carré autour du client (avant : TOUTES les boutiques du pays
+    // étaient chargées à chaque ouverture de GO Market, puis triées en mémoire).
+    // 1° de latitude ≈ 111 km ; la longitude se resserre avec cos(latitude).
+    if (hasPosition) {
+      const dLat = maxRadius / 111;
+      const dLng = maxRadius / (111 * Math.max(Math.cos((userLat * Math.PI) / 180), 0.01));
+      where.shopLat = { gte: userLat - dLat, lte: userLat + dLat };
+      where.shopLng = { gte: userLng - dLng, lte: userLng + dLng };
+    }
+
+    // Uniquement les champs publics (avant : pièce d'identité et registre de commerce du
+    // gérant envoyés à tous les clients). Les produits ne sont pas affichés dans la liste :
+    // ils sont chargés à l'ouverture de la boutique (/merchants/:id).
     const merchants = await prisma.merchantProfile.findMany({
       where,
-      include: {
-        user: { select: { firstName: true, lastName: true, phone: true } },
-        products: { where: { isAvailable: true }, take: 5 },
-      },
+      select: PUBLIC_MERCHANT_SELECT,
+      take: 200,
     });
 
-    // Filtrer par distance si coordonnées fournies
-    let filtered = merchants;
-    if (lat && lng) {
-      const userLat = parseFloat(lat as string);
-      const userLng = parseFloat(lng as string);
-      const maxRadius = parseFloat(radius as string);
-
-      filtered = merchants.filter((m) => {
-        const dist = calculateDistance(userLat, userLng, m.shopLat, m.shopLng);
-        return dist <= maxRadius;
-      });
-    }
+    // Filtre exact sur le cercle (le carré inclut les coins)
+    const filtered = hasPosition
+      ? merchants.filter((m) => calculateDistance(userLat, userLng, m.shopLat, m.shopLng) <= maxRadius)
+      : merchants;
 
     res.json({ success: true, data: filtered });
   } catch {
@@ -119,9 +128,11 @@ router.get('/merchants/:id', authenticate, async (req: AuthRequest, res: Respons
   try {
     const { id } = req.params;
 
+    // Champs publics uniquement (avant : documents d'identité du gérant inclus)
     const merchant = await prisma.merchantProfile.findUnique({
       where: { id },
-      include: {
+      select: {
+        ...PUBLIC_MERCHANT_SELECT,
         user: { select: { id: true, firstName: true, lastName: true, phone: true } },
         products: { where: { isAvailable: true }, orderBy: { category: 'asc' } },
       },

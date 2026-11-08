@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
-import { JWT_SECRET } from '../lib/jwtSecret';
+import { JWT_KEY, JWT_VERIFY_OPTIONS } from '../lib/jwtSecret';
 import { sendSOSAlert, sendTripShareLink } from '../services/sms.service';
 
 interface AuthSocket extends Socket {
@@ -18,7 +18,7 @@ export function setupSocketHandlers(io: Server) {
         return next(new Error('Token requis'));
       }
 
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const decoded = jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS) as { userId: string };
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
         select: { id: true, role: true },

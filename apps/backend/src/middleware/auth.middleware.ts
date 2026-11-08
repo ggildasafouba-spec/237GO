@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
-import { JWT_SECRET } from '../lib/jwtSecret';
+import { JWT_KEY, JWT_VERIFY_OPTIONS } from '../lib/jwtSecret';
 import { AppError } from './error.middleware';
 
 export interface AuthRequest extends Request {
@@ -67,7 +67,12 @@ export const authenticate = async (
 
     const token = authHeader.split(' ')[1];
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    // Le limiteur de requêtes a souvent déjà vérifié ce jeton : on réutilise le résultat.
+    const preVerified = (req as any).jwtVerified as { token: string; userId: string } | undefined;
+    const decoded =
+      preVerified && preVerified.token === token
+        ? { userId: preVerified.userId }
+        : (jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS) as { userId: string });
 
     // 1) Cache : évite une requête SQL pour les utilisateurs actifs récemment vus
     const cached = userCache.get(decoded.userId);

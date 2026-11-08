@@ -7,7 +7,8 @@ import { AppError } from '../middleware/error.middleware';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { sendSMS } from '../services/sms.service';
 import { sendPasswordResetEmail } from '../services/mail.service';
-import { JWT_SECRET } from '../lib/jwtSecret';
+import { JWT_KEY, JWT_SIGN_OPTIONS } from '../lib/jwtSecret';
+import { SELF_USER_SELECT } from '../lib/publicSelects';
 
 const router = Router();
 
@@ -82,8 +83,8 @@ router.post(
 
       const token = jwt.sign(
         { userId: user.id },
-        JWT_SECRET,
-        { expiresIn: '7d' } as any
+        JWT_KEY,
+        { ...JWT_SIGN_OPTIONS, expiresIn: '7d' } as any
       );
 
       res.status(201).json({
@@ -143,8 +144,8 @@ router.post(
 
       const token = jwt.sign(
         { userId: user.id },
-        JWT_SECRET,
-        { expiresIn: '7d' } as any
+        JWT_KEY,
+        { ...JWT_SIGN_OPTIONS, expiresIn: '7d' } as any
       );
 
       res.json({
@@ -297,10 +298,12 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     const [user, cancelCount] = await Promise.all([
       prisma.user.findUnique({
         where: { id: req.user!.id },
-        include: {
+        // select explicite : JAMAIS le mot de passe chiffré ni le code de réinitialisation
+        select: {
+          ...SELF_USER_SELECT,
           wallet: true,
           loyaltyPoints: true,
-          driverProfile: true,
+          driverProfile: true, // ses propres documents : il en est le propriétaire
           merchantProfile: true,
           emergencyContacts: true,
         },
