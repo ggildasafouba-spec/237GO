@@ -83,6 +83,11 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
 
   // Coordonnées réelles (remplies par le GPS / géocodage). Fallback Douala si indispo.
   const [pickupCoords, setPickupCoords] = useState({ lat: 4.0511, lng: 9.7679 });
+  // VRAIE position de départ connue (GPS ou lieu choisi sur la carte) ?
+  // Avant : si le GPS échouait, la course partait EN SILENCE du point par défaut (Douala),
+  // quel que soit le texte saisi, et les chauffeurs proches du client ne la recevaient jamais.
+  const [pickupLocated, setPickupLocated] = useState(false);
+  const [showPickupPicker, setShowPickupPicker] = useState(false);
   const [dropoffCoords, setDropoffCoords] = useState({ lat: 4.0611, lng: 9.7879 });
   const [locating, setLocating] = useState(false);
 
@@ -96,6 +101,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
       const loc = await getCurrentLocation();
       if (loc) {
         setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
+        setPickupLocated(true);
         const addr = await reverseGeocode(loc.latitude, loc.longitude);
         if (addr && !pickupAddress) setPickupAddress(addr);
       }
@@ -109,13 +115,25 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     const loc = await getCurrentLocation();
     if (loc) {
       setPickupCoords({ lat: loc.latitude, lng: loc.longitude });
+      setPickupLocated(true);
       const addr = await reverseGeocode(loc.latitude, loc.longitude);
       // reverseGeocode renvoie déjà un libellé propre si aucun nom n'est trouvé.
       setPickupAddress(addr);
     } else {
-      Alert.alert('Localisation', "Impossible d'obtenir votre position. Vérifiez que le GPS est activé.");
+      Alert.alert(
+        'Localisation',
+        "Impossible d'obtenir votre position. Activez le GPS (ou autorisez la localisation dans le navigateur), ou choisissez le départ sur la carte."
+      );
     }
     setLocating(false);
+  };
+
+  // Départ choisi sur la carte / par recherche de lieu (quand le GPS est indisponible)
+  const onPickupPicked = (place: PickedPlace) => {
+    setPickupCoords({ lat: place.lat, lng: place.lng });
+    setPickupAddress(place.label);
+    setPickupLocated(true);
+    setShowPickupPicker(false);
   };
 
   const [confirming, setConfirming] = useState(false);
@@ -208,6 +226,13 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   };
 
   const handleGetEstimates = async () => {
+    if (!pickupLocated) {
+      Alert.alert(
+        'Point de départ',
+        'Votre position de départ est inconnue. Appuyez sur « Utiliser ma position actuelle » ou « Choisir le départ sur la carte ».'
+      );
+      return;
+    }
     if (!pickupAddress) {
       Alert.alert('Attention', 'Indiquez votre point de départ (ou utilisez votre position).');
       return;
@@ -386,6 +411,21 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           )}
         </TouchableOpacity>
 
+        {/* Alternative au GPS : choisir le départ par recherche de lieu */}
+        <TouchableOpacity
+          style={styles.myLocationBtn}
+          onPress={() => setShowPickupPicker(true)}
+          accessibilityLabel="Choisir le point de départ sur la carte"
+          accessibilityRole="button"
+        >
+          <Text style={styles.myLocationText}>🗺️ Choisir le départ sur la carte</Text>
+        </TouchableOpacity>
+        {!pickupLocated && !locating && (
+          <Text style={styles.pickupWarning}>
+            ⚠️ Position de départ inconnue : utilisez votre position ou choisissez le départ sur la carte.
+          </Text>
+        )}
+
         {/* Repère du point de DÉPART (très utile au Cameroun où l'adresse GPS est imprécise) */}
         <TextInput
           style={styles.landmarkInput}
@@ -434,6 +474,15 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
             <Text style={styles.buttonText}>Voir les tarifs</Text>
           )}
         </TouchableOpacity>
+
+        {/* Sélecteur du point de DÉPART (même composant que la destination) */}
+        <DestinationPicker
+          visible={showPickupPicker}
+          initialCenter={pickupCoords}
+          title="Choisir le point de départ"
+          onConfirm={onPickupPicked}
+          onClose={() => setShowPickupPicker(false)}
+        />
 
         {/* Sélecteur de destination plein écran (carte OSM + recherche) */}
         <DestinationPicker
@@ -1002,6 +1051,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     paddingVertical: spacing.sm,
     borderRadius: 10,
+    marginBottom: spacing.sm,
+  },
+  pickupWarning: {
+    fontSize: typography.xs,
+    color: '#B8860B',
+    backgroundColor: '#FFF8E1',
+    padding: spacing.sm,
+    borderRadius: 8,
     marginBottom: spacing.sm,
   },
   myLocationText: {
