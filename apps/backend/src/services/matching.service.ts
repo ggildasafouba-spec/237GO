@@ -103,7 +103,22 @@ export async function dispatchToNearbyDrivers(params: DispatchParams) {
   };
 
   // Palier initial : notifier tout de suite les plus proches.
-  await notifyAtRadius(steps[0]);
+  const firstCount = await notifyAtRadius(steps[0]);
+
+  // Diagnostic : sans cette ligne, impossible de savoir pourquoi un chauffeur ne reçoit rien
+  // (trop loin, mauvais type de véhicule, hors ligne…). On logge le chauffeur en ligne le plus
+  // proche, tous rayons confondus.
+  try {
+    const all = await findNearbyDrivers({ vehicleType, pickupLat, pickupLng, radiusKm: Infinity });
+    const nearest = all[0];
+    console.log(
+      `🔎 Dispatch ${serviceType} ${serviceId} (${vehicleType || 'tous types'}) départ=(${pickupLat}, ${pickupLng}) ` +
+      `rayons=${steps.join('/')} km — ${firstCount} notifié(s) au 1er palier, ${all.length} chauffeur(s) en ligne de ce type` +
+      (nearest ? `, le plus proche: ${nearest.userId} à ${Math.round(nearest.dist * 10) / 10} km` : '')
+    );
+  } catch {
+    /* journalisation seulement */
+  }
 
   // Paliers suivants : on élargit seulement si toujours en attente.
   for (let i = 1; i < steps.length; i++) {
