@@ -24,6 +24,14 @@ async function computeOrderTotals(
   if (!merchant) {
     throw new AppError('Marchand non trouvé', 404);
   }
+  // Vérifié ici (devis ET commande) : avant, une boutique non vérifiée ou fermée
+  // recevait quand même des commandes payées, l'argent du client étant bloqué.
+  if (merchant.verificationStatus !== 'VERIFIED') {
+    throw new AppError('Cette boutique n\'est pas encore vérifiée par 237GO', 403);
+  }
+  if (!merchant.isOpen) {
+    throw new AppError('Cette boutique est fermée pour le moment. Réessayez plus tard.', 409);
+  }
 
   let totalAmount = 0;
   const orderItems: { productId: string; quantity: number; unitPrice: number }[] = [];

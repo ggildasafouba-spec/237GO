@@ -365,11 +365,22 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+// Paiement libéré au propriétaire : la réservation est terminée.
+// (Avant : elle restait « CONFIRMED » pour toujours, faussant l'historique et
+// bloquant les dates du véhicule dans la détection de chevauchement.)
+async function markRentalCompleted(bookingId: string) {
+  await prisma.rentalBooking.updateMany({
+    where: { id: bookingId, status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] } },
+    data: { status: 'COMPLETED', isPaid: true },
+  });
+}
+
 // Le locataire confirme la fin de location (libère l'escrow si le propriétaire a aussi confirmé)
 router.post('/bookings/:id/confirm-return', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const result = await confirmSide('RENTAL', id, 'client', req.user!.id);
+    if (result.status === 'RELEASED') await markRentalCompleted(id);
 
     res.json({
       success: true,
@@ -391,6 +402,7 @@ router.post('/bookings/:id/confirm-completion', authenticate, async (req: AuthRe
   try {
     const { id } = req.params;
     const result = await confirmSide('RENTAL', id, 'provider', req.user!.id);
+    if (result.status === 'RELEASED') await markRentalCompleted(id);
 
     res.json({
       success: true,

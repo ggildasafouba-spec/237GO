@@ -204,13 +204,14 @@ const DOC = 'https://example.com/doc.jpg';
 
   // Boutique fermée
   await prisma.merchantProfile.update({ where: { id: merchant.id }, data: { isOpen: false } });
+  const cBeforeClosed = await balance(client.id);
   const oClosed = await api('POST', '/market/orders', T.client, {
     merchantId: merchant.id, items: orderItems, deliveryAddress: 'Bastos', ...dropoff, paymentMethod: 'WALLET',
   });
-  if (oClosed.status === 201) {
-    warn('boutique FERMÉE', 'la commande est quand même acceptée et payée');
-    await api('PATCH', `/market/orders/${oClosed.body.data.id}/status`, T.merchant, { status: 'CANCELLED' });
-  } else check('boutique fermée : commande refusée', true, msg(oClosed));
+  check('boutique fermée : commande refusée', oClosed.status === 409, msg(oClosed));
+  check('boutique fermée : client non débité', (await balance(client.id)) === cBeforeClosed);
+  const qClosed = await api('POST', '/market/orders/quote', T.client, { merchantId: merchant.id, items: orderItems, ...dropoff });
+  check('boutique fermée : devis refusé (pas de paiement direct)', qClosed.status === 409, msg(qClosed));
   await prisma.merchantProfile.update({ where: { id: merchant.id }, data: { isOpen: true } });
 
   // Boutique non vérifiée
@@ -218,10 +219,7 @@ const DOC = 'https://example.com/doc.jpg';
   const oUnverified = await api('POST', '/market/orders', T.client, {
     merchantId: merchant.id, items: orderItems, deliveryAddress: 'Bastos', ...dropoff, paymentMethod: 'WALLET',
   });
-  if (oUnverified.status === 201) {
-    warn('boutique NON VÉRIFIÉE', 'la commande est quand même acceptée et payée');
-    await api('PATCH', `/market/orders/${oUnverified.body.data.id}/status`, T.merchant, { status: 'CANCELLED' });
-  } else check('boutique non vérifiée : commande refusée', true, msg(oUnverified));
+  check('boutique non vérifiée : commande refusée', oUnverified.status === 403, msg(oUnverified));
   await prisma.merchantProfile.update({ where: { id: merchant.id }, data: { verificationStatus: 'VERIFIED' } });
 
   // =====================================================================
@@ -262,9 +260,10 @@ const DOC = 'https://example.com/doc.jpg';
   check('locataire confirme le retour', c2.status === 200, msg(c2));
   check('propriétaire payé (total − 15 %)', (await balance(owner.id)) === oBefore + net(rentalTotal), `${net(rentalTotal)} XAF`);
   const bookingAfter = await prisma.rentalBooking.findUnique({ where: { id: booking.id } });
-  if (bookingAfter.status !== 'COMPLETED') {
-    warn('statut de la réservation après paiement', `reste « ${bookingAfter.status} » au lieu de COMPLETED`);
-  }
+  check('réservation passée en COMPLETED et payée', bookingAfter.status === 'COMPLETED' && bookingAfter.isPaid === true, bookingAfter.status);
+  // Une location terminée ne bloque plus les dates du véhicule
+  const rebook = await api('POST', `/rentals/vehicles/${vehicle.id}/book`, T.client2, { ...dates, paymentMethod: 'WALLET' });
+  check('dates libérées après la fin de location', rebook.status === 201, msg(rebook));
 
   const renterCancel = await api('PATCH', `/rentals/bookings/${booking.id}/cancel`, T.client);
   if (renterCancel.status === 404) {
