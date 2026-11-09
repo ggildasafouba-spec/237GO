@@ -478,6 +478,28 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response) => 
   }
 });
 
+// État d'une course (passager ou chauffeur assigné uniquement).
+// Sert de filet de sécurité côté app : si un événement temps réel est manqué
+// (socket déconnecté, onglet en veille), l'app relit l'état ici.
+router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const ride = await prisma.ride.findUnique({
+      where: { id: req.params.id },
+      include: {
+        driver: {
+          select: { ...PUBLIC_USER_SELECT, driverProfile: { select: PUBLIC_DRIVER_PROFILE_SELECT } },
+        },
+      },
+    });
+    if (!ride || (ride.passengerId !== req.user!.id && ride.driverId !== req.user!.id)) {
+      return res.status(404).json({ success: false, message: 'Course introuvable' });
+    }
+    res.json({ success: true, data: ride });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // Le passager confirme son arrivée (libère l'escrow si le chauffeur a aussi confirmé)
 router.post('/:id/confirm-arrival', authenticate, authorize('PASSENGER'), async (req: AuthRequest, res: Response) => {
   try {

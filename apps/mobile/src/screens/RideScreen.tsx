@@ -136,6 +136,27 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     setShowPickupPicker(false);
   };
 
+  // Filet de sécurité : tant qu'une course est active, on relit son état toutes les 5 s.
+  // Si un événement temps réel est manqué (socket coupé, onglet en veille), l'écran se met
+  // quand même à jour (chauffeur trouvé, en route, course terminée…).
+  const rideId = currentRide?.id;
+  const rideStatus = currentRide?.status;
+  useEffect(() => {
+    if (!rideId || rideStatus === 'CANCELLED') return;
+    const timer = setInterval(() => {
+      useRideStore.getState().refreshRide();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [rideId, rideStatus]);
+
+  // Course annulée côté chauffeur/serveur : on prévient et on revient au départ.
+  useEffect(() => {
+    if (rideStatus !== 'CANCELLED') return;
+    Alert.alert('Course annulée', 'Cette course a été annulée.');
+    clearRide();
+    setStep('location');
+  }, [rideStatus]);
+
   const [confirming, setConfirming] = useState(false);
 
   const handleConfirmArrival = async () => {
@@ -665,7 +686,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   }
 
   // Step: En attente d'un chauffeur
-  if (step === 'waiting' || currentRide?.status === 'PENDING') {
+  // (Avant : `step === 'waiting'` gardait cet écran affiché même après acceptation.)
+  if (currentRide?.status === 'PENDING' || (step === 'waiting' && !currentRide)) {
     return (
       <View style={[styles.container, styles.centerContent, safeTop, { paddingBottom: insets.bottom + spacing.md }]}>
         <ActivityIndicator size="large" color={colors.primary} />

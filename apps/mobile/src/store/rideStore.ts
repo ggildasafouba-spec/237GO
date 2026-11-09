@@ -61,8 +61,13 @@ interface RideState {
   sendSOS: (lat: number, lng: number, rideId?: string) => void;
   shareTrip: (rideId: string, contactPhone: string) => void;
   listenToRideUpdates: () => void;
+  refreshRide: () => Promise<void>;
   clearRide: () => void;
 }
+
+// Écouteurs socket de la course en cours (gardés pour pouvoir les retirer proprement).
+let handlers: Record<string, (...args: any[]) => void> = {};
+let boundSocket: ReturnType<typeof getSocket> = null;
 
 export const useRideStore = create<RideState>((set, get) => ({
   currentRide: null,
@@ -147,33 +152,71 @@ export const useRideStore = create<RideState>((set, get) => ({
     socket?.emit('share:trip', { rideId, contactPhone });
   },
 
+  // Relit l'état de la course côté serveur (filet de sécurité si un événement socket est manqué).
+  refreshRide: async () => {
+    const ride = get().currentRide;
+    if (!ride) return;
+    try {
+      const response = await api.get(`/rides/${ride.id}`);
+      const fresh = response.data?.data;
+      if (!fresh) return;
+      set((state) =>
+        state.currentRide && state.currentRide.id === fresh.id
+          ? { currentRide: { ...state.currentRide, status: fresh.status, driver: fresh.driver || state.currentRide.driver, finalPrice: fresh.finalPrice ?? state.currentRide.finalPrice } }
+          : {}
+      );
+    } catch {
+      /* réseau : on réessaiera au prochain tour */
+    }
+  },
+
   listenToRideUpdates: () => {
     const socket = getSocket();
     if (!socket) return;
 
-    socket.on('ride_accepted', (data) => {
-      set((state) => ({
-        currentRide: state.currentRide
-          ? { ...state.currentRide, status: 'ACCEPTED', driver: data.driver }
-          : null,
-      }));
-    });
+    // Évite d'empiler les écouteurs à chaque nouvelle course : on retire uniquement
+    // les NÔTRES (les autres écrans peuvent écouter les mêmes événements).
+    if (boundSocket) {
+      for (const [event, handler] of Object.entries(handlers)) boundSocket.off(event, handler);
+    }
 
-    socket.on('ride_status_update', (data) => {
-      set((state) => ({
-        currentRide: state.currentRide
-          ? { ...state.currentRide, status: data.status }
-          : null,
-      }));
+    const isCurrent = (rideId?: string) => {
+      const current = get().currentRide;
+      return !!current && (!rideId || rideId === current.id);
+    };
 
-      if (data.status === 'COMPLETED' || data.status === 'CANCELLED') {
-        set({ driverLocation: null });
-      }
-    });
+    handlers = {
+      // Après une reconnexion, on a pu manquer des événements : on relit l'état.
+      connect: () => { get().refreshRide(); },
 
-    socket.on('driver:location_update', (data) => {
-      set({ driverLocation: { lat: data.lat, lng: data.lng } });
-    });
+      ride_accepted: (data: any) => {
+        if (!isCurrent(data?.rideId)) return;
+        set((state) => ({
+          currentRide: state.currentRide
+            ? { ...state.currentRide, status: 'ACCEPTED', driver: data.driver }
+            : null,
+        }));
+      },
+
+      ride_status_update: (data: any) => {
+        if (!isCurrent(data?.rideId)) return;
+        set((state) => ({
+          currentRide: state.currentRide
+            ? { ...state.currentRide, status: data.status }
+            : null,
+        }));
+        if (data.status === 'COMPLETED' || data.status === 'CANCELLED') {
+          set({ driverLocation: null });
+        }
+      },
+
+      'driver:location_update': (data: any) => {
+        set({ driverLocation: { lat: data.lat, lng: data.lng } });
+      },
+    };
+
+    for (const [event, handler] of Object.entries(handlers)) socket.on(event, handler);
+    boundSocket = socket;
   },
 
   clearRide: () => {
