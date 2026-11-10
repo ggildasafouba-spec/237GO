@@ -19,7 +19,13 @@ import { colors, spacing, typography, gradients } from '../theme';
 
 export default function LoginScreen({ navigation }: { navigation: any }) {
   const safe = useSafeScreen();
-  const [isLogin, setIsLogin] = useState(true);
+  // Sur le web, les boutons « Créer mon compte » du site (www.237go.app) ouvrent
+  // https://app.237go.app/?inscription : on arrive directement sur l'inscription.
+  const [isLogin, setIsLogin] = useState(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return true;
+    const { search, hash } = window.location;
+    return !/inscription|signup/i.test(search + hash);
+  });
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -192,7 +198,28 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
 
         {/* Formulaire */}
         <View style={styles.form}>
-          <Text style={styles.title}>{isLogin ? 'Connexion' : 'Inscription'}</Text>
+          {/* Onglets toujours visibles en haut : avant, le lien « S'inscrire » était tout en
+              bas, sous « Se connecter », et sortait de l'écran sur téléphone. */}
+          <View style={styles.tabs} accessibilityRole="tablist">
+            {[
+              { login: true, label: 'Connexion' },
+              { login: false, label: 'Inscription' },
+            ].map((tab) => {
+              const active = isLogin === tab.login;
+              return (
+                <TouchableOpacity
+                  key={tab.label}
+                  style={[styles.tab, active && styles.tabActive]}
+                  onPress={() => setIsLogin(tab.login)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={tab.label}
+                >
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           {!isLogin && (
             <>
@@ -457,6 +484,30 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     padding: spacing.xl,
     flex: 1,
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: spacing.lg,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: colors.primary,
+  },
+  tabText: {
+    fontSize: typography.md,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  tabTextActive: {
+    color: '#fff',
   },
   title: {
     fontSize: typography.xxl,
