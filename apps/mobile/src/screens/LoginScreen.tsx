@@ -169,7 +169,9 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: safe.insets.top, paddingBottom: safe.insets.bottom },
+          // Sur le web, marge basse généreuse : le bouton « S'inscrire » doit pouvoir
+          // remonter au-dessus du clavier du téléphone.
+          { paddingTop: safe.insets.top, paddingBottom: safe.insets.bottom + (Platform.OS === 'web' ? 160 : 0) },
         ]}
         keyboardShouldPersistTaps="handled"
       >

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!--
+      interactive-widget=resizes-content : sur Android (Chrome), le clavier RÉDUIT la page
+      au lieu de la recouvrir. Sans ça, le bas des formulaires (ex. bouton « S'inscrire »)
+      restait caché sous le clavier et impossible à atteindre en faisant défiler.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>%WEB_TITLE%</title>
+    <style id="expo-reset">
+      /* Pleine hauteur. 100dvh = hauteur VISIBLE réelle sur mobile (hors barre d'adresse),
+         contrairement à 100vh/100% qui peuvent dépasser l'écran et couper le bas. */
+      html,
+      body {
+        height: 100%;
+        height: 100dvh;
+      }
+      /* Le défilement est géré par les <ScrollView> de l'app */
+      body {
+        overflow: hidden;
+        margin: 0;
+        overscroll-behavior: none;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        height: 100dvh;
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>Vous devez activer JavaScript pour utiliser 237GO.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
