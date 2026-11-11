@@ -3,10 +3,17 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
+import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted, cancelWithRefund } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { PUBLIC_VEHICLE_SELECT } from '../lib/publicSelects';
+import { sendPushNotification } from '../services/notification.service';
+
+// Règle d'annulation d'une location (par le locataire) :
+// plus de 24 h avant le début → 100 % remboursé ; moins de 24 h → 50 % ; commencée → impossible.
+// Le propriétaire qui annule rembourse toujours 100 %.
+const RENTAL_FREE_CANCEL_HOURS = 24;
+const RENTAL_LATE_REFUND_RATIO = 0.5;
 
 const router = Router();
 
@@ -374,6 +381,77 @@ async function markRentalCompleted(bookingId: string) {
     data: { status: 'COMPLETED', isPaid: true },
   });
 }
+
+// Annuler une réservation (locataire ou propriétaire), avant le début de la location.
+// Le serveur applique la règle et renvoie le montant exact remboursé.
+router.patch('/bookings/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const booking = await prisma.rentalBooking.findUnique({
+      where: { id },
+      include: { vehicle: { select: { ownerId: true, brand: true, model: true } } },
+    });
+    if (!booking) throw new AppError('Réservation non trouvée', 404);
+
+    const isRenter = booking.renterId === req.user!.id;
+    const isOwner = booking.vehicle.ownerId === req.user!.id;
+    if (!isRenter && !isOwner) throw new AppError('Réservation non trouvée', 404);
+
+    if (booking.status === 'CANCELLED') {
+      return res.json({ success: true, message: 'Réservation déjà annulée', data: { refund: 0 } });
+    }
+    if (booking.status === 'ACTIVE' || booking.status === 'COMPLETED' || booking.startDate.getTime() <= Date.now()) {
+      throw new AppError('La location a commencé : annulation impossible. Signalez un problème si nécessaire.', 409);
+    }
+
+    const escrow = await getEscrowForService('RENTAL', id);
+    if (escrow?.status === 'DISPUTED') {
+      throw new AppError('Un litige est en cours sur cette réservation : un administrateur va trancher', 409);
+    }
+
+    const hoursBefore = (booking.startDate.getTime() - Date.now()) / 3_600_000;
+    const ratio = isOwner || hoursBefore >= RENTAL_FREE_CANCEL_HOURS ? 1 : RENTAL_LATE_REFUND_RATIO;
+
+    // Bascule atomique : une seule annulation passe, même si les deux parties annulent en même temps
+    const claimed = await prisma.rentalBooking.updateMany({
+      where: { id, status: { in: ['PENDING', 'CONFIRMED'] } },
+      data: { status: 'CANCELLED' },
+    });
+    if (claimed.count !== 1) throw new AppError('Cette réservation vient d\'être modifiée, rafraîchissez', 409);
+
+    let refund = 0;
+    if (escrow?.status === 'HELD') {
+      refund = (await cancelWithRefund(escrow.id, ratio, req.user!.id)).refund;
+    }
+
+    const otherId = isRenter ? booking.vehicle.ownerId : booking.renterId;
+    const vehicleName = `${booking.vehicle.brand} ${booking.vehicle.model}`;
+    req.app.get('io')?.to(`user:${otherId}`).emit('rental_cancelled', { bookingId: id, by: isRenter ? 'renter' : 'owner' });
+    sendPushNotification({
+      userId: otherId,
+      title: 'Location annulée',
+      body: isRenter
+        ? `Le locataire a annulé la réservation de votre ${vehicleName}.`
+        : `Le propriétaire a annulé votre location (${vehicleName}). Vous êtes remboursé intégralement.`,
+      type: 'rental',
+      data: { bookingId: id },
+    }).catch(() => {});
+
+    const methodNote = escrow?.paymentMethod === 'CASH' ? ' (paiement en espèces : aucun montant n\'avait été débité)' : '';
+    res.json({
+      success: true,
+      message: ratio === 1
+        ? `Réservation annulée. Remboursement intégral${refund ? ` : ${refund.toLocaleString('fr-FR')} XAF sur votre portefeuille` : ''}${methodNote}.`
+        : `Réservation annulée moins de ${RENTAL_FREE_CANCEL_HOURS} h avant le début : remboursement de 50 %${refund ? ` (${refund.toLocaleString('fr-FR')} XAF)` : ''}${methodNote}.`,
+      data: { refund, refundRatio: ratio },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur d\'annulation' });
+  }
+});
 
 // Le locataire confirme la fin de location (libère l'escrow si le propriétaire a aussi confirmé)
 router.post('/bookings/:id/confirm-return', authenticate, async (req: AuthRequest, res: Response) => {

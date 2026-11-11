@@ -13,6 +13,7 @@ import * as Location from 'expo-location';
 import { useDeliveryStore } from '../store/deliveryStore';
 import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
+import CancelAction from '../components/CancelAction';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -464,12 +465,22 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
       )}
 
+      {/* Annulation gratuite tant qu'aucun livreur n'a accepté (rien n'est encore débité) */}
+      {currentDelivery?.id && (currentDelivery.status || 'PENDING') === 'PENDING' && (
+        <CancelAction
+          path={`/deliveries/${currentDelivery.id}/cancel`}
+          label="Annuler la livraison"
+          ruleText="Aucun livreur n'a encore accepté : l'annulation est gratuite, rien n'a été débité."
+          onDone={() => { clearDelivery(); setStep('type'); navigation.goBack(); }}
+        />
+      )}
+
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.error }]}
+        style={[styles.button, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }]}
         onPress={() => { clearDelivery(); setStep('type'); navigation.goBack(); }}
         accessibilityRole="button"
       >
-        <Text style={[styles.buttonText, { color: colors.error }]}>Fermer</Text>
+        <Text style={[styles.buttonText, { color: colors.text }]}>Fermer</Text>
       </TouchableOpacity>
     </View>
   );

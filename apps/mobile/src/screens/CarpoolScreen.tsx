@@ -14,6 +14,7 @@ import * as Location from 'expo-location';
 import { useCarpoolStore } from '../store/carpoolStore';
 import { useAuthStore } from '../store/authStore';
 import EscrowActions from '../components/EscrowActions';
+import CancelAction from '../components/CancelAction';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 
@@ -451,8 +452,18 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
               <Text style={styles.bookingRoute}>{trip.departureCity} → {trip.arrivalCity}</Text>
               <Text style={styles.bookingDate}>
                 {new Date(trip.departureTime).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}
+                {trip.status === 'CANCELLED' ? '  ·  ❌ Annulé' : ''}
               </Text>
-              {(trip.bookings || []).map((b) => (
+              {/* Le chauffeur annule son trajet avant le départ : passagers remboursés à 100 % */}
+              {(trip.status === 'ACTIVE' || trip.status === 'FULL') && new Date(trip.departureTime).getTime() > Date.now() && (
+                <CancelAction
+                  path={`/carpools/${trip.id}/cancel`}
+                  label="Annuler ce trajet"
+                  ruleText="Tous les passagers seront prévenus et remboursés à 100 %."
+                  onDone={fetchMyTrips}
+                />
+              )}
+              {(trip.bookings || []).filter((b) => b.status !== 'CANCELLED').map((b) => (
                 <View key={b.id} style={styles.subBookingRow}>
                   <Text style={styles.subBookingText}>
                     {b.passenger ? `${b.passenger.firstName} ${b.passenger.lastName}` : 'Passager'} • {b.seats} place(s)
@@ -498,9 +509,9 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
               {new Date(item.carpool.departureTime).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}
             </Text>
             <Text style={styles.bookingSeats}>{item.seats} place(s)</Text>
-            <View style={[styles.statusBadge, { backgroundColor: item.status === 'CONFIRMED' ? '#E8F5E9' : '#FFF8E1' }]}>
-              <Text style={{ color: item.status === 'CONFIRMED' ? colors.success : colors.warning, fontWeight: '600', fontSize: 12 }}>
-                {item.status === 'CONFIRMED' ? '✅ Confirmé' : '⏳ En attente'}
+            <View style={[styles.statusBadge, { backgroundColor: item.status === 'CONFIRMED' ? '#E8F5E9' : item.status === 'CANCELLED' ? '#FFEBEE' : '#FFF8E1' }]}>
+              <Text style={{ color: item.status === 'CONFIRMED' ? colors.success : item.status === 'CANCELLED' ? colors.error : colors.warning, fontWeight: '600', fontSize: 12 }}>
+                {item.status === 'CONFIRMED' ? '✅ Confirmé' : item.status === 'CANCELLED' ? '❌ Annulé' : item.status === 'COMPLETED' ? '🏁 Terminé' : '⏳ En attente'}
               </Text>
             </View>
 
@@ -513,6 +524,25 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
                 onDone={fetchMyBookings}
               />
             )}
+
+            {/* Annulation passager avant le départ : 100 % à plus de 12 h, 50 % ensuite */}
+            {(item.status === 'CONFIRMED' || item.status === 'PENDING') &&
+              new Date(item.carpool.departureTime).getTime() > Date.now() && (() => {
+                const hours = (new Date(item.carpool.departureTime).getTime() - Date.now()) / 3_600_000;
+                const total = item.seats * item.carpool.pricePerSeat;
+                return (
+                  <CancelAction
+                    path={`/carpools/bookings/${item.id}/cancel`}
+                    label="Annuler ma réservation"
+                    ruleText={
+                      hours >= 12
+                        ? 'Plus de 12 h avant le départ : vous serez remboursé à 100 %.'
+                        : `Moins de 12 h avant le départ : vous serez remboursé à 50 % (${Math.round(total / 2).toLocaleString()} XAF). L'autre moitié dédommage le chauffeur.`
+                    }
+                    onDone={fetchMyBookings}
+                  />
+                );
+              })()}
 
             {/* Évaluer le conducteur (clé = id de la réservation) */}
             <TouchableOpacity

@@ -373,3 +373,71 @@ export async function isServiceCompleted(serviceType: EscrowServiceType, service
   const escrow = await getEscrowForService(serviceType, serviceId);
   return escrow?.status === 'RELEASED';
 }
+
+/**
+ * ANNULATION AVEC REMBOURSEMENT (total ou partiel).
+ *
+ * refundRatio = 1   → le client récupère tout.
+ * refundRatio = 0.5 → le client récupère la moitié ; l'autre moitié est une indemnité
+ *                     d'annulation versée au prestataire (moins la commission 237GO).
+ *
+ * Atomique : l'escrow passe HELD → REFUNDED une seule fois (deux annulations
+ * simultanées ne remboursent jamais deux fois). Tout passe ou rien.
+ * Paiement en ESPÈCES : rien n'a été encaissé par 237GO, aucun mouvement d'argent.
+ */
+export async function cancelWithRefund(escrowId: string, refundRatio: number, cancelledBy: string) {
+  const ratio = Math.min(Math.max(refundRatio, 0), 1);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const current = await tx.escrow.findUnique({ where: { id: escrowId } });
+    if (!current) throw new AppError('Paiement introuvable', 404);
+
+    const claimed = await tx.escrow.updateMany({
+      where: { id: escrowId, status: 'HELD' },
+      data: { status: 'REFUNDED', refundedAt: new Date(), resolvedBy: cancelledBy === 'auto' ? null : cancelledBy },
+    });
+    if (claimed.count !== 1) {
+      throw new AppError('Ce paiement a déjà été traité (versé, remboursé ou en litige)', 409);
+    }
+
+    const refund = Math.round(current.amount * ratio);
+    const kept = current.amount - refund;
+    const keptCommission = Math.round(kept * PLATFORM_COMMISSION_RATE);
+    const providerShare = kept - keptCommission;
+    const ref = current.serviceId.substring(0, 8);
+
+    if (current.paymentMethod === 'WALLET') {
+      if (refund > 0) {
+        const payerWallet = await tx.wallet.findUnique({ where: { userId: current.payerId } });
+        if (payerWallet) {
+          await tx.wallet.update({ where: { id: payerWallet.id }, data: { balance: { increment: refund } } });
+          await tx.transaction.create({
+            data: {
+              walletId: payerWallet.id, type: 'REFUND', amount: refund, paymentMethod: 'WALLET', status: 'COMPLETED',
+              description: `Remboursement annulation ${current.serviceType} ${ref}${ratio < 1 ? ` (${Math.round(ratio * 100)} %)` : ''}`,
+              reference: current.serviceId,
+            },
+          });
+        }
+      }
+      if (providerShare > 0) {
+        const payeeWallet = await tx.wallet.findUnique({ where: { userId: current.payeeId } });
+        if (payeeWallet) {
+          await tx.wallet.update({ where: { id: payeeWallet.id }, data: { balance: { increment: providerShare } } });
+          await tx.transaction.create({
+            data: {
+              walletId: payeeWallet.id, type: 'PAYMENT', amount: providerShare, paymentMethod: 'WALLET', status: 'COMPLETED',
+              description: `Indemnité d'annulation tardive ${current.serviceType} ${ref} (commission ${keptCommission} XAF)`,
+              reference: current.serviceId,
+            },
+          });
+        }
+      }
+    }
+
+    await tx.escrow.update({ where: { id: escrowId }, data: { commission: current.paymentMethod === 'WALLET' ? keptCommission : 0 } });
+    return { refund: current.paymentMethod === 'WALLET' ? refund : 0, providerShare: current.paymentMethod === 'WALLET' ? providerShare : 0, paymentMethod: current.paymentMethod };
+  });
+
+  return result;
+}

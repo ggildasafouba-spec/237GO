@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRentalStore } from '../store/rentalStore';
 import EscrowActions from '../components/EscrowActions';
+import CancelAction from '../components/CancelAction';
 import { pickAndUploadImage } from '../config/upload';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
@@ -721,6 +722,15 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
                   >
                     <Text style={styles.rateButtonText}>⭐ Évaluer</Text>
                   </TouchableOpacity>
+                  {/* Le propriétaire peut annuler avant le début : locataire remboursé à 100 % */}
+                  {(b.status === 'CONFIRMED' || b.status === 'PENDING') && new Date(b.startDate).getTime() > Date.now() && (
+                    <CancelAction
+                      path={`/rentals/bookings/${b.id}/cancel`}
+                      label="Annuler cette location"
+                      ruleText="Le locataire sera prévenu et remboursé à 100 %."
+                      onDone={fetchMyVehicles}
+                    />
+                  )}
                 </View>
               ))}
             </View>
@@ -785,6 +795,25 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
                 onDone={fetchMyBookings}
               />
             )}
+
+            {/* Annulation avant le début : 100 % à plus de 24 h, 50 % ensuite */}
+            {(item.status === 'CONFIRMED' || item.status === 'PENDING') &&
+              new Date(item.startDate).getTime() > Date.now() && (() => {
+                const hours = (new Date(item.startDate).getTime() - Date.now()) / 3_600_000;
+                const full = hours >= 24;
+                return (
+                  <CancelAction
+                    path={`/rentals/bookings/${item.id}/cancel`}
+                    label="Annuler la location"
+                    ruleText={
+                      full
+                        ? 'Plus de 24 h avant le début : vous serez remboursé à 100 %.'
+                        : `Moins de 24 h avant le début : vous serez remboursé à 50 % (${Math.round(item.totalPrice / 2).toLocaleString()} XAF). L'autre moitié dédommage le propriétaire.`
+                    }
+                    onDone={fetchMyBookings}
+                  />
+                );
+              })()}
 
             {/* Évaluer le propriétaire (clé = id de la réservation) */}
             <TouchableOpacity

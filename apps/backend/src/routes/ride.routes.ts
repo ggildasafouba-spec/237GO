@@ -313,6 +313,12 @@ router.patch(
         throw new AppError('Vous n\'êtes pas le chauffeur de cette course', 403);
       }
 
+      // Une course terminée ou annulée ne change plus d'état (avant : on pouvait « terminer »
+      // une course annulée ou annuler une course terminée).
+      if (existingRide.status === 'COMPLETED' || existingRide.status === 'CANCELLED') {
+        throw new AppError(`Course déjà ${existingRide.status === 'COMPLETED' ? 'terminée' : 'annulée'}`, 409);
+      }
+
       const updateData: Record<string, unknown> = { status };
 
       if (status === 'IN_PROGRESS') {
@@ -326,10 +332,28 @@ router.patch(
         updateData.cancelReason = cancelReason || '';
       }
 
-      const ride = await prisma.ride.update({
-        where: { id },
+      // Transition atomique depuis l'état lu (évite deux mises à jour concurrentes contradictoires)
+      const moved = await prisma.ride.updateMany({
+        where: { id, status: existingRide.status },
         data: updateData,
       });
+      if (moved.count !== 1) {
+        throw new AppError('La course vient de changer d\'état, rafraîchissez', 409);
+      }
+      const ride = await prisma.ride.findUniqueOrThrow({ where: { id } });
+
+      // Annulation par le CHAUFFEUR : le passager doit être remboursé.
+      // (Avant : aucun remboursement, l'argent du passager restait bloqué en séquestre.)
+      if (status === 'CANCELLED') {
+        try {
+          const escrow = await getEscrowForService('RIDE', id);
+          if (escrow && (escrow.status === 'HELD' || escrow.status === 'DISPUTED')) {
+            await refundFunds(escrow.id, 'auto');
+          }
+        } catch (refundError) {
+          console.error(`Remboursement course ${id} (annulée par le chauffeur) échoué:`, (refundError as Error).message);
+        }
+      }
 
       // Notifier le passager du changement de statut
       const io = req.app.get('io');

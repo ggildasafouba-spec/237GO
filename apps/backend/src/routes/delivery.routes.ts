@@ -284,6 +284,11 @@ router.patch(
         throw new AppError('Vous n\'êtes pas le livreur de cette livraison', 403);
       }
 
+      // Une livraison livrée ou annulée ne change plus d'état
+      if (existingDelivery.status === 'DELIVERED' || existingDelivery.status === 'CANCELLED') {
+        throw new AppError(`Livraison déjà ${existingDelivery.status === 'DELIVERED' ? 'livrée' : 'annulée'}`, 409);
+      }
+
       const updateData: Record<string, unknown> = { status };
       if (status === 'IN_TRANSIT') updateData.pickedUpAt = new Date();
       if (status === 'DELIVERED') {
@@ -374,6 +379,37 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response) => 
       data: { deliveries, total, page: parseInt(page as string) },
     });
   } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// L'expéditeur annule sa livraison TANT QU'AUCUN LIVREUR N'A ACCEPTÉ (gratuit : aucun
+// argent n'est encore bloqué à ce stade, il ne l'est qu'à l'acceptation).
+// Atomique : si un livreur accepte au même instant, un seul des deux gagne ; la route
+// d'acceptation rembourse d'elle-même si l'annulation est passée en premier.
+router.patch('/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const cancelled = await prisma.delivery.updateMany({
+      where: { id, senderId: req.user!.id, status: 'PENDING', driverId: null },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    });
+    if (cancelled.count !== 1) {
+      const d = await prisma.delivery.findUnique({ where: { id }, select: { senderId: true, status: true } });
+      if (!d || d.senderId !== req.user!.id) throw new AppError('Livraison non trouvée', 404);
+      if (d.status === 'CANCELLED') {
+        return res.json({ success: true, message: 'Livraison déjà annulée' });
+      }
+      throw new AppError(
+        'Un livreur a déjà accepté cette livraison : contactez-le, ou signalez un problème si nécessaire.',
+        409
+      );
+    }
+    res.json({ success: true, message: 'Livraison annulée. Aucun montant n\'a été débité.' });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Erreur' });
   }
 });

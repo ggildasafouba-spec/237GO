@@ -3,11 +3,18 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
-import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted } from '../services/escrow.service';
+import { holdFunds, confirmSide, openDispute, getEscrowForService, isServiceCompleted, cancelWithRefund } from '../services/escrow.service';
 import { submitRating, RatingError } from '../services/rating.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
+import { sendPushNotification } from '../services/notification.service';
 
 const router = Router();
+
+// Règle d'annulation du covoiturage :
+// - le CHAUFFEUR annule le trajet → tous les passagers remboursés à 100 % ;
+// - un PASSAGER annule plus de 12 h avant le départ → 100 %, sinon 50 % ; après le départ → impossible.
+const CARPOOL_FREE_CANCEL_HOURS = 12;
+const CARPOOL_LATE_REFUND_RATIO = 0.5;
 
 // Rechercher des covoiturages
 router.get('/search', authenticate, async (req: AuthRequest, res: Response) => {
@@ -257,6 +264,124 @@ async function resolvePassengerBookingId(idParam: string, passengerId: string): 
 
   throw new AppError('Réservation non trouvée', 404);
 }
+
+// Le CHAUFFEUR annule son trajet (avant le départ) : chaque passager est remboursé à 100 %.
+router.patch('/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const carpool = await prisma.carpool.findUnique({ where: { id }, select: { driverId: true, status: true, departureCity: true, arrivalCity: true } });
+    if (!carpool || carpool.driverId !== req.user!.id) throw new AppError('Trajet non trouvé', 404);
+    if (carpool.status === 'CANCELLED') return res.json({ success: true, message: 'Trajet déjà annulé', data: { refunded: 0 } });
+
+    // Bascule atomique : impossible d'annuler un trajet parti ou terminé
+    const claimed = await prisma.carpool.updateMany({
+      where: { id, status: { in: ['ACTIVE', 'FULL'] } },
+      data: { status: 'CANCELLED' },
+    });
+    if (claimed.count !== 1) throw new AppError('Le trajet est déjà parti ou terminé : annulation impossible', 409);
+
+    const bookings = await prisma.carpoolBooking.findMany({
+      where: { carpoolId: id, status: { in: ['PENDING', 'CONFIRMED'] } },
+      select: { id: true, passengerId: true },
+    });
+    let refunded = 0;
+    for (const b of bookings) {
+      await prisma.carpoolBooking.update({ where: { id: b.id }, data: { status: 'CANCELLED' } });
+      const escrow = await getEscrowForService('CARPOOL', b.id);
+      if (escrow?.status === 'HELD') {
+        try {
+          await cancelWithRefund(escrow.id, 1, req.user!.id);
+          refunded++;
+        } catch (e) {
+          console.error(`Remboursement covoiturage ${b.id} échoué:`, (e as Error).message);
+        }
+      }
+      req.app.get('io')?.to(`user:${b.passengerId}`).emit('carpool_cancelled', { carpoolId: id, bookingId: b.id, by: 'driver' });
+      sendPushNotification({
+        userId: b.passengerId,
+        title: 'Trajet annulé',
+        body: `Le chauffeur a annulé le trajet ${carpool.departureCity} → ${carpool.arrivalCity}. Vous êtes remboursé intégralement.`,
+        type: 'carpool',
+        data: { carpoolId: id },
+      }).catch(() => {});
+    }
+
+    res.json({
+      success: true,
+      message: `Trajet annulé. ${bookings.length} passager(s) prévenu(s) et remboursé(s) intégralement.`,
+      data: { passengers: bookings.length, refunded },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur d\'annulation' });
+  }
+});
+
+// Un PASSAGER annule sa réservation (avant le départ) : 100 % à plus de 12 h, sinon 50 %.
+router.patch('/bookings/:bookingId/cancel', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await prisma.carpoolBooking.findUnique({
+      where: { id: bookingId },
+      include: { carpool: { select: { id: true, driverId: true, departureTime: true, status: true, departureCity: true, arrivalCity: true } } },
+    });
+    if (!booking || booking.passengerId !== req.user!.id) throw new AppError('Réservation non trouvée', 404);
+    if (booking.status === 'CANCELLED') return res.json({ success: true, message: 'Réservation déjà annulée', data: { refund: 0 } });
+    if (
+      booking.status === 'COMPLETED' ||
+      ['DEPARTED', 'COMPLETED'].includes(booking.carpool.status) ||
+      booking.carpool.departureTime.getTime() <= Date.now()
+    ) {
+      throw new AppError('Le trajet est déjà parti : annulation impossible. Signalez un problème si nécessaire.', 409);
+    }
+
+    const escrow = await getEscrowForService('CARPOOL', bookingId);
+    if (escrow?.status === 'DISPUTED') throw new AppError('Un litige est en cours : un administrateur va trancher', 409);
+
+    const hoursBefore = (booking.carpool.departureTime.getTime() - Date.now()) / 3_600_000;
+    const ratio = hoursBefore >= CARPOOL_FREE_CANCEL_HOURS ? 1 : CARPOOL_LATE_REFUND_RATIO;
+
+    const claimed = await prisma.carpoolBooking.updateMany({
+      where: { id: bookingId, status: { in: ['PENDING', 'CONFIRMED'] } },
+      data: { status: 'CANCELLED' },
+    });
+    if (claimed.count !== 1) throw new AppError('Cette réservation vient d\'être modifiée, rafraîchissez', 409);
+
+    // Les places redeviennent disponibles (et le trajet n'est plus « complet »)
+    await prisma.carpool.updateMany({
+      where: { id: booking.carpool.id, status: { in: ['ACTIVE', 'FULL'] } },
+      data: { availableSeats: { increment: booking.seats }, status: 'ACTIVE' },
+    });
+
+    let refund = 0;
+    if (escrow?.status === 'HELD') refund = (await cancelWithRefund(escrow.id, ratio, req.user!.id)).refund;
+
+    req.app.get('io')?.to(`user:${booking.carpool.driverId}`).emit('carpool_booking_cancelled', { carpoolId: booking.carpool.id, bookingId, seats: booking.seats });
+    sendPushNotification({
+      userId: booking.carpool.driverId,
+      title: 'Réservation annulée',
+      body: `Un passager a annulé ${booking.seats} place(s) sur ${booking.carpool.departureCity} → ${booking.carpool.arrivalCity}.`,
+      type: 'carpool',
+      data: { carpoolId: booking.carpool.id },
+    }).catch(() => {});
+
+    const methodNote = escrow?.paymentMethod === 'CASH' ? ' (paiement en espèces : aucun montant n\'avait été débité)' : '';
+    res.json({
+      success: true,
+      message: ratio === 1
+        ? `Réservation annulée. Remboursement intégral${refund ? ` : ${refund.toLocaleString('fr-FR')} XAF sur votre portefeuille` : ''}${methodNote}.`
+        : `Annulation moins de ${CARPOOL_FREE_CANCEL_HOURS} h avant le départ : remboursement de 50 %${refund ? ` (${refund.toLocaleString('fr-FR')} XAF)` : ''}${methodNote}.`,
+      data: { refund, refundRatio: ratio },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur d\'annulation' });
+  }
+});
 
 // Le passager confirme son arrivée (libère l'escrow si le chauffeur a aussi confirmé)
 router.post('/:id/confirm-arrival', authenticate, async (req: AuthRequest, res: Response) => {

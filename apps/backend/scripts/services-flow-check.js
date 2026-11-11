@@ -63,7 +63,7 @@ const DOC = 'https://example.com/doc.jpg';
 
 (async () => {
   // ---------- Comptes ----------
-  const client = await mkUser('PASSENGER', 200000);
+  const client = await mkUser('PASSENGER', 2000000);
   const client2 = await mkUser('PASSENGER', 200000);
   const driver = await mkUser('DRIVER', 5000);
   const poorDriver = await mkUser('DRIVER', 0);
@@ -140,12 +140,20 @@ const DOC = 'https://example.com/doc.jpg';
 
   // Annulation par l'EXPÉDITEUR d'une livraison en attente
   const dPending = await api('POST', '/deliveries', T.client, deliveryBody('WALLET'));
+  const cBeforePendingCancel = await balance(client.id);
   const senderCancel = await api('PATCH', `/deliveries/${dPending.body.data.id}/cancel`, T.client);
-  if (senderCancel.status !== 200) {
-    warn('expéditeur : annulation d\'une livraison en attente', `aucune route (${senderCancel.status}) : la livraison reste en attente si personne n'accepte`);
-  } else {
-    check('expéditeur annule une livraison en attente', true);
-  }
+  check('expéditeur annule une livraison en attente', senderCancel.status === 200, msg(senderCancel));
+  check('annulation gratuite : rien débité', (await balance(client.id)) === cBeforePendingCancel);
+  const acceptCancelled = await api('PATCH', `/deliveries/${dPending.body.data.id}/accept`, T.driver);
+  check('un livreur ne peut plus accepter une livraison annulée', acceptCancelled.status === 400, msg(acceptCancelled));
+  const otherCancel = await api('PATCH', `/deliveries/${dCash.body.data.id}/cancel`, T.client2);
+  check('un inconnu ne peut pas annuler la livraison d\'un autre', otherCancel.status === 404, msg(otherCancel));
+  // Après acceptation : annulation par l'expéditeur refusée (le livreur est en route)
+  const dAccepted = await api('POST', '/deliveries', T.client, deliveryBody('WALLET'));
+  await api('PATCH', `/deliveries/${dAccepted.body.data.id}/accept`, T.driver);
+  const lateCancel = await api('PATCH', `/deliveries/${dAccepted.body.data.id}/cancel`, T.client);
+  check('après acceptation : annulation expéditeur refusée (message clair)', lateCancel.status === 409, msg(lateCancel));
+  await api('PATCH', `/deliveries/${dAccepted.body.data.id}/status`, T.driver, { status: 'CANCELLED' });
   sDriver.disconnect();
 
   // =====================================================================
@@ -276,10 +284,55 @@ const DOC = 'https://example.com/doc.jpg';
   const rebook = await api('POST', `/rentals/vehicles/${vehicle.id}/book`, T.client2, { ...dates, paymentMethod: 'WALLET' });
   check('dates libérées après la fin de location', rebook.status === 201, msg(rebook));
 
-  const renterCancel = await api('PATCH', `/rentals/bookings/${booking.id}/cancel`, T.client);
-  if (renterCancel.status === 404) {
-    warn('location : annulation', 'aucune route d\'annulation : le locataire ne peut pas annuler ni être remboursé sans litige');
-  }
+  const completedCancel = await api('PATCH', `/rentals/bookings/${booking.id}/cancel`, T.client);
+  check('location terminée : annulation refusée', completedCancel.status === 409, msg(completedCancel));
+
+  // --- Annulations de location ---
+  const iso = (ms) => new Date(Date.now() + ms).toISOString();
+  const H = 3_600_000;
+  const bookFor = async (token, startInMs) => api('POST', `/rentals/vehicles/${vehicle.id}/book`, token, {
+    startDate: iso(startInMs), endDate: iso(startInMs + 24 * H + 60_000), withDriver: false, paymentMethod: 'WALLET',
+  });
+  // a) Plus de 24 h avant : 100 %
+  const early = await bookFor(T.client, 10 * 24 * H);
+  const earlyPrice = early.body?.data?.totalPrice;
+  const cAfterEarly = await balance(client.id);
+  const oBeforeEarly = await balance(owner.id);
+  const cEarly = await api('PATCH', `/rentals/bookings/${early.body.data.id}/cancel`, T.client);
+  check('location annulée > 24 h avant : 100 % remboursé', cEarly.status === 200 && (await balance(client.id)) === cAfterEarly + earlyPrice, msg(cEarly));
+  check('… propriétaire non payé', (await balance(owner.id)) === oBeforeEarly);
+  const cEarlyAgain = await api('PATCH', `/rentals/bookings/${early.body.data.id}/cancel`, T.client);
+  check('double annulation : pas de double remboursement', cEarlyAgain.status === 200 && (await balance(client.id)) === cAfterEarly + earlyPrice);
+  // b) Moins de 24 h avant : 50 %, l'autre moitié au propriétaire (− 15 %)
+  const late = await bookFor(T.client, 10 * H);
+  const latePrice = late.body?.data?.totalPrice;
+  const cAfterLate = await balance(client.id);
+  const oBeforeLate = await balance(owner.id);
+  const cLate = await api('PATCH', `/rentals/bookings/${late.body.data.id}/cancel`, T.client);
+  const half = Math.round(latePrice * 0.5);
+  check('location annulée < 24 h avant : 50 % remboursé', cLate.status === 200 && (await balance(client.id)) === cAfterLate + half, `${msg(cLate)} — ${half} XAF`);
+  check('… propriétaire dédommagé de l\'autre moitié − 15 %', (await balance(owner.id)) === oBeforeLate + net(latePrice - half), `${net(latePrice - half)} XAF`);
+  // c) Le propriétaire annule (même tardivement) : locataire remboursé à 100 %
+  const byOwner = await bookFor(T.client, 5 * H);
+  const ownerPrice = byOwner.body?.data?.totalPrice;
+  const cAfterOwner = await balance(client.id);
+  const cOwner = await api('PATCH', `/rentals/bookings/${byOwner.body.data.id}/cancel`, T.owner);
+  check('propriétaire annule : locataire remboursé à 100 %', cOwner.status === 200 && (await balance(client.id)) === cAfterOwner + ownerPrice, msg(cOwner));
+  // d) Un inconnu ne peut pas annuler ; location commencée → refusée
+  const started = await bookFor(T.client, -H);
+  const cStranger = await api('PATCH', `/rentals/bookings/${started.body.data.id}/cancel`, T.client2);
+  check('un inconnu ne peut pas annuler une location', cStranger.status === 404, msg(cStranger));
+  const cStarted = await api('PATCH', `/rentals/bookings/${started.body.data.id}/cancel`, T.client);
+  check('location commencée : annulation refusée', cStarted.status === 409, msg(cStarted));
+  // e) Deux annulations simultanées (locataire + propriétaire) : un seul remboursement
+  const race = await bookFor(T.client, 20 * 24 * H);
+  const racePrice = race.body?.data?.totalPrice;
+  const cAfterRace = await balance(client.id);
+  await Promise.all([
+    api('PATCH', `/rentals/bookings/${race.body.data.id}/cancel`, T.client),
+    api('PATCH', `/rentals/bookings/${race.body.data.id}/cancel`, T.owner),
+  ]);
+  check('annulations simultanées : remboursé une seule fois', (await balance(client.id)) === cAfterRace + racePrice);
 
   // =====================================================================
   console.log('\n=== 4. COVOITURAGE ===');
@@ -309,10 +362,113 @@ const DOC = 'https://example.com/doc.jpg';
   check('les 2 passagers confirment l\'arrivée', a1.status === 200 && a2.status === 200, `${msg(a1)} / ${msg(a2)}`);
   check('chauffeur payé pour les 3 places (− 15 %)', (await balance(driver.id)) === drvBeforeTrip + net(10000) + net(5000));
 
-  const tripCancel = await api('PATCH', `/carpools/${carpool.id}/cancel`, T.driver);
-  if (tripCancel.status === 404) {
-    warn('covoiturage : annulation', 'aucune route d\'annulation (chauffeur ou passager) : argent bloqué si le trajet n\'a pas lieu, sauf litige');
+  const doneCancel = await api('PATCH', `/carpools/${carpool.id}/cancel`, T.driver);
+  check('trajet terminé : annulation refusée', doneCancel.status === 409, msg(doneCancel));
+
+  // --- Annulations de covoiturage ---
+  const HOUR = 3_600_000;
+  const newTrip = async (inMs, seats = 3) => (await api('POST', '/carpools', T.driver, {
+    departureLat: POS.lat, departureLng: POS.lng, departureCity: 'Yaoundé', departureAddress: 'Mvan',
+    arrivalLat: 4.0511, arrivalLng: 9.7679, arrivalCity: 'Douala', arrivalAddress: 'Akwa',
+    departureTime: new Date(Date.now() + inMs).toISOString(), availableSeats: seats, pricePerSeat: 5000,
+  })).body.data;
+  // a) Passager > 12 h avant : 100 %, places rendues, trajet de nouveau ouvert
+  const t1 = await newTrip(3 * 24 * HOUR, 2);
+  const b1 = (await api('POST', `/carpools/${t1.id}/book`, T.client, { seats: 2, paymentMethod: 'WALLET' })).body.data;
+  check('trajet complet après réservation', (await prisma.carpool.findUnique({ where: { id: t1.id } })).status === 'FULL');
+  const cB1 = await balance(client.id);
+  const x1 = await api('PATCH', `/carpools/bookings/${b1.id}/cancel`, T.client);
+  check('passager annule > 12 h avant : 100 % remboursé', x1.status === 200 && (await balance(client.id)) === cB1 + 10000, msg(x1));
+  const t1After = await prisma.carpool.findUnique({ where: { id: t1.id } });
+  check('… places rendues et trajet de nouveau ouvert', t1After.availableSeats === 2 && t1After.status === 'ACTIVE');
+  // b) Passager < 12 h avant : 50 %, l'autre moitié au chauffeur (− 15 %)
+  const t2 = await newTrip(5 * HOUR);
+  const b2 = (await api('POST', `/carpools/${t2.id}/book`, T.client, { seats: 1, paymentMethod: 'WALLET' })).body.data;
+  const cB2 = await balance(client.id);
+  const dB2 = await balance(driver.id);
+  const x2 = await api('PATCH', `/carpools/bookings/${b2.id}/cancel`, T.client);
+  check('passager annule < 12 h avant : 50 % remboursé', x2.status === 200 && (await balance(client.id)) === cB2 + 2500, msg(x2));
+  check('… chauffeur dédommagé de 2 500 − 15 %', (await balance(driver.id)) === dB2 + net(2500));
+  // c) Le chauffeur annule : tous les passagers remboursés à 100 %
+  const t3 = await newTrip(2 * HOUR);
+  const b3a = (await api('POST', `/carpools/${t3.id}/book`, T.client, { seats: 1, paymentMethod: 'WALLET' })).body.data;
+  const b3b = (await api('POST', `/carpools/${t3.id}/book`, T.client2, { seats: 2, paymentMethod: 'WALLET' })).body.data;
+  const cB3 = await balance(client.id);
+  const c2B3 = await balance(client2.id);
+  const x3 = await api('PATCH', `/carpools/${t3.id}/cancel`, T.driver);
+  check('chauffeur annule : passagers remboursés à 100 %', x3.status === 200 && (await balance(client.id)) === cB3 + 5000 && (await balance(client2.id)) === c2B3 + 10000, msg(x3));
+  check('… réservations annulées, trajet annulé',
+    (await prisma.carpoolBooking.count({ where: { id: { in: [b3a.id, b3b.id] }, status: 'CANCELLED' } })) === 2 &&
+    (await prisma.carpool.findUnique({ where: { id: t3.id } })).status === 'CANCELLED');
+  const x3again = await api('PATCH', `/carpools/${t3.id}/cancel`, T.driver);
+  check('double annulation du trajet : pas de double remboursement', x3again.status === 200 && (await balance(client.id)) === cB3 + 5000);
+  const bookCancelled = await api('POST', `/carpools/${t3.id}/book`, T.client, { seats: 1, paymentMethod: 'WALLET' });
+  check('trajet annulé : plus réservable', bookCancelled.status === 400, msg(bookCancelled));
+  // d) Sécurité : un passager ne peut pas annuler le trajet d'un chauffeur, ni la réservation d'un autre
+  const t4 = await newTrip(2 * 24 * HOUR);
+  const b4 = (await api('POST', `/carpools/${t4.id}/book`, T.client, { seats: 1, paymentMethod: 'WALLET' })).body.data;
+  const y1 = await api('PATCH', `/carpools/${t4.id}/cancel`, T.client);
+  const y2 = await api('PATCH', `/carpools/bookings/${b4.id}/cancel`, T.client2);
+  check('un passager ne peut pas annuler le trajet du chauffeur', y1.status === 404, msg(y1));
+  check('un inconnu ne peut pas annuler la réservation d\'un autre', y2.status === 404, msg(y2));
+
+  // =====================================================================
+  console.log('\n=== 4 bis. COURSES (paiement) ===');
+  const rideBody = (paymentMethod, proposedPrice) => ({
+    pickupLat: POS.lat, pickupLng: POS.lng, pickupAddress: 'Poste centrale',
+    dropoffLat: 3.8667, dropoffLng: 11.5167, dropoffAddress: 'Bastos',
+    vehicleType: 'MOTO', paymentMethod, ...(proposedPrice ? { proposedPrice } : {}),
+  });
+  const ridePrice = (r) => r.proposedPrice || r.estimatedPrice;
+  // a) Portefeuille : séquestre à l'acceptation, versé au chauffeur après les 2 confirmations
+  const r1 = (await api('POST', '/rides', T.client, rideBody('WALLET', 1500))).body.data;
+  const cR1 = await balance(client.id);
+  const acc1 = await api('PATCH', `/rides/${r1.id}/accept`, T.driver);
+  check('course : chauffeur accepte', acc1.status === 200, msg(acc1));
+  check('course : passager débité du prix négocié', (await balance(client.id)) === cR1 - ridePrice(r1), `${ridePrice(r1)} XAF`);
+  for (const st of ['DRIVER_ARRIVING', 'IN_PROGRESS', 'COMPLETED']) {
+    const r = await api('PATCH', `/rides/${r1.id}/status`, T.driver, { status: st });
+    check(`course ${st}`, r.status === 200, msg(r));
   }
+  const dR1 = await balance(driver.id);
+  const arr1 = await api('POST', `/rides/${r1.id}/confirm-arrival`, T.client);
+  check('passager confirme l\'arrivée', arr1.status === 200, msg(arr1));
+  check('chauffeur payé (prix − 15 %)', (await balance(driver.id)) === dR1 + net(ridePrice(r1)), `${net(ridePrice(r1))} XAF`);
+  const after1 = await api('PATCH', `/rides/${r1.id}/status`, T.driver, { status: 'CANCELLED' });
+  check('course terminée : ne peut plus être annulée', after1.status === 409, msg(after1));
+  // b) Le PASSAGER annule après acceptation : remboursé
+  const r2 = (await api('POST', '/rides', T.client, rideBody('WALLET'))).body.data;
+  const cR2 = await balance(client.id);
+  await api('PATCH', `/rides/${r2.id}/accept`, T.driver);
+  const x2r = await api('PATCH', `/rides/${r2.id}/cancel`, T.client);
+  check('passager annule une course acceptée : remboursé', x2r.status === 200 && (await balance(client.id)) === cR2, msg(x2r));
+  // c) Le CHAUFFEUR annule après acceptation : le passager doit être remboursé
+  const r3 = (await api('POST', '/rides', T.client, rideBody('WALLET'))).body.data;
+  const cR3 = await balance(client.id);
+  await api('PATCH', `/rides/${r3.id}/accept`, T.driver);
+  const x3r = await api('PATCH', `/rides/${r3.id}/status`, T.driver, { status: 'CANCELLED', cancelReason: 'test' });
+  check('chauffeur annule une course acceptée : passager remboursé', x3r.status === 200 && (await balance(client.id)) === cR3, msg(x3r));
+  const revive = await api('PATCH', `/rides/${r3.id}/status`, T.driver, { status: 'COMPLETED' });
+  check('course annulée : ne peut plus être « terminée »', revive.status === 409, msg(revive));
+  // d) Course commencée : le passager ne peut plus annuler
+  const r4 = (await api('POST', '/rides', T.client, rideBody('WALLET'))).body.data;
+  await api('PATCH', `/rides/${r4.id}/accept`, T.driver);
+  await api('PATCH', `/rides/${r4.id}/status`, T.driver, { status: 'IN_PROGRESS' });
+  const x4r = await api('PATCH', `/rides/${r4.id}/cancel`, T.client);
+  check('course en cours : annulation passager refusée', x4r.status >= 400, msg(x4r));
+  await api('PATCH', `/rides/${r4.id}/status`, T.driver, { status: 'COMPLETED' });
+  await api('POST', `/rides/${r4.id}/confirm-arrival`, T.client);
+  // e) Espèces : le chauffeur encaisse en main propre, la commission est prélevée sur son portefeuille
+  const r5 = (await api('POST', '/rides', T.client, rideBody('CASH', 2000))).body.data;
+  const poorAcc = await api('PATCH', `/rides/${r5.id}/accept`, T.poorDriver);
+  check('espèces : chauffeur sans solde de commission refusé', poorAcc.status === 402, msg(poorAcc));
+  const cR5 = await balance(client.id);
+  await api('PATCH', `/rides/${r5.id}/accept`, T.driver);
+  check('espèces : passager NON débité dans l\'app', (await balance(client.id)) === cR5);
+  for (const st of ['IN_PROGRESS', 'COMPLETED']) await api('PATCH', `/rides/${r5.id}/status`, T.driver, { status: st });
+  const dR5 = await balance(driver.id);
+  await api('POST', `/rides/${r5.id}/confirm-arrival`, T.client);
+  check('espèces : commission 15 % prélevée au chauffeur', (await balance(driver.id)) === dR5 - Math.round(2000 * 0.15), `${Math.round(2000 * 0.15)} XAF`);
 
   // =====================================================================
   console.log('\n=== 5. RETRAITS ===');
