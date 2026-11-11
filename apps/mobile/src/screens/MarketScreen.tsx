@@ -16,6 +16,7 @@ import { useMarketStore } from '../store/marketStore';
 import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
 import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
+import { getSocket } from '../config/socket';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -33,6 +34,15 @@ const categories = [
   { id: 'pharmacie', name: 'Pharmacie', icon: '💊' },
   { id: 'artisanat', name: 'Artisanat', icon: '🎨' },
   { id: 'electronique', name: 'Électronique', icon: '📱' },
+];
+
+// Étapes affichées au client (plusieurs statuts serveur peuvent correspondre à une étape)
+const ORDER_STEPS = [
+  { label: 'Reçue', icon: '🧾', statuses: ['PENDING'] },
+  { label: 'Confirmée', icon: '👍', statuses: ['CONFIRMED'] },
+  { label: 'Préparation', icon: '👨‍🍳', statuses: ['PREPARING', 'READY'] },
+  { label: 'En route', icon: '🛵', statuses: ['PICKED_UP', 'DELIVERING'] },
+  { label: 'Livrée', icon: '✅', statuses: ['DELIVERED'] },
 ];
 
 export default function MarketScreen({ navigation }: { navigation: any }) {
@@ -76,6 +86,25 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
       .catch(() => { if (!cancelled) setQuotedFee(null); });
     return () => { cancelled = true; };
   }, [view, selectedMerchant?.id, cart, deliveryCoords.lat, deliveryCoords.lng]);
+
+  // SUIVI EN DIRECT des commandes : le serveur prévient le client à chaque étape
+  // (order_status_update / order_completed) ; avant, l'écran n'écoutait pas et restait figé.
+  // + relecture toutes les 10 s tant que « Mes commandes » est ouvert (si un événement est manqué).
+  useEffect(() => {
+    if (view !== 'orders') return;
+    const socket = getSocket();
+    const refresh = () => { fetchOrders(); };
+    socket?.on('order_status_update', refresh);
+    socket?.on('order_completed', refresh);
+    socket?.on('connect', refresh);
+    const timer = setInterval(refresh, 10000);
+    return () => {
+      socket?.off('order_status_update', refresh);
+      socket?.off('order_completed', refresh);
+      socket?.off('connect', refresh);
+      clearInterval(timer);
+    };
+  }, [view]);
 
   // Position utilisée pour chercher les boutiques (affichée à l'écran et modifiable).
   // Avant : si le GPS échouait, la recherche se faisait EN SILENCE autour de Douala,
@@ -181,9 +210,11 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
         deliveryLng: coords.lng,
         paymentMethod: methodToSend,
       });
-      Alert.alert('🎉 Commande passée !', 'Le marchand prépare votre commande.', [
-        { text: 'OK', onPress: () => setView('merchants') },
-      ]);
+      // Après la commande : on ouvre directement le SUIVI (avant : retour à la liste des
+      // boutiques, le client ne voyait plus sa commande).
+      fetchOrders();
+      setView('orders');
+      Alert.alert('🎉 Commande passée !', 'Suivez ici chaque étape : confirmation, préparation, livraison.');
     } catch (error: any) {
       Alert.alert(
         'Erreur',
@@ -555,14 +586,48 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
                 Total : {(item.totalAmount + item.deliveryFee).toLocaleString()} XAF
               </Text>
 
-              {/* Actions escrow : confirmer la réception de la commande livrée */}
-              {item.status === 'DELIVERED' && (
+              {/* Suivi étape par étape */}
+              {item.status !== 'CANCELLED' && (() => {
+                const current = ORDER_STEPS.findIndex((s) => s.statuses.includes(item.status));
+                return (
+                  <View style={styles.steps} accessibilityLabel={`Étape : ${statusLabel(item.status)}`}>
+                    {ORDER_STEPS.map((step, i) => {
+                      const done = i <= current;
+                      return (
+                        <View key={step.label} style={styles.step}>
+                          <View style={[styles.stepDot, done && styles.stepDotDone, i === current && styles.stepDotCurrent]}>
+                            <Text style={styles.stepIcon}>{step.icon}</Text>
+                          </View>
+                          <Text style={[styles.stepLabel, done && styles.stepLabelDone]} numberOfLines={1}>{step.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })()}
+              {item.status === 'PENDING' && (
+                <Text style={styles.orderHint}>En attente de la confirmation du marchand…</Text>
+              )}
+              {item.status === 'CANCELLED' && (
+                <Text style={styles.orderHint}>
+                  Commande annulée.{item.escrowStatus === 'REFUNDED' ? ' Vous avez été remboursé sur votre portefeuille.' : ''}
+                </Text>
+              )}
+
+              {/* Actions escrow : confirmer la réception (une seule fois) */}
+              {item.status === 'DELIVERED' && item.escrowStatus === 'HELD' && !item.clientConfirmed && (
                 <EscrowActions
                   serviceType="market"
                   serviceId={item.id}
                   amount={item.totalAmount + item.deliveryFee}
                   onDone={fetchOrders}
                 />
+              )}
+              {item.status === 'DELIVERED' && (item.clientConfirmed || item.escrowStatus === 'RELEASED') && (
+                <Text style={styles.orderDone}>✅ Réception confirmée — merci !</Text>
+              )}
+              {item.escrowStatus === 'DISPUTED' && (
+                <Text style={styles.orderHint}>⚠️ Litige en cours : un administrateur examine votre dossier.</Text>
               )}
             </View>
           )}
@@ -662,6 +727,19 @@ const styles = StyleSheet.create({
   orderStatus: { fontSize: typography.xs, fontWeight: '600', color: colors.primary },
   orderItems: { fontSize: typography.sm, color: colors.textSecondary, marginBottom: spacing.xs },
   orderTotal: { fontSize: typography.sm, fontWeight: '700', color: colors.primary },
+  orderHint: { fontSize: typography.sm, color: colors.textSecondary, marginTop: spacing.sm },
+  orderDone: { fontSize: typography.sm, color: colors.success, fontWeight: '700', marginTop: spacing.sm },
+  steps: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md },
+  step: { alignItems: 'center', flex: 1 },
+  stepDot: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: '#eee',
+    justifyContent: 'center', alignItems: 'center', opacity: 0.5,
+  },
+  stepDotDone: { backgroundColor: '#E8F5E9', opacity: 1 },
+  stepDotCurrent: { borderWidth: 2, borderColor: colors.primary },
+  stepIcon: { fontSize: 16 },
+  stepLabel: { fontSize: 10, color: colors.textLight, marginTop: 4 },
+  stepLabelDone: { color: colors.text, fontWeight: '600' },
   searchInput: {
     backgroundColor: '#fff',
     padding: spacing.md,

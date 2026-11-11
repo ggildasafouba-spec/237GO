@@ -671,12 +671,30 @@ router.get('/orders', authenticate, async (req: AuthRequest, res: Response) => {
       skip,
       take: parseInt(limit as string),
       include: {
-        merchant: { select: { shopName: true } },
+        merchant: { select: { shopName: true, user: { select: { phone: true } } } },
         items: { include: { product: { select: { name: true } } } },
       },
     });
 
-    res.json({ success: true, data: orders });
+    // État du paiement de chaque commande : l'app sait si le client a déjà confirmé
+    // la réception (sinon les boutons « Confirmer » restaient affichés après validation).
+    const escrows = orders.length
+      ? await prisma.escrow.findMany({
+          where: { serviceType: 'MARKET', serviceId: { in: orders.map((o) => o.id) } },
+          select: { serviceId: true, status: true, clientConfirmed: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const escrowByOrder = new Map<string, (typeof escrows)[number]>();
+    for (const e of escrows) if (!escrowByOrder.has(e.serviceId)) escrowByOrder.set(e.serviceId, e);
+
+    res.json({
+      success: true,
+      data: orders.map((o) => {
+        const e = escrowByOrder.get(o.id);
+        return { ...o, escrowStatus: e?.status ?? null, clientConfirmed: e?.clientConfirmed ?? false };
+      }),
+    });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }

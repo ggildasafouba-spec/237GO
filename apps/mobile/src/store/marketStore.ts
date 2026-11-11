@@ -40,8 +40,11 @@ interface MarketOrder {
   totalAmount: number;
   deliveryFee: number;
   items: { product: { name: string }; quantity: number; unitPrice: number }[];
-  merchant: { shopName: string };
+  merchant: { shopName: string; user?: { phone: string } };
   createdAt: string;
+  deliveryAddress?: string;
+  escrowStatus?: 'HELD' | 'RELEASED' | 'REFUNDED' | 'DISPUTED' | null;
+  clientConfirmed?: boolean;
 }
 
 interface MarketState {
@@ -167,7 +170,11 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   },
 
   fetchOrders: async () => {
-    const response = await api.get('/market/orders');
-    set({ orders: response.data.data });
+    try {
+      const response = await api.get('/market/orders');
+      set({ orders: response.data.data });
+    } catch {
+      /* réseau : on garde la dernière liste, le prochain rafraîchissement réessaiera */
+    }
   },
 }));
