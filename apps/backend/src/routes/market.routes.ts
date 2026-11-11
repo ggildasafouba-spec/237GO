@@ -236,6 +236,47 @@ router.get('/my-shop', authenticate, authorize('MERCHANT'), async (req: AuthRequ
   }
 });
 
+// Modifier la position de la boutique (GPS ou point choisi sur la carte).
+// Avant : impossible après l'inscription ; une boutique mal placée restait invisible
+// pour les clients proches (recherche limitée à 5 km) et les frais de livraison étaient faux.
+router.patch(
+  '/my-shop/location',
+  authenticate,
+  authorize('MERCHANT'),
+  [
+    body('shopLat').isFloat({ min: -90, max: 90 }),
+    body('shopLng').isFloat({ min: -180, max: 180 }),
+    body('shopAddress').optional().trim().isLength({ min: 1, max: 200 }),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, message: 'Position invalide', errors: errors.array() });
+      }
+      const merchant = await prisma.merchantProfile.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
+      if (!merchant) throw new AppError('Profil marchand non trouvé', 404);
+
+      const { shopLat, shopLng, shopAddress } = req.body;
+      const updated = await prisma.merchantProfile.update({
+        where: { id: merchant.id },
+        data: {
+          shopLat: Number(shopLat),
+          shopLng: Number(shopLng),
+          ...(shopAddress ? { shopAddress } : {}),
+        },
+        select: { shopLat: true, shopLng: true, shopAddress: true },
+      });
+      res.json({ success: true, message: 'Position de la boutique mise à jour', data: updated });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur' });
+    }
+  }
+);
+
 // Ouvrir / fermer la boutique
 router.patch('/my-shop/toggle', authenticate, authorize('MERCHANT'), async (req: AuthRequest, res: Response) => {
   try {

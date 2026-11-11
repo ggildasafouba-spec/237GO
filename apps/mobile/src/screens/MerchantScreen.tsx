@@ -19,6 +19,8 @@ import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
 import { openMenuTemplate, pickAndParseMenu, commitMenuImport, MenuPreview } from '../config/menuImport';
 import { useSafeScreen } from '../hooks/useSafeScreen';
+import { useLocation } from '../hooks/useLocation';
+import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { colors, spacing, typography } from '../theme';
 import { formatPhone } from '../utils/phone';
 
@@ -59,6 +61,8 @@ interface Shop {
   id: string;
   shopName: string;
   shopAddress: string;
+  shopLat?: number;
+  shopLng?: number;
   isOpen: boolean;
   openingHours?: OpeningHours;
   products: Product[];
@@ -170,6 +174,46 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     } catch {
       // Vibration indisponible — pas bloquant
     }
+  };
+
+  // ===== Position de la boutique =====
+  // Les clients ne voient que les boutiques à moins de 5 km : la position doit être juste.
+  const { getCurrentLocation, reverseGeocode } = useLocation();
+  const [showShopPicker, setShowShopPicker] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
+
+  const saveShopLocation = async (lat: number, lng: number, label?: string) => {
+    setSavingLocation(true);
+    try {
+      const res = await api.patch('/market/my-shop/location', {
+        shopLat: lat,
+        shopLng: lng,
+        ...(label ? { shopAddress: label.slice(0, 200) } : {}),
+      });
+      setShop((prev) => (prev ? { ...prev, ...res.data.data } : prev));
+      Alert.alert('📍 Position enregistrée', 'Les clients à moins de 5 km verront maintenant votre boutique.');
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.response?.data?.message || 'Impossible de modifier la position');
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
+  const useGpsForShop = async () => {
+    setSavingLocation(true);
+    const loc = await getCurrentLocation();
+    if (!loc) {
+      setSavingLocation(false);
+      Alert.alert('Localisation', "Position GPS indisponible. Autorisez la localisation ou choisissez la position sur la carte.");
+      return;
+    }
+    const label = await reverseGeocode(loc.latitude, loc.longitude).catch(() => '');
+    await saveShopLocation(loc.latitude, loc.longitude, label || undefined);
+  };
+
+  const onShopPlacePicked = (place: PickedPlace) => {
+    setShowShopPicker(false);
+    saveShopLocation(place.lat, place.lng, place.label);
   };
 
   const toggleShop = async () => {
@@ -386,6 +430,30 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
           accessibilityLabel="Ouvrir ou fermer la boutique"
         />
       </View>
+
+      {/* Position de la boutique (modifiable : GPS ou carte) */}
+      <View style={styles.shopLocationBar}>
+        <Text style={styles.shopLocationText} numberOfLines={1}>📍 {shop.shopAddress}</Text>
+        {savingLocation ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <>
+            <TouchableOpacity onPress={useGpsForShop} accessibilityRole="button" accessibilityLabel="Placer la boutique à ma position GPS">
+              <Text style={styles.shopLocationAction}>📡 Ici</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowShopPicker(true)} accessibilityRole="button" accessibilityLabel="Choisir la position de la boutique sur la carte">
+              <Text style={styles.shopLocationAction}>🗺️ Carte</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+      <DestinationPicker
+        visible={showShopPicker}
+        initialCenter={{ lat: shop.shopLat ?? 4.0511, lng: shop.shopLng ?? 9.7679 }}
+        title="Où se trouve votre boutique ?"
+        onConfirm={onShopPlacePicked}
+        onClose={() => setShowShopPicker(false)}
+      />
 
       {/* Onglets */}
       <View style={styles.tabs}>
@@ -821,6 +889,13 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  shopLocationBar: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: '#fff', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    borderTopWidth: 1, borderTopColor: '#f0f0f0',
+  },
+  shopLocationText: { flex: 1, fontSize: typography.sm, color: colors.textSecondary },
+  shopLocationAction: { fontSize: typography.sm, fontWeight: '700', color: colors.primary },
   importBox: {
     backgroundColor: '#fff', borderRadius: 14, padding: spacing.md, marginBottom: spacing.lg,
     borderWidth: 1, borderColor: colors.primaryLight,
