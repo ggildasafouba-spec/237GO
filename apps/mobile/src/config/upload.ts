@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
 import api from './api';
 
 /**
@@ -26,13 +27,22 @@ export async function pickAndUploadImage(): Promise<string | null> {
 
   // Construire le form-data
   const formData = new FormData();
-  const uriParts = asset.uri.split('.');
-  const ext = uriParts[uriParts.length - 1] || 'jpg';
-  formData.append('file', {
-    uri: asset.uri,
-    name: `upload.${ext}`,
-    type: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-  } as any);
+  if (Platform.OS === 'web') {
+    // Navigateur : un objet { uri } n'est pas un fichier (il était envoyé comme texte
+    // « [object Object] » et refusé). Il faut un vrai File/Blob.
+    const blob: Blob = (asset as any).file ?? (await (await fetch(asset.uri)).blob());
+    const mime = blob.type || asset.mimeType || 'image/jpeg';
+    const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+    formData.append('file', blob, asset.fileName || `upload.${ext}`);
+  } else {
+    const uriParts = asset.uri.split('.');
+    const ext = uriParts[uriParts.length - 1] || 'jpg';
+    formData.append('file', {
+      uri: asset.uri,
+      name: `upload.${ext}`,
+      type: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+    } as any);
+  }
 
   const response = await api.post('/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

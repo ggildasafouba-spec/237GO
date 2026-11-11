@@ -4,6 +4,8 @@ import { authenticate, authorize, AuthRequest, invalidateUserCache } from '../mi
 import { releaseFunds, refundFunds } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiVision, aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
+import { importMenu } from '../lib/menuImport';
+import { AppError } from '../middleware/error.middleware';
 
 const router = Router();
 
@@ -403,6 +405,25 @@ router.get('/merchants', async (_req: AuthRequest, res: Response) => {
     res.json({ success: true, data: merchants });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Importer le menu d'un restaurant pour son compte (aperçu : POST /market/menu-import/parse?merchantId=...)
+router.post('/merchants/:id/menu-import', async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await prisma.merchantProfile.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!merchant) return res.status(404).json({ success: false, message: 'Marchand non trouvé' });
+    const result = await importMenu(merchant.id, req.body?.items);
+    res.json({
+      success: true,
+      message: `Menu importé : ${result.created} plat(s) ajouté(s), ${result.updated} mis à jour`,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Import du menu impossible' });
   }
 });
 

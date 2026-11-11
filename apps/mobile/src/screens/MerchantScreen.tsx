@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
+import { openMenuTemplate, pickAndParseMenu, commitMenuImport, MenuPreview } from '../config/menuImport';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import { formatPhone } from '../utils/phone';
@@ -215,6 +216,55 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
       Alert.alert('Erreur', "Impossible d'ajouter le produit");
     } finally {
       setSavingProduct(false);
+    }
+  };
+
+  // ===== Import du menu (Excel / CSV) =====
+  const [menuPreview, setMenuPreview] = useState<MenuPreview | null>(null);
+  const [parsingMenu, setParsingMenu] = useState(false);
+  const [committingMenu, setCommittingMenu] = useState(false);
+  const [photoProductId, setPhotoProductId] = useState<string | null>(null);
+
+  const handleImportMenu = async () => {
+    setParsingMenu(true);
+    try {
+      const preview = await pickAndParseMenu();
+      if (preview) setMenuPreview(preview);
+    } catch (e: any) {
+      Alert.alert('Import impossible', e?.response?.data?.message || e?.message || 'Lecture du fichier impossible');
+    } finally {
+      setParsingMenu(false);
+    }
+  };
+
+  const confirmMenuImport = async () => {
+    if (!menuPreview) return;
+    setCommittingMenu(true);
+    try {
+      const res = await commitMenuImport(menuPreview.rows);
+      setMenuPreview(null);
+      await loadShop();
+      Alert.alert('✅ Menu importé', `${res.message}. Ajoutez maintenant les photos de vos plats (touchez l'image d'un plat).`);
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.response?.data?.message || "Impossible d'importer le menu");
+    } finally {
+      setCommittingMenu(false);
+    }
+  };
+
+  // Ajouter / changer la photo d'un plat existant (ex. après un import Excel)
+  const changeProductPhoto = async (product: Product) => {
+    setPhotoProductId(product.id);
+    try {
+      const url = await pickAndUploadImage();
+      if (url) {
+        await api.patch(`/market/products/${product.id}`, { image: url });
+        await loadShop();
+      }
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.response?.data?.message || e?.message || "Impossible d'ajouter la photo");
+    } finally {
+      setPhotoProductId(null);
     }
   };
 
@@ -436,6 +486,34 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
             <Text style={styles.addBtnText}>{showAddForm ? '✕ Annuler' : '+ Ajouter un produit'}</Text>
           </TouchableOpacity>
 
+          {/* Import du menu complet depuis un fichier Excel / CSV */}
+          <View style={styles.importBox}>
+            <Text style={styles.importTitle}>📋 Tout votre menu d'un coup</Text>
+            <Text style={styles.importHint}>
+              Remplissez le modèle Excel (nom, prix, catégorie, description), puis importez-le.
+              Un plat du même nom est mis à jour, sans doublon.
+            </Text>
+            <View style={styles.importRow}>
+              <TouchableOpacity
+                style={styles.importBtnSecondary}
+                onPress={() => openMenuTemplate().catch(() => Alert.alert('Erreur', 'Ouverture du modèle impossible'))}
+                accessibilityRole="button"
+                accessibilityLabel="Télécharger le modèle Excel"
+              >
+                <Text style={styles.importBtnSecondaryText}>📥 Modèle Excel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.importBtn, parsingMenu && { opacity: 0.6 }]}
+                onPress={handleImportMenu}
+                disabled={parsingMenu}
+                accessibilityRole="button"
+                accessibilityLabel="Importer mon menu"
+              >
+                {parsingMenu ? <ActivityIndicator color="#fff" /> : <Text style={styles.importBtnText}>📤 Importer mon menu</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {showAddForm && (
             <View style={styles.form}>
               {/* Photo du produit */}
@@ -513,14 +591,26 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
           ) : (
             shop.products.map((p) => (
               <View key={p.id} style={styles.productCard}>
-                {/* Image produit */}
-                {p.image ? (
-                  <Image source={{ uri: p.image }} style={styles.productImage} />
-                ) : (
-                  <View style={styles.productImagePlaceholder}>
-                    <Text style={{ fontSize: 24 }}>🍽️</Text>
-                  </View>
-                )}
+                {/* Image produit : toucher pour ajouter / changer la photo */}
+                <TouchableOpacity
+                  onPress={() => changeProductPhoto(p)}
+                  disabled={photoProductId === p.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={p.image ? `Changer la photo de ${p.name}` : `Ajouter une photo à ${p.name}`}
+                >
+                  {photoProductId === p.id ? (
+                    <View style={styles.productImagePlaceholder}>
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : p.image ? (
+                    <Image source={{ uri: p.image }} style={styles.productImage} />
+                  ) : (
+                    <View style={styles.productImagePlaceholder}>
+                      <Text style={{ fontSize: 20 }}>📷</Text>
+                      <Text style={{ fontSize: 9, color: colors.textLight }}>Photo</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: spacing.md }}>
                   <Text style={styles.productName}>{p.name}</Text>
                   <Text style={styles.productMeta}>{p.price.toLocaleString()} F · {p.category}</Text>
@@ -656,12 +746,110 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
           </View>
         </View>
       </Modal>
+
+      {/* Aperçu de l'import du menu : rien n'est enregistré avant « Valider » */}
+      <Modal
+        visible={!!menuPreview}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !committingMenu && setMenuPreview(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, styles.previewBox]}>
+            <Text style={styles.modalTitle}>📋 Vérifiez votre menu</Text>
+            {menuPreview && (
+              <>
+                <Text style={styles.previewSummary}>
+                  {menuPreview.validCount} plat(s) prêt(s) : {menuPreview.createCount} nouveau(x), {menuPreview.updateCount} mis à jour
+                  {menuPreview.errorCount > 0 ? `\n⚠️ ${menuPreview.errorCount} ligne(s) en erreur ne seront pas importées` : ''}
+                </Text>
+                <ScrollView style={styles.previewList}>
+                  {menuPreview.rows.map((r) => (
+                    <View
+                      key={r.line}
+                      style={[styles.previewRow, r.errors.length > 0 && styles.previewRowError]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.previewName}>
+                          {r.errors.length > 0 ? '❌' : r.action === 'update' ? '🔄' : '➕'} {r.name || '(sans nom)'}
+                        </Text>
+                        <Text style={styles.previewMeta}>
+                          Ligne {r.line} · {r.category}{r.description ? ` · ${r.description}` : ''}
+                        </Text>
+                        {r.errors.map((e) => (
+                          <Text key={e} style={styles.previewError}>{e}</Text>
+                        ))}
+                        {r.warnings.map((w) => (
+                          <Text key={w} style={styles.previewWarning}>{w}</Text>
+                        ))}
+                      </View>
+                      <Text style={styles.previewPrice}>
+                        {r.price !== null ? `${r.price.toLocaleString()} F` : '—'}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setMenuPreview(null)}
+                    disabled={committingMenu}
+                  >
+                    <Text style={styles.modalCancelText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalConfirmBtn, (menuPreview.validCount === 0 || committingMenu) && { opacity: 0.5 }]}
+                    onPress={confirmMenuImport}
+                    disabled={menuPreview.validCount === 0 || committingMenu}
+                    accessibilityLabel={`Valider l'import de ${menuPreview.validCount} plats`}
+                  >
+                    {committingMenu ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.modalConfirmText}>✅ Valider ({menuPreview.validCount})</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  importBox: {
+    backgroundColor: '#fff', borderRadius: 14, padding: spacing.md, marginBottom: spacing.lg,
+    borderWidth: 1, borderColor: colors.primaryLight,
+  },
+  importTitle: { fontSize: typography.md, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  importHint: { fontSize: typography.sm, color: colors.textSecondary, marginBottom: spacing.md },
+  importRow: { flexDirection: 'row', gap: spacing.sm },
+  importBtn: {
+    flex: 1, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center',
+  },
+  importBtnText: { color: '#fff', fontWeight: '700' },
+  importBtnSecondary: {
+    flex: 1, backgroundColor: colors.background, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.primary,
+  },
+  importBtnSecondaryText: { color: colors.primaryDark, fontWeight: '700' },
+  previewBox: { maxHeight: '85%', width: '92%' },
+  previewSummary: { fontSize: typography.sm, color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  previewList: { maxHeight: 380, marginBottom: spacing.md },
+  previewRow: {
+    flexDirection: 'row', alignItems: 'flex-start', paddingVertical: spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: '#eee', gap: spacing.sm,
+  },
+  previewRowError: { backgroundColor: '#FFEBEE', borderRadius: 8, paddingHorizontal: spacing.sm },
+  previewName: { fontSize: typography.md, fontWeight: '600', color: colors.text },
+  previewMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  previewError: { fontSize: 12, color: colors.error, marginTop: 2, fontWeight: '600' },
+  previewWarning: { fontSize: 12, color: '#E65100', marginTop: 2 },
+  previewPrice: { fontSize: typography.md, fontWeight: '700', color: colors.primaryDark },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyIcon: { fontSize: 44, marginBottom: spacing.md },
   emptyText: { fontSize: typography.md, color: colors.textSecondary, textAlign: 'center' },

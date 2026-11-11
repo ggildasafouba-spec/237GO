@@ -6,8 +6,13 @@ import { AppError } from '../middleware/error.middleware';
 import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { PUBLIC_MERCHANT_SELECT } from '../lib/publicSelects';
+import multer from 'multer';
+import { parseMenuFile, importMenu, buildMenuTemplate, MENU_MAX_FILE_BYTES } from '../lib/menuImport';
 
 const router = Router();
+
+// Fichier du menu gardé en mémoire (jamais écrit sur le disque), 2 Mo max.
+const menuUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MENU_MAX_FILE_BYTES } }).single('file');
 
 /**
  * Calcul UNIQUE du montant d'une commande (produits + livraison).
@@ -347,6 +352,71 @@ router.patch('/my-shop/hours', authenticate, authorize('MERCHANT'), async (req: 
       return res.status(error.statusCode).json({ success: false, message: error.message });
     }
     res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// ========== IMPORT DU MENU (Excel / CSV) ==========
+
+// Modèle Excel à remplir (public : simple fichier vide d'exemple, aucune donnée)
+router.get('/menu-template', async (_req, res: Response) => {
+  try {
+    const file = await buildMenuTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="menu-237go.xlsx"');
+    res.send(file);
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur de génération du modèle' });
+  }
+});
+
+// Étape 1 : lecture du fichier → aperçu ligne par ligne (rien n'est enregistré).
+// Marchand : sa propre boutique. Admin : ?merchantId=... (import pour le compte d'un restaurant).
+router.post('/menu-import/parse', authenticate, authorize('MERCHANT', 'ADMIN'), (req: AuthRequest, res: Response) => {
+  menuUpload(req, res, async (uploadError) => {
+    try {
+      if (uploadError) {
+        const tooBig = (uploadError as any).code === 'LIMIT_FILE_SIZE';
+        throw new AppError(tooBig ? 'Fichier trop lourd (2 Mo maximum)' : 'Envoi du fichier impossible', 400);
+      }
+      if (!req.file) throw new AppError('Aucun fichier reçu', 400);
+
+      let merchantId: string | undefined;
+      if (req.user!.role === 'ADMIN') {
+        merchantId = typeof req.query.merchantId === 'string' ? req.query.merchantId : undefined;
+      } else {
+        const merchant = await prisma.merchantProfile.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
+        if (!merchant) throw new AppError('Profil marchand non trouvé', 404);
+        merchantId = merchant.id;
+      }
+
+      const result = await parseMenuFile(req.file.buffer, req.file.originalname, merchantId);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      console.error('Lecture du menu échouée:', (error as Error).message);
+      res.status(500).json({ success: false, message: 'Lecture du fichier impossible' });
+    }
+  });
+});
+
+// Étape 2 : enregistrement des plats validés dans la boutique du marchand connecté
+router.post('/my-shop/menu-import', authenticate, authorize('MERCHANT'), async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await prisma.merchantProfile.findUnique({ where: { userId: req.user!.id }, select: { id: true } });
+    if (!merchant) throw new AppError('Profil marchand non trouvé', 404);
+    const result = await importMenu(merchant.id, req.body?.items);
+    res.json({
+      success: true,
+      message: `Menu importé : ${result.created} plat(s) ajouté(s), ${result.updated} mis à jour`,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Import du menu impossible' });
   }
 });
 
