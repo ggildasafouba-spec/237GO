@@ -15,6 +15,7 @@ import * as Location from 'expo-location';
 import { useMarketStore } from '../store/marketStore';
 import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
+import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -76,18 +77,52 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     return () => { cancelled = true; };
   }, [view, selectedMerchant?.id, cart, deliveryCoords.lat, deliveryCoords.lng]);
 
-  useEffect(() => {
-    (async () => {
+  // Position utilisée pour chercher les boutiques (affichée à l'écran et modifiable).
+  // Avant : si le GPS échouait, la recherche se faisait EN SILENCE autour de Douala,
+  // et le client ne voyait aucune boutique proche de chez lui, sans savoir pourquoi.
+  const [locationLabel, setLocationLabel] = useState('');
+  const [locationKnown, setLocationKnown] = useState(false);
+  const [locating, setLocating] = useState(true);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  const applyPosition = (lat: number, lng: number, label: string) => {
+    setMyCoords({ lat, lng });
+    setDeliveryCoords({ lat, lng });
+    setLocationLabel(label);
+    setLocationKnown(true);
+    fetchMerchants({ lat, lng });
+  };
+
+  const locateMe = async () => {
+    setLocating(true);
+    try {
       const loc = await getCurrentLocation();
       if (loc) {
-        setMyCoords({ lat: loc.latitude, lng: loc.longitude });
-        setDeliveryCoords({ lat: loc.latitude, lng: loc.longitude });
-        fetchMerchants({ lat: loc.latitude, lng: loc.longitude });
         const addr = await reverseGeocode(loc.latitude, loc.longitude);
+        applyPosition(loc.latitude, loc.longitude, addr || 'Ma position');
         if (addr && !deliveryAddress) setDeliveryAddress(addr);
-      } else {
-        // Fallback Douala si GPS indisponible
+        return true;
+      }
+      return false;
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const onLocationPicked = (place: PickedPlace) => {
+    setShowLocationPicker(false);
+    applyPosition(place.lat, place.lng, place.label);
+    setDeliveryAddress(place.label);
+  };
+
+  useEffect(() => {
+    (async () => {
+      const ok = await locateMe();
+      if (!ok) {
+        // Position inconnue : on montre quand même des boutiques (Douala) mais on le DIT
+        // et on propose de choisir sa position sur la carte.
         fetchMerchants({ lat: 4.0511, lng: 9.7679 });
+        setLocationLabel('Douala (position inconnue)');
       }
     })();
   }, []);
@@ -176,6 +211,33 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         </View>
 
+        {/* Position utilisée pour la recherche (boutiques à moins de 5 km) */}
+        <View style={styles.locationBar}>
+          <Text style={styles.locationText} numberOfLines={1}>
+            📍 {locating ? 'Localisation…' : `Près de : ${locationLabel || 'position inconnue'}`}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setShowLocationPicker(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Changer ma position sur la carte"
+          >
+            <Text style={styles.locationChange}>Changer</Text>
+          </TouchableOpacity>
+        </View>
+        {!locating && !locationKnown && (
+          <Text style={styles.locationWarning}>
+            ⚠️ Votre position est inconnue : autorisez la localisation ou choisissez votre position sur la carte pour voir les boutiques proches.
+          </Text>
+        )}
+
+        <DestinationPicker
+          visible={showLocationPicker}
+          initialCenter={myCoords}
+          title="Où êtes-vous ?"
+          onConfirm={onLocationPicked}
+          onClose={() => setShowLocationPicker(false)}
+        />
+
         {/* Recherche */}
         <TextInput
           style={styles.searchInput}
@@ -231,7 +293,15 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>🏪</Text>
-                <Text style={styles.emptyText}>Aucun marchand trouvé</Text>
+                <Text style={styles.emptyText}>Aucun marchand à moins de 5 km</Text>
+                <View style={styles.emptyActions}>
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => locateMe()} accessibilityRole="button">
+                    <Text style={styles.emptyBtnText}>📡 Utiliser ma position</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowLocationPicker(true)} accessibilityRole="button">
+                    <Text style={styles.emptyBtnText}>🗺️ Choisir sur la carte</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             }
             renderItem={({ item }) => (
@@ -735,4 +805,15 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyText: { fontSize: typography.md, color: colors.textSecondary },
+  emptyActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap', justifyContent: 'center' },
+  emptyBtn: { borderWidth: 1, borderColor: colors.primary, borderRadius: 20, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  emptyBtnText: { color: colors.primaryDark, fontWeight: '600', fontSize: typography.sm },
+  locationBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#fff', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm, gap: spacing.sm,
+  },
+  locationText: { flex: 1, fontSize: typography.sm, color: colors.text },
+  locationChange: { color: colors.primary, fontWeight: '700', fontSize: typography.sm },
+  locationWarning: { fontSize: typography.xs, color: '#E65100', marginBottom: spacing.sm },
 });
