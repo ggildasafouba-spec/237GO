@@ -98,9 +98,15 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
     try {
       const loc = await getCurrentLocation();
       if (loc) {
-        const addr = await reverseGeocode(loc.latitude, loc.longitude);
-        applyPosition(loc.latitude, loc.longitude, addr || 'Ma position');
-        if (addr && !deliveryAddress) setDeliveryAddress(addr);
+        // Recherche des boutiques TOUT DE SUITE ; le nom du lieu arrive ensuite.
+        applyPosition(loc.latitude, loc.longitude, 'Ma position');
+        reverseGeocode(loc.latitude, loc.longitude)
+          .then((addr) => {
+            if (!addr) return;
+            setLocationLabel(addr);
+            setDeliveryAddress((prev) => prev || addr);
+          })
+          .catch(() => {});
         return true;
       }
       return false;

@@ -1,6 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 
+/** Rejette la promesse si elle ne répond pas dans le délai (évite les attentes infinies). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
 interface LocationData {
   latitude: number;
   longitude: number;
@@ -51,15 +62,27 @@ export function useLocation(): UseLocationReturn {
   const getCurrentLocation = async (): Promise<LocationData | null> => {
     setIsLoading(true);
     try {
-      const hasPermission = await requestPermission();
+      // Délai max pour la question « Autoriser la localisation ? » (sinon attente infinie
+      // si l'utilisateur ne répond pas ou si le navigateur bloque la demande en silence)
+      const hasPermission = await withTimeout(requestPermission(), 20000).catch(() => false);
       if (!hasPermission) {
         setIsLoading(false);
         return null;
       }
 
-      const result = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
+      // Avant : demande « haute précision » SANS délai max. Sur un PC (pas de GPS, VPN...),
+      // elle pouvait ne jamais répondre : l'écran restait bloqué sur « Localisation… ».
+      // Maintenant : haute précision 10 s max, puis précision réseau (Wi-Fi/IP) 10 s max,
+      // puis dernière position connue.
+      const result =
+        (await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }), 10000).catch(() => null)) ||
+        (await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), 10000).catch(() => null)) ||
+        (await withTimeout(Location.getLastKnownPositionAsync(), 3000).catch(() => null));
+      if (!result) {
+        setErrorMsg('Impossible d\'obtenir la position');
+        setIsLoading(false);
+        return null;
+      }
 
       const locationData: LocationData = {
         latitude: result.coords.latitude,
@@ -72,9 +95,9 @@ export function useLocation(): UseLocationReturn {
       setLocation(locationData);
       setIsLoading(false);
 
-      // Obtenir l'adresse
-      const addr = await reverseGeocode(locationData.latitude, locationData.longitude);
-      setAddress(addr);
+      // Adresse en arrière-plan : on n'attend PAS le nom du lieu pour renvoyer la position
+      // (avant, une recherche d'adresse lente retardait tout l'écran).
+      reverseGeocode(locationData.latitude, locationData.longitude).then(setAddress).catch(() => {});
 
       return locationData;
     } catch {
@@ -129,7 +152,7 @@ export function useLocation(): UseLocationReturn {
   const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
     // 1) Géocodeur natif Expo
     try {
-      const [result] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      const [result] = await withTimeout(Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }), 5000);
       if (result) {
         const parts = [result.name, result.street, result.district, result.city, result.region]
           .filter(Boolean)
@@ -143,7 +166,7 @@ export function useLocation(): UseLocationReturn {
 
     // 2) Nominatim (OpenStreetMap) — meilleure couverture des quartiers camerounais
     try {
-      const osm = await reverseGeocodeOSM(lat, lng);
+      const osm = await withTimeout(reverseGeocodeOSM(lat, lng), 6000);
       if (osm) return osm;
     } catch {
       /* on retombe sur le libellé propre */
