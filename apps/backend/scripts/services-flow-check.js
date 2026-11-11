@@ -182,6 +182,17 @@ const DOC = 'https://example.com/doc.jpg';
   const oConfirm = await api('POST', `/market/orders/${order.id}/confirm-reception`, T.client);
   check('client confirme la réception', oConfirm.status === 200, msg(oConfirm));
   check('marchand payé (total − 15 %)', (await balance(merchantUser.id)) === mBefore + net(grandTotal), `${net(grandTotal)} XAF`);
+  const mPaid = await balance(merchantUser.id);
+  const oConfirmAgain = await api('POST', `/market/orders/${order.id}/confirm-reception`, T.client);
+  check('2e confirmation (double appui) : pas d\'erreur', oConfirmAgain.status === 200, msg(oConfirmAgain));
+  check('2e confirmation : marchand PAS payé deux fois', (await balance(merchantUser.id)) === mPaid);
+  const [dbl1, dbl2] = await Promise.all([
+    api('POST', `/market/orders/${order.id}/confirm-reception`, T.client),
+    api('POST', `/market/orders/${order.id}/confirm-reception`, T.client),
+  ]);
+  check('confirmations simultanées : toujours un seul paiement', dbl1.status === 200 && dbl2.status === 200 && (await balance(merchantUser.id)) === mPaid);
+  const stranger = await api('POST', `/market/orders/${order.id}/confirm-reception`, T.client2);
+  check('un inconnu ne peut pas confirmer la commande d\'un autre', stranger.status === 404, msg(stranger));
 
   const relivrer = await api('PATCH', `/market/orders/${order.id}/status`, T.merchant, { status: 'CANCELLED' });
   check('commande livrée : ne peut plus être annulée', relivrer.status === 409, msg(relivrer));

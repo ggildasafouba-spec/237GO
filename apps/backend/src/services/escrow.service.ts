@@ -121,6 +121,20 @@ export async function confirmSide(
   });
 
   if (!escrow) {
+    // Confirmation répétée (double appui, écran pas encore rafraîchi) : avant, l'utilisateur
+    // voyait « Aucun paiement en séquestre » alors que tout s'était bien passé.
+    // On renvoie l'état réel au lieu d'une erreur, sans jamais rebouger l'argent.
+    const last = await prisma.escrow.findFirst({
+      where: { serviceType, serviceId, OR: [{ payerId: userId }, { payeeId: userId }] },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (last?.status === 'RELEASED') return last;
+    if (last?.status === 'REFUNDED') {
+      throw new AppError('Ce service a été annulé et remboursé : il n\'y a plus rien à confirmer', 409);
+    }
+    if (last?.status === 'DISPUTED') {
+      throw new AppError('Un litige est en cours : un administrateur va trancher', 409);
+    }
     throw new AppError('Aucun paiement en séquestre pour ce service', 404);
   }
 
