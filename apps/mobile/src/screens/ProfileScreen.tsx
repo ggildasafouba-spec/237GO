@@ -25,7 +25,7 @@ interface EmergencyContact {
 }
 
 export default function ProfileScreen({ navigation }: { navigation: any }) {
-  const { user, logout, updateUser } = useAuthStore();
+  const { user, logout, updateUser, replaceToken } = useAuthStore();
   const { balance, loyaltyPoints, loyaltyTier } = useWalletStore();
   const safe = useSafeScreen();
 
@@ -116,6 +116,66 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
         },
       },
     ]);
+  };
+
+  // ===== Sécurité =====
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [securityBusy, setSecurityBusy] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword) {
+      Alert.alert('Attention', 'Remplissez votre mot de passe actuel et le nouveau.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      Alert.alert('Attention', 'Le nouveau mot de passe doit faire au moins 6 caractères.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Attention', 'Les deux nouveaux mots de passe ne correspondent pas.');
+      return;
+    }
+    setSecurityBusy(true);
+    try {
+      const res = await api.post('/auth/change-password', { currentPassword, newPassword });
+      await replaceToken(res.data.data.token);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordForm(false);
+      Alert.alert('✅ Mot de passe modifié', res.data.message);
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.response?.data?.message || 'Impossible de changer le mot de passe');
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const doLogoutAll = async () => {
+    setSecurityBusy(true);
+    try {
+      const res = await api.post('/auth/logout-all');
+      await replaceToken(res.data.data.token);
+      Alert.alert('✅ Fait', res.data.message);
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.response?.data?.message || 'Opération impossible');
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const handleLogoutAll = () => {
+    Alert.alert(
+      'Déconnecter vos autres appareils ?',
+      'Tous les téléphones et navigateurs connectés à votre compte seront déconnectés, sauf celui-ci. Utile si vous avez perdu un téléphone ou prêté votre compte.',
+      [
+        { text: 'Retour', style: 'cancel' },
+        { text: 'Déconnecter', style: 'destructive', onPress: doLogoutAll },
+      ]
+    );
   };
 
   const handleLogout = () => {
@@ -374,6 +434,78 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
         <TouchableOpacity style={styles.actionItem} accessibilityRole="button">
           <Text style={styles.actionIcon}>📜</Text>
           <Text style={styles.actionText}>Conditions d'utilisation</Text>
+          <Text style={styles.actionArrow}>→</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sécurité du compte */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🔐 Sécurité</Text>
+
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={() => setShowPasswordForm((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel="Changer mon mot de passe"
+        >
+          <Text style={styles.actionIcon}>🔑</Text>
+          <Text style={styles.actionText}>Changer mon mot de passe</Text>
+          <Text style={styles.actionArrow}>{showPasswordForm ? '▲' : '→'}</Text>
+        </TouchableOpacity>
+
+        {showPasswordForm && (
+          <View style={styles.addContactForm}>
+            <TextInput
+              style={styles.input}
+              placeholder="Mot de passe actuel"
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.textLight}
+              accessibilityLabel="Mot de passe actuel"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Nouveau mot de passe (6 caractères minimum)"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.textLight}
+              accessibilityLabel="Nouveau mot de passe"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirmer le nouveau mot de passe"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.textLight}
+              accessibilityLabel="Confirmer le nouveau mot de passe"
+            />
+            <TouchableOpacity
+              style={[styles.saveButton, securityBusy && { opacity: 0.6 }]}
+              onPress={handleChangePassword}
+              disabled={securityBusy}
+              accessibilityRole="button"
+            >
+              <Text style={styles.saveButtonText}>Enregistrer le nouveau mot de passe</Text>
+            </TouchableOpacity>
+            <Text style={styles.labelSmall}>Vos autres appareils seront déconnectés.</Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.actionItem, { borderBottomWidth: 0 }]}
+          onPress={handleLogoutAll}
+          disabled={securityBusy}
+          accessibilityRole="button"
+          accessibilityLabel="Déconnecter tous mes autres appareils"
+        >
+          <Text style={styles.actionIcon}>📵</Text>
+          <Text style={styles.actionText}>Déconnecter tous mes autres appareils</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
       </View>

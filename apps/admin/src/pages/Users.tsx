@@ -53,6 +53,22 @@ export default function Users() {
     }
   };
 
+  // Déconnecter de force tous les appareils d'un compte (il pourra se reconnecter avec son mot de passe)
+  const logoutAllDevices = async (user: User) => {
+    const ok = window.confirm(
+      `Déconnecter tous les appareils de "${user.firstName} ${user.lastName}" (${user.phone}) ?\n\n` +
+      'Le compte reste actif : la personne devra simplement se reconnecter avec son mot de passe.' +
+      (user.role === 'ADMIN' ? '\n\n⚠️ Si c\'est votre propre compte, vous serez aussi déconnecté ici.' : '')
+    );
+    if (!ok) return;
+    try {
+      const res = await api.post(`/admin/users/${user.id}/logout-all`);
+      alert(res.data?.message || 'Appareils déconnectés');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Opération impossible');
+    }
+  };
+
   const deleteUser = async (user: User) => {
     const ok = window.confirm(
       `Supprimer définitivement le compte "${user.firstName} ${user.lastName}" (${user.phone}) ?\n\nCette action est irréversible.`
@@ -161,6 +177,14 @@ export default function Users() {
                     title={user.isActive ? 'Désactiver' : 'Activer'}
                   >
                     {user.isActive ? '🔒' : '🔓'}
+                  </button>
+                  <button
+                    style={styles.actionBtn}
+                    onClick={() => logoutAllDevices(user)}
+                    title="Déconnecter tous ses appareils (compte suspect, téléphone volé)"
+                    aria-label={`Déconnecter tous les appareils de ${user.firstName} ${user.lastName}`}
+                  >
+                    📵
                   </button>
                   {user.role !== 'ADMIN' && (
                     <button

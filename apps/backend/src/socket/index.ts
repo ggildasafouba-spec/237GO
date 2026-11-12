@@ -19,14 +19,19 @@ export function setupSocketHandlers(io: Server) {
         return next(new Error('Token requis'));
       }
 
-      const decoded = jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS) as { userId: string };
+      const decoded = jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS) as { userId: string; tv?: unknown };
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { id: true, role: true },
+        select: { id: true, role: true, isActive: true, tokenVersion: true },
       });
 
-      if (!user) {
+      if (!user || !user.isActive) {
         return next(new Error('Utilisateur non trouvé'));
+      }
+      // Session révoquée (mot de passe changé, « déconnecter tous mes appareils »…)
+      const tv = typeof decoded.tv === 'number' ? decoded.tv : 0;
+      if (tv !== user.tokenVersion) {
+        return next(new Error('Session expirée'));
       }
 
       socket.userId = user.id;

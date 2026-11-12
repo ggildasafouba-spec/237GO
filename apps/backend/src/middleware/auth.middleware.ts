@@ -33,7 +33,13 @@ interface CachedUser {
   id: string;
   phone: string;
   role: string;
+  tokenVersion: number;
   expiresAt: number;
+}
+
+/** Version de session portée par un jeton (0 pour les anciens jetons, émis sans version). */
+function tokenVersionOf(decoded: { tv?: unknown }): number {
+  return typeof decoded.tv === 'number' ? decoded.tv : 0;
 }
 
 const USER_CACHE_TTL_MS = Number(process.env.AUTH_CACHE_TTL_MS || 15_000);
@@ -44,7 +50,7 @@ export function invalidateUserCache(userId: string): void {
   userCache.delete(userId);
 }
 
-function cacheUser(user: { id: string; phone: string; role: string }): void {
+function cacheUser(user: { id: string; phone: string; role: string; tokenVersion: number }): void {
   // delete puis set : place l'entrée en dernier (ordre d'insertion = ancienneté)
   userCache.delete(user.id);
   userCache.set(user.id, { ...user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
@@ -68,15 +74,22 @@ export const authenticate = async (
     const token = authHeader.split(' ')[1];
 
     // Le limiteur de requêtes a souvent déjà vérifié ce jeton : on réutilise le résultat.
+    // (signature déjà vérifiée par le limiteur pour CE jeton : on relit seulement son contenu)
     const preVerified = (req as any).jwtVerified as { token: string; userId: string } | undefined;
-    const decoded =
+    const decoded = (
       preVerified && preVerified.token === token
-        ? { userId: preVerified.userId }
-        : (jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS) as { userId: string });
+        ? jwt.decode(token)
+        : jwt.verify(token, JWT_KEY, JWT_VERIFY_OPTIONS)
+    ) as { userId: string; tv?: unknown };
+    if (!decoded?.userId) throw new AppError('Token invalide ou expiré', 401);
+    const tokenVersion = tokenVersionOf(decoded);
 
     // 1) Cache : évite une requête SQL pour les utilisateurs actifs récemment vus
     const cached = userCache.get(decoded.userId);
     if (cached && cached.expiresAt > Date.now()) {
+      if (cached.tokenVersion !== tokenVersion) {
+        throw new AppError('Session expirée, veuillez vous reconnecter', 401);
+      }
       req.user = { id: cached.id, phone: cached.phone, role: cached.role };
       return next();
     }
@@ -84,7 +97,7 @@ export const authenticate = async (
     // 2) Sinon, lecture en base
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, phone: true, role: true, isActive: true },
+      select: { id: true, phone: true, role: true, isActive: true, tokenVersion: true },
     });
 
     if (!user || !user.isActive) {
@@ -92,7 +105,12 @@ export const authenticate = async (
       throw new AppError('Utilisateur non trouvé ou désactivé', 401);
     }
 
-    cacheUser({ id: user.id, phone: user.phone, role: user.role });
+    // Jeton d'une session révoquée (mot de passe changé, « déconnecter tous mes appareils »…)
+    if (user.tokenVersion !== tokenVersion) {
+      throw new AppError('Session expirée, veuillez vous reconnecter', 401);
+    }
+
+    cacheUser({ id: user.id, phone: user.phone, role: user.role, tokenVersion: user.tokenVersion });
     req.user = { id: user.id, phone: user.phone, role: user.role };
     next();
   } catch (error) {

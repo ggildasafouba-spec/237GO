@@ -1,14 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { AppError } from '../middleware/error.middleware';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { sendSMS } from '../services/sms.service';
 import { sendPasswordResetEmail } from '../services/mail.service';
-import { JWT_KEY, JWT_SIGN_OPTIONS } from '../lib/jwtSecret';
 import { SELF_USER_SELECT } from '../lib/publicSelects';
+import { signUserToken, revokeAllSessions } from '../lib/session';
 
 const router = Router();
 
@@ -81,11 +80,7 @@ router.post(
         },
       });
 
-      const token = jwt.sign(
-        { userId: user.id },
-        JWT_KEY,
-        { ...JWT_SIGN_OPTIONS, expiresIn: '7d' } as any
-      );
+      const token = signUserToken({ id: user.id, tokenVersion: 0 });
 
       res.status(201).json({
         success: true,
@@ -142,11 +137,7 @@ router.post(
         throw new AppError('Identifiant ou mot de passe incorrect', 401);
       }
 
-      const token = jwt.sign(
-        { userId: user.id },
-        JWT_KEY,
-        { ...JWT_SIGN_OPTIONS, expiresIn: '7d' } as any
-      );
+      const token = signUserToken(user);
 
       res.json({
         success: true,
@@ -281,6 +272,9 @@ router.post(
         where: { id: user.id },
         data: { passwordHash: hashedPassword, resetOtp: null, resetOtpExpiry: null },
       });
+      // Nouveau mot de passe : TOUS les appareils encore connectés sont déconnectés
+      // (si quelqu'un avait volé l'ancien mot de passe, il perd l'accès immédiatement).
+      await revokeAllSessions(user.id, req.app.get('io'));
 
       res.json({ success: true, message: 'Mot de passe réinitialisé. Vous pouvez vous connecter.' });
     } catch (error) {
@@ -291,6 +285,60 @@ router.post(
     }
   }
 );
+
+// Changer son mot de passe (connecté) : tous les AUTRES appareils sont déconnectés,
+// l'appareil courant reçoit un nouveau jeton et reste connecté.
+router.post(
+  '/change-password',
+  authenticate,
+  [
+    body('currentPassword').notEmpty().withMessage('Mot de passe actuel requis'),
+    body('newPassword').isLength({ min: 6 }).withMessage('Nouveau mot de passe : 6 caractères minimum'),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, message: errors.array()[0].msg, errors: errors.array() });
+      }
+      const { currentPassword, newPassword } = req.body;
+      const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { id: true, passwordHash: true } });
+      if (!user?.passwordHash || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+        throw new AppError('Mot de passe actuel incorrect', 400);
+      }
+      if (currentPassword === newPassword) {
+        throw new AppError('Le nouveau mot de passe doit être différent de l\'ancien', 400);
+      }
+      await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
+      const tokenVersion = await revokeAllSessions(user.id, req.app.get('io'));
+      res.json({
+        success: true,
+        message: 'Mot de passe modifié. Vos autres appareils ont été déconnectés.',
+        data: { token: signUserToken({ id: user.id, tokenVersion }) },
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: 'Erreur lors du changement de mot de passe' });
+    }
+  }
+);
+
+// Déconnecter TOUS mes appareils (téléphone perdu, compte partagé, doute…).
+// L'appareil courant reçoit un nouveau jeton et reste connecté.
+router.post('/logout-all', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const tokenVersion = await revokeAllSessions(req.user!.id, req.app.get('io'));
+    res.json({
+      success: true,
+      message: 'Tous vos autres appareils ont été déconnectés.',
+      data: { token: signUserToken({ id: req.user!.id, tokenVersion }) },
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
 
 // Profil utilisateur
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {

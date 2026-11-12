@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, authorize, AuthRequest, invalidateUserCache } from '../middleware/auth.middleware';
+import { revokeAllSessions } from '../lib/session';
 import { releaseFunds, refundFunds } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiVision, aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
@@ -132,8 +133,25 @@ router.patch('/users/:id/toggle', async (req: AuthRequest, res: Response) => {
     });
     // Effet immédiat : le compte désactivé ne doit pas rester valide dans le cache d'authentification
     invalidateUserCache(req.params.id);
+    // … ni garder une connexion temps réel ouverte (chauffeur en ligne, etc.)
+    if (user.isActive) {
+      try { req.app.get('io')?.in(`user:${req.params.id}`).disconnectSockets(true); } catch { /* aucune */ }
+    }
 
     res.json({ success: true, message: `Utilisateur ${user.isActive ? 'désactivé' : 'activé'}` });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Déconnecter de force tous les appareils d'un compte (compte suspect, téléphone volé…).
+// Le compte reste actif : la personne peut se reconnecter avec son mot de passe.
+router.post('/users/:id/logout-all', async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!user) return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    await revokeAllSessions(user.id, req.app.get('io'));
+    res.json({ success: true, message: 'Tous les appareils de ce compte ont été déconnectés' });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }

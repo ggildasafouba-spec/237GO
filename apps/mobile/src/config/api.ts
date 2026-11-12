@@ -29,10 +29,19 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    // Session refusée alors qu'on était connecté (jeton expiré, mot de passe changé,
+    // « déconnecter tous mes appareils », compte désactivé) : retour à l'écran de connexion.
+    // (Avant : le jeton était effacé mais l'app restait affichée, sans plus rien pouvoir faire.)
+    if (error.response?.status === 401 && error.config?.headers?.Authorization) {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
-      // TODO: Rediriger vers l'écran de connexion
+      try {
+        // import différé : authStore importe déjà ce fichier
+        const { useAuthStore } = require('../store/authStore');
+        if (useAuthStore.getState().isAuthenticated) await useAuthStore.getState().logout();
+      } catch {
+        /* écran de connexion au prochain démarrage */
+      }
     }
     return Promise.reject(error);
   }

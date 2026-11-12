@@ -23,6 +23,7 @@ import { aiRouter } from './routes/ai.routes';
 import { chatRouter } from './routes/chat.routes';
 import { setupSocketHandlers } from './socket';
 import { JWT_KEY, JWT_VERIFY_OPTIONS } from './lib/jwtSecret';
+import { isAllowedOrigin } from './lib/allowedOrigins';
 import { resumePendingDispatches } from './services/matching.service';
 import { errorHandler } from './middleware/error.middleware';
 
@@ -38,17 +39,38 @@ app.set('trust proxy', 1);
 
 const httpServer = createServer(app);
 
-// Socket.IO pour le tracking temps réel
+// Socket.IO pour le tracking temps réel.
+// Seuls les sites 237GO (ou l'app installée, sans Origin) peuvent ouvrir une connexion.
+// allowRequest s'applique aussi au WebSocket direct (l'option cors seule ne le filtre pas).
 const io = new SocketServer(httpServer, {
   cors: {
-    origin: process.env.SOCKET_CORS_ORIGIN || '*',
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
     methods: ['GET', 'POST'],
+  },
+  allowRequest: (req, cb) => {
+    const ok = isAllowedOrigin(req.headers.origin);
+    if (!ok) console.warn(`⛔ Connexion temps réel refusée depuis ${req.headers.origin}`);
+    cb(null, ok);
   },
 });
 
 // Middleware globaux
 app.use(helmet());
-app.use(cors());
+
+// CORS : seuls les sites 237GO peuvent appeler l'API depuis un navigateur.
+// Une requête venant d'un autre site est REFUSÉE (403) avant tout traitement :
+// sans ça, certaines requêtes simples seraient exécutées même si le navigateur
+// empêche ensuite le site pirate de lire la réponse.
+// Les webhooks des prestataires de paiement n'envoient pas d'Origin : non concernés.
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  // Notifications des prestataires de paiement : jamais bloquées (sécurisées par revérification)
+  if (req.path.startsWith('/api/webhooks')) return next();
+  if (isAllowedOrigin(origin)) return next();
+  console.warn(`⛔ Requête refusée depuis le site ${origin} (${req.method} ${req.path})`);
+  return res.status(403).json({ success: false, message: 'Origine non autorisée' });
+});
+app.use(cors({ origin: (origin, cb) => cb(null, isAllowedOrigin(origin)) }));
 // Conserver le corps brut (nécessaire pour vérifier la signature des webhooks NotchPay)
 app.use(
   express.json({

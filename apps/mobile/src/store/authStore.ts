@@ -31,6 +31,8 @@ interface AuthState {
   }) => Promise<void>;
   login: (phone: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  // Remplace le jeton de CET appareil (après changement de mot de passe / déconnexion des autres appareils)
+  replaceToken: (token: string) => Promise<void>;
   loadUser: () => Promise<void>;
   updateUser: (patch: Partial<User>) => Promise<void>;
 }
@@ -76,6 +78,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       disconnectSocket();
     } catch {}
+  },
+
+  replaceToken: async (token) => {
+    await AsyncStorage.setItem('token', token);
+    set({ token });
+    // La connexion temps réel a été coupée par le serveur : on la rouvre avec le nouveau jeton
+    try {
+      disconnectSocket();
+    } catch {}
+    await connectSocket().catch(() => {});
   },
 
   loadUser: async () => {
