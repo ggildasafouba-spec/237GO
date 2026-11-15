@@ -243,10 +243,18 @@ const DOC = 'https://example.com/doc.jpg';
 
   // =====================================================================
   console.log('\n=== 3. LOCATION ===');
+  // Les documents (carte grise, assurance, pièce d'identité) doivent être téléversés en privé
+  const uploadDoc = async (t) => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    const fd = new FormData();
+    fd.append('file', new Blob([png], { type: 'image/png' }), 'doc.png');
+    const r = await fetch(`${API}/api/upload?private=1`, { method: 'POST', headers: { Authorization: `Bearer ${t}` }, body: fd });
+    return (await r.json()).data.previewUrl;
+  };
   const vCreate = await api('POST', '/rentals/vehicles', T.owner, {
     type: 'CAR_ECONOMY', brand: 'Toyota', model: 'Corolla', year: 2018, plate: 'CE-TEST-01', pricePerDay: 25000,
     locationLat: POS.lat, locationLng: POS.lng, locationAddress: 'Yaoundé',
-    vehiclePhoto: DOC, registrationPhoto: DOC, insurancePhoto: DOC, ownerIdPhoto: DOC,
+    vehiclePhoto: DOC, registrationPhoto: await uploadDoc(T.owner), insurancePhoto: await uploadDoc(T.owner), ownerIdPhoto: await uploadDoc(T.owner),
     localContactName: 'Paul', localContactPhone: '699990003',
   });
   const vehicle = vCreate.body?.data;

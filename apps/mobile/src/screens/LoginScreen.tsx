@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/authStore';
@@ -71,7 +72,35 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     return `${countryDialCode}${local}`;
   };
 
-  const { login, register } = useAuthStore();
+  const { login, register, verifyAdminLogin } = useAuthStore();
+
+  // Double vérification ADMIN : code reçu par email
+  const [twoFa, setTwoFa] = useState<{ challengeToken: string; maskedEmail: string } | null>(null);
+  const [twoFaCode, setTwoFaCode] = useState('');
+  const [twoFaBusy, setTwoFaBusy] = useState(false);
+
+  const submitTwoFa = async () => {
+    if (!twoFa) return;
+    if (!/^\d{6}$/.test(twoFaCode.trim())) {
+      Alert.alert('Code invalide', 'Entrez le code à 6 chiffres reçu par email.');
+      return;
+    }
+    setTwoFaBusy(true);
+    try {
+      await verifyAdminLogin(twoFa.challengeToken, twoFaCode.trim());
+      setTwoFa(null);
+      setTwoFaCode('');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Code incorrect';
+      Alert.alert('Erreur', msg);
+      if (error?.response?.status === 401 || error?.response?.status === 429) {
+        setTwoFa(null); // demande expirée ou trop d'essais : il faut se reconnecter
+        setTwoFaCode('');
+      }
+    } finally {
+      setTwoFaBusy(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!password) {
@@ -88,7 +117,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       }
       setIsLoading(true);
       try {
-        await login(em, password); // le backend accepte email ou téléphone
+        const challenge = await login(em, password); // le backend accepte email ou téléphone
+        if (challenge) setTwoFa(challenge);
       } catch (error: any) {
         const data = error?.response?.data;
         Alert.alert('Erreur', data?.message || 'Identifiant ou mot de passe incorrect');
@@ -114,17 +144,32 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     setIsLoading(true);
     try {
       if (isLogin) {
-        await login(fullPhone, password);
+        const challenge = await login(fullPhone, password);
+        if (challenge) setTwoFa(challenge);
       } else {
         if (!firstName || !lastName) {
           Alert.alert('Attention', 'Veuillez entrer votre nom et prénom');
           setIsLoading(false);
           return;
         }
-        // Email : obligatoire pour la diaspora (mode international), optionnel sinon
+        if (password.length < 8) {
+          Alert.alert('Mot de passe trop court', 'Choisissez un mot de passe d\'au moins 8 caractères.');
+          setIsLoading(false);
+          return;
+        }
+        // Email : obligatoire pour la diaspora (mode international) et pour les chauffeurs /
+        // marchands (ils ont de l'argent sur leur portefeuille), optionnel sinon
         const trimmedEmail = email.trim();
         if (isInternational && !trimmedEmail) {
           Alert.alert('Email requis', 'Depuis l\'étranger, un email est nécessaire (pour la récupération de compte).');
+          setIsLoading(false);
+          return;
+        }
+        if (accountType !== 'PASSENGER' && !trimmedEmail) {
+          Alert.alert(
+            'Email requis',
+            `Un email est obligatoire pour les comptes ${accountType === 'DRIVER' ? 'chauffeur' : 'marchand'} : il vous permet de récupérer votre compte et vos gains en toute sécurité.`
+          );
           setIsLoading(false);
           return;
         }
@@ -242,7 +287,13 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
 
               <TextInput
                 style={styles.input}
-                placeholder={isInternational ? 'Email (obligatoire à l\'étranger)' : 'Email (optionnel)'}
+                placeholder={
+                  isInternational
+                    ? 'Email (obligatoire à l\'étranger)'
+                    : accountType !== 'PASSENGER'
+                      ? 'Email (obligatoire pour chauffeurs et marchands)'
+                      : 'Email (optionnel)'
+                }
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -429,6 +480,38 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+
+    {/* Connexion administrateur : code reçu par email */}
+    <Modal visible={!!twoFa} transparent animationType="fade" onRequestClose={() => setTwoFa(null)}>
+      <View style={styles.twoFaOverlay}>
+        <View style={styles.twoFaBox}>
+          <Text style={styles.twoFaTitle}>🔐 Vérification administrateur</Text>
+          <Text style={styles.twoFaText}>Un code à 6 chiffres a été envoyé à {twoFa?.maskedEmail}.</Text>
+          <TextInput
+            style={styles.twoFaInput}
+            value={twoFaCode}
+            onChangeText={setTwoFaCode}
+            placeholder="123456"
+            keyboardType="number-pad"
+            maxLength={6}
+            autoFocus
+            placeholderTextColor={colors.textLight}
+            accessibilityLabel="Code de vérification"
+          />
+          <TouchableOpacity
+            style={[styles.submitButton, twoFaBusy && { opacity: 0.6 }]}
+            onPress={submitTwoFa}
+            disabled={twoFaBusy}
+            accessibilityRole="button"
+          >
+            {twoFaBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Valider</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setTwoFa(null); setTwoFaCode(''); }} style={{ marginTop: spacing.md, alignItems: 'center' }}>
+            <Text style={{ color: colors.textSecondary }}>Annuler</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
     </LinearGradient>
   );
 }
@@ -640,6 +723,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.md,
+  },
+  twoFaOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  twoFaBox: { backgroundColor: '#fff', borderRadius: 16, padding: spacing.xl, width: '100%', maxWidth: 400 },
+  twoFaTitle: { fontSize: typography.lg, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  twoFaText: { fontSize: typography.sm, color: colors.textSecondary, textAlign: 'center', marginVertical: spacing.md },
+  twoFaInput: {
+    backgroundColor: colors.background, borderRadius: 12, padding: spacing.md, fontSize: 24,
+    letterSpacing: 6, textAlign: 'center', color: colors.text, marginBottom: spacing.sm,
   },
   passwordInput: {
     flex: 1,

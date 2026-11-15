@@ -10,6 +10,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
@@ -31,10 +32,13 @@ const COUNTRIES = [
 
 export default function ForgotPasswordScreen({ navigation }: { navigation: any }) {
   const safe = useSafeScreen();
-  const [step, setStep] = useState<'phone' | 'reset'>('phone');
+  const [step, setStep] = useState<'phone' | 'support' | 'reset'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
-  const [otpDisplay, setOtpDisplay] = useState(''); // code affiché à l'écran
+  // Le code n'est JAMAIS affiché : il arrive par email, SMS, ou via le support WhatsApp
+  const [channel, setChannel] = useState<'email' | 'sms' | 'support' | null>(null);
+  const [sentTo, setSentTo] = useState('');
+  const [supportWhatsapp, setSupportWhatsapp] = useState('+33650222474');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,12 +76,18 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     setIsLoading(true);
     try {
       const res = await api.post('/auth/forgot-password', { identifier: id });
-      // Le code est retourné directement dans la réponse pour être affiché à l'écran
-      if (res.data.otp) {
-        setOtpDisplay(res.data.otp);
-        setOtp(res.data.otp); // pré-remplir le champ pour faciliter la saisie
+      const data = res.data?.data || {};
+      if (data.supportWhatsapp) setSupportWhatsapp(data.supportWhatsapp);
+      setOtp('');
+      if (data.channel === 'email' || data.channel === 'sms') {
+        setChannel(data.channel);
+        setSentTo(data.maskedEmail || data.maskedPhone || '');
+        setStep('reset');
+      } else {
+        // Pas d'email sur le compte : le support envoie le code par WhatsApp
+        setChannel('support');
+        setStep('support');
       }
-      setStep('reset');
     } catch (error: any) {
       Alert.alert('Erreur', error?.response?.data?.message || 'Une erreur est survenue');
     } finally {
@@ -85,13 +95,22 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     }
   };
 
+  // Ouvre WhatsApp avec un message prêt à envoyer au support
+  const openWhatsapp = () => {
+    const digits = supportWhatsapp.replace(/\D/g, '');
+    const text = `Bonjour, j'ai oublié mon mot de passe 237GO. Le numéro de mon compte est : ${getIdentifier()}`;
+    Linking.openURL(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`).catch(() =>
+      Alert.alert('Support 237GO', `Écrivez-nous sur WhatsApp au ${supportWhatsapp}`)
+    );
+  };
+
   const handleReset = async () => {
-    if (otp.length !== 6) {
-      Alert.alert('Code invalide', 'Entrez le code à 6 chiffres reçu par SMS');
+    if (!/^\d{6}$/.test(otp)) {
+      Alert.alert('Code invalide', 'Entrez le code à 6 chiffres que vous avez reçu');
       return;
     }
-    if (newPassword.length < 6) {
-      Alert.alert('Mot de passe trop court', 'Minimum 6 caractères');
+    if (newPassword.length < 8) {
+      Alert.alert('Mot de passe trop court', 'Minimum 8 caractères');
       return;
     }
     setIsLoading(true);
@@ -118,7 +137,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
             <Text style={styles.subtitle}>
               {byEmail
                 ? 'Entrez votre email. Nous vous enverrons un code de réinitialisation par email.'
-                : 'Entrez votre numéro de téléphone. Nous vous enverrons un code de réinitialisation par SMS.'}
+                : 'Entrez le numéro de votre compte. Le code sera envoyé à l\'email lié à votre compte (sinon, le support 237GO vous aidera sur WhatsApp).'}
             </Text>
 
             {byEmail ? (
@@ -190,20 +209,38 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Envoyer le code</Text>}
             </TouchableOpacity>
           </>
+        ) : step === 'support' ? (
+          <>
+            <View style={styles.otpBox}>
+              <Text style={styles.otpBoxLabel}>💬 Récupération par le support</Text>
+              <Text style={styles.supportText}>
+                Aucun email n'est lié à ce compte. Écrivez au support 237GO sur WhatsApp{' '}
+                <Text style={{ fontWeight: '800' }}>depuis le numéro de votre compte</Text> : nous vérifierons
+                qu'il s'agit bien de vous, puis nous vous enverrons un code.
+              </Text>
+              <Text style={styles.otpBoxNote}>Pour votre sécurité, aucun code n'est envoyé à un autre numéro.</Text>
+            </View>
+
+            <TouchableOpacity style={styles.button} onPress={openWhatsapp} accessibilityRole="button" accessibilityLabel="Contacter le support sur WhatsApp">
+              <Text style={styles.buttonText}>💬 Contacter le support WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.linkButton} onPress={() => setStep('reset')} accessibilityRole="button">
+              <Text style={styles.linkText}>J'ai reçu mon code →</Text>
+            </TouchableOpacity>
+            <Text style={styles.tip}>
+              💡 Après la récupération, ajoutez un email dans votre profil : vous pourrez ensuite récupérer votre compte vous-même.
+            </Text>
+          </>
         ) : (
           <>
             <Text style={styles.subtitle}>
-              Voici votre code de réinitialisation. Saisissez-le ci-dessous et choisissez un nouveau mot de passe.
+              {channel === 'email'
+                ? `Un code à 6 chiffres a été envoyé à ${sentTo}. Pensez à regarder dans les courriers indésirables (spam).`
+                : channel === 'sms'
+                  ? `Un code à 6 chiffres a été envoyé par SMS au ${sentTo}.`
+                  : 'Saisissez le code envoyé par le support 237GO et choisissez un nouveau mot de passe.'}
             </Text>
-
-            {/* Code affiché en grand — bien visible */}
-            {otpDisplay ? (
-              <View style={styles.otpBox}>
-                <Text style={styles.otpBoxLabel}>🔐 Votre code de réinitialisation</Text>
-                <Text style={styles.otpBoxCode}>{otpDisplay}</Text>
-                <Text style={styles.otpBoxNote}>Valable 10 minutes · Ne le partagez pas</Text>
-              </View>
-            ) : null}
 
             <Text style={styles.label}>Code de vérification</Text>
             <TextInput
@@ -220,7 +257,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
-                placeholder="Nouveau mot de passe"
+                placeholder="Nouveau mot de passe (8 caractères min.)"
                 value={newPassword}
                 onChangeText={setNewPassword}
                 secureTextEntry={!showPassword}
@@ -239,9 +276,15 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
               {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Réinitialiser</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.linkButton} onPress={handleRequestOtp}>
-              <Text style={styles.linkText}>Renvoyer le code</Text>
-            </TouchableOpacity>
+            {channel === 'support' ? (
+              <TouchableOpacity style={styles.linkButton} onPress={openWhatsapp}>
+                <Text style={styles.linkText}>💬 Recontacter le support</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.linkButton} onPress={handleRequestOtp}>
+                <Text style={styles.linkText}>Renvoyer le code</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
 
@@ -305,5 +348,19 @@ const styles = StyleSheet.create({
     fontSize: typography.xs,
     color: colors.textLight,
     textAlign: 'center',
+  },
+  supportText: {
+    fontSize: typography.sm,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  tip: {
+    fontSize: typography.xs,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
   },
 });

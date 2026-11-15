@@ -164,7 +164,8 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
   const handleUploadDocument = async (field: 'vehiclePhoto' | 'registrationPhoto' | 'insurancePhoto' | 'ownerIdPhoto') => {
     setUploadingDoc(field);
     try {
-      const url = await pickAndUploadImage();
+      // Carte grise, assurance, pièce d'identité → dossier privé ; la photo du véhicule est publique
+      const url = await pickAndUploadImage({ privateDoc: field !== 'vehiclePhoto' });
       if (!url) return;
 
       if (field === 'vehiclePhoto') setVehiclePhoto(url);

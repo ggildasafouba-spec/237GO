@@ -29,7 +29,9 @@ interface AuthState {
     role?: string;
     language?: string;
   }) => Promise<void>;
-  login: (phone: string, password: string) => Promise<void>;
+  // Renvoie une demande de code si le compte est ADMIN (double vérification par email)
+  login: (phone: string, password: string) => Promise<{ challengeToken: string; maskedEmail: string } | null>;
+  verifyAdminLogin: (challengeToken: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   // Remplace le jeton de CET appareil (après changement de mot de passe / déconnexion des autres appareils)
   replaceToken: (token: string) => Promise<void>;
@@ -57,13 +59,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (phone, password) => {
     const response = await api.post('/auth/login', { phone, password });
-    const { user, token } = response.data.data;
+    const data = response.data.data;
+    // Compte ADMIN : un code a été envoyé par email, il faut l'étape 2
+    if (data?.twoFactorRequired) {
+      return { challengeToken: data.challengeToken, maskedEmail: data.maskedEmail };
+    }
+    const { user, token } = data;
 
     await AsyncStorage.setItem('token', token);
     await AsyncStorage.setItem('user', JSON.stringify(user));
     await connectSocket();
     registerForPushNotifications();
 
+    set({ user, token, isAuthenticated: true });
+    return null;
+  },
+
+  verifyAdminLogin: async (challengeToken, code) => {
+    const response = await api.post('/auth/login/verify', { challengeToken, code });
+    const { user, token } = response.data.data;
+    await AsyncStorage.setItem('token', token);
+    await AsyncStorage.setItem('user', JSON.stringify(user));
+    await connectSocket();
+    registerForPushNotifications();
     set({ user, token, isAuthenticated: true });
   },
 

@@ -62,16 +62,31 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
     } catch {}
   };
 
+  const [profilePassword, setProfilePassword] = useState('');
+  const emailChanging =
+    !!user?.email && !!email.trim() && email.trim().toLowerCase() !== user.email.toLowerCase();
+
   const handleUpdateProfile = async () => {
     try {
       const trimmedEmail = email.trim();
-      await api.patch('/users/profile', { firstName, lastName, email: trimmedEmail || undefined, language });
+      if (emailChanging && !profilePassword) {
+        Alert.alert('Mot de passe requis', 'Pour changer votre email, entrez votre mot de passe actuel.');
+        return;
+      }
+      await api.patch('/users/profile', {
+        firstName,
+        lastName,
+        email: trimmedEmail || undefined,
+        language,
+        ...(emailChanging ? { currentPassword: profilePassword } : {}),
+      });
+      setProfilePassword('');
       // Met à jour le store pour rafraîchir l'UI (ex. masquer la bannière "ajoutez un email").
       await updateUser({ firstName, lastName, language, ...(trimmedEmail ? { email: trimmedEmail } : {}) });
       Alert.alert('✅ Profil mis à jour');
       setIsEditing(false);
-    } catch {
-      Alert.alert('Erreur', 'Impossible de mettre à jour le profil');
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.response?.data?.message || 'Impossible de mettre à jour le profil');
     }
   };
 
@@ -130,8 +145,8 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
       Alert.alert('Attention', 'Remplissez votre mot de passe actuel et le nouveau.');
       return;
     }
-    if (newPassword.length < 6) {
-      Alert.alert('Attention', 'Le nouveau mot de passe doit faire au moins 6 caractères.');
+    if (newPassword.length < 8) {
+      Alert.alert('Attention', 'Le nouveau mot de passe doit faire au moins 8 caractères.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -277,8 +292,22 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
+              autoCapitalize="none"
               accessibilityLabel="Email"
             />
+            {/* Changer un email existant = changer le moyen de récupérer le compte : mot de passe exigé */}
+            {emailChanging && (
+              <TextInput
+                style={styles.input}
+                placeholder="Mot de passe actuel (pour changer l'email)"
+                value={profilePassword}
+                onChangeText={setProfilePassword}
+                secureTextEntry
+                autoCapitalize="none"
+                placeholderTextColor={colors.textLight}
+                accessibilityLabel="Mot de passe actuel"
+              />
+            )}
 
             <Text style={styles.labelSmall}>Langue</Text>
             <View style={styles.languageRow}>
@@ -467,7 +496,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
             />
             <TextInput
               style={styles.input}
-              placeholder="Nouveau mot de passe (6 caractères minimum)"
+              placeholder="Nouveau mot de passe (8 caractères minimum)"
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry

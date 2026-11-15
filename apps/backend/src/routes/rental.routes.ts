@@ -8,6 +8,7 @@ import { submitRating, RatingError } from '../services/rating.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { PUBLIC_VEHICLE_SELECT } from '../lib/publicSelects';
 import { sendPushNotification } from '../services/notification.service';
+import { normalizeDocInput, withSignedDocs, VEHICLE_DOC_FIELDS } from '../lib/privateDocs';
 
 // Règle d'annulation d'une location (par le locataire) :
 // plus de 24 h avant le début → 100 % remboursé ; moins de 24 h → 50 % ; commencée → impossible.
@@ -167,10 +168,13 @@ router.post(
     body('locationLat').isFloat(),
     body('locationLng').isFloat(),
     body('locationAddress').trim().notEmpty(),
-    body('vehiclePhoto').optional().isURL(),
-    body('registrationPhoto').optional().isURL(),
-    body('insurancePhoto').optional().isURL(),
-    body('ownerIdPhoto').optional().isURL(),
+    body('vehiclePhoto').optional().isURL({ require_tld: false }),
+    body('registrationPhoto').optional().isString(),
+    body('insurancePhoto').optional().isString(),
+    body('ownerIdPhoto').optional().isString(),
+    body('color').optional().trim(),
+    body('seats').optional().isInt({ min: 1, max: 60 }),
+    body('pricePerHour').optional().isFloat({ min: 0 }),
     body('localContactName').trim().notEmpty().withMessage('Nom du contact local requis'),
     body('localContactPhone').matches(/^6[0-9]{8}$/).withMessage('Numéro camerounais du contact local requis (6XXXXXXXX)'),
   ],
@@ -191,11 +195,33 @@ router.post(
         });
       }
 
+      const uid = req.user!.id;
+      const b = req.body;
+      // Champs listés un par un (avant : « ...req.body » laissait le client fixer n'importe quel
+      // champ, ex. le statut de vérification ou la disponibilité).
       const vehicle = await prisma.vehicle.create({
         data: {
-          ownerId: req.user!.id,
+          ownerId: uid,
           verificationStatus: 'PENDING',
-          ...req.body,
+          type: b.type,
+          brand: b.brand,
+          model: b.model,
+          year: Number(b.year),
+          plate: b.plate,
+          color: b.color || null,
+          seats: b.seats ? Number(b.seats) : null,
+          pricePerDay: Number(b.pricePerDay),
+          pricePerHour: b.pricePerHour ? Number(b.pricePerHour) : null,
+          locationLat: Number(b.locationLat),
+          locationLng: Number(b.locationLng),
+          locationAddress: b.locationAddress,
+          vehiclePhoto: b.vehiclePhoto,
+          // Documents → dossier privé
+          registrationPhoto: normalizeDocInput(b.registrationPhoto, uid),
+          insurancePhoto: normalizeDocInput(b.insurancePhoto, uid),
+          ownerIdPhoto: normalizeDocInput(b.ownerIdPhoto, uid),
+          localContactName: b.localContactName,
+          localContactPhone: b.localContactPhone,
           withDriver: true, // 237GO : location avec chauffeur uniquement (sécurité)
         },
       });
@@ -203,9 +229,12 @@ router.post(
       res.status(201).json({
         success: true,
         message: 'Véhicule soumis à vérification. Il apparaîtra après validation de l’équipe.',
-        data: vehicle,
+        data: withSignedDocs(vehicle, uid, VEHICLE_DOC_FIELDS),
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
       res.status(500).json({ success: false, message: 'Erreur de publication' });
     }
   }
@@ -335,7 +364,8 @@ router.get('/my-vehicles', authenticate, async (req: AuthRequest, res: Response)
       },
     });
 
-    res.json({ success: true, data: vehicles });
+    // Ses propres documents : liens temporaires uniquement
+    res.json({ success: true, data: vehicles.map((v) => withSignedDocs(v, req.user!.id, VEHICLE_DOC_FIELDS)) });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -347,9 +377,17 @@ router.get('/my-bookings', authenticate, async (req: AuthRequest, res: Response)
     const bookings = await prisma.rentalBooking.findMany({
       where: { renterId: req.user!.id },
       orderBy: { createdAt: 'desc' },
+      // Le locataire voit le véhicule et le contact du mandataire (utile après réservation),
+      // JAMAIS les documents du propriétaire (avant : carte grise, assurance et pièce
+      // d'identité du propriétaire étaient envoyées à chaque locataire).
       include: {
         vehicle: {
-          include: { owner: { select: { firstName: true, lastName: true } } },
+          select: {
+            ...PUBLIC_VEHICLE_SELECT,
+            localContactName: true,
+            localContactPhone: true,
+            owner: { select: { firstName: true, lastName: true } },
+          },
         },
       },
     });

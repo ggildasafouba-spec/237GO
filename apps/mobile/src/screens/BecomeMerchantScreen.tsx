@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
+import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
 import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { colors, spacing, typography } from '../theme';
@@ -58,6 +59,8 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
   const [shopPhoto, setShopPhoto] = useState<string | null>(null);
   const [businessRegPhoto, setBusinessRegPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const { user, updateUser } = useAuthStore();
+  const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const { getCurrentLocation, reverseGeocode } = useLocation();
@@ -93,7 +96,8 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
   const handleUpload = async (which: 'ownerId' | 'shop' | 'businessReg') => {
     setUploading(which);
     try {
-      const url = await pickAndUploadImage();
+      // Pièce d'identité et registre de commerce → dossier privé ; la photo de la boutique est publique
+      const url = await pickAndUploadImage({ privateDoc: which !== 'shop' });
       if (url) {
         if (which === 'ownerId') setOwnerIdPhoto(url);
         else if (which === 'shop') setShopPhoto(url);
@@ -115,10 +119,16 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
       Alert.alert('Documents requis', 'Téléversez votre pièce d\'identité et une photo de la boutique. Le registre de commerce est optionnel.');
       return;
     }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!user?.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Alert.alert('Email requis', 'Un email valide est obligatoire pour les marchands : il protège votre compte et vos gains.');
+      return;
+    }
 
     setIsLoading(true);
     try {
       await api.post('/users/become-merchant', {
+        ...(!user?.email ? { email: trimmedEmail } : {}),
         shopName,
         shopAddress,
         shopLat,
@@ -130,6 +140,7 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
         businessRegPhoto: businessRegPhoto || undefined,
       });
 
+      if (!user?.email) await updateUser({ email: trimmedEmail });
       Alert.alert(
         'Demande envoyée ✅',
         'Votre demande de marchand a été soumise. Notre équipe va vérifier vos informations. Vous serez notifié dès l\'approbation.',
@@ -151,6 +162,26 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
         <Text style={styles.subtitle}>
           Vendez vos produits sur 237GO. Vos informations seront vérifiées par notre équipe avant activation.
         </Text>
+
+        {/* Email obligatoire pour les marchands (récupération sûre du compte et des gains) */}
+        {!user?.email && (
+          <>
+            <Text style={styles.label}>Email *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="votre.email@exemple.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor={colors.textLight}
+              accessibilityLabel="Email"
+            />
+            <Text style={styles.docHint}>
+              🔐 Obligatoire pour les marchands : il vous permet de récupérer votre compte et vos gains en toute sécurité.
+            </Text>
+          </>
+        )}
 
         <Text style={styles.label}>Nom de la boutique *</Text>
         <TextInput

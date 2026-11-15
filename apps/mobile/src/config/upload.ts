@@ -6,7 +6,12 @@ import api from './api';
  * Ouvre la galerie, laisse l'utilisateur choisir une image, puis l'upload au backend.
  * @returns l'URL publique du fichier, ou null si annulé/échoué
  */
-export async function pickAndUploadImage(): Promise<string | null> {
+/**
+ * @param options.privateDoc  document d'identité (CNI, permis, carte grise, assurance…) :
+ *   rangé dans le dossier PRIVÉ du serveur. La valeur renvoyée est un lien temporaire, utilisable
+ *   pour l'aperçu ET à envoyer tel quel au serveur (qui en retient la référence privée).
+ */
+export async function pickAndUploadImage(options: { privateDoc?: boolean } = {}): Promise<string | null> {
   // Demander la permission d'accès à la galerie
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) {
@@ -44,9 +49,10 @@ export async function pickAndUploadImage(): Promise<string | null> {
     } as any);
   }
 
-  const response = await api.post('/upload', formData, {
+  const response = await api.post(options.privateDoc ? '/upload?private=1' : '/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
-  return response.data.data.url as string;
+  const data = response.data.data;
+  return (data.previewUrl || data.url) as string;
 }

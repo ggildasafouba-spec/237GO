@@ -53,6 +53,27 @@ export default function Users() {
     }
   };
 
+  // Mot de passe oublié via le support WhatsApp (comptes sans email)
+  const generateResetCode = async (user: User) => {
+    const ok = window.confirm(
+      `Générer un code de réinitialisation pour "${user.firstName} ${user.lastName}" (${formatPhone(user.phone)}) ?\n\n` +
+      '⚠️ AVANT de continuer, vérifiez que la demande WhatsApp vient bien de CE numéro.\n' +
+      'Si la personne écrit depuis un autre numéro : refusez, ou posez des questions que seul le titulaire connaît.'
+    );
+    if (!ok) return;
+    try {
+      const res = await api.post(`/admin/users/${user.id}/reset-code`);
+      const { code, expiresInMinutes, phone } = res.data.data;
+      window.prompt(
+        `Code à envoyer par WhatsApp UNIQUEMENT au ${formatPhone(phone)} (valable ${expiresInMinutes} min, 5 essais).\n` +
+        'Ne le communiquez à personne d\'autre. Copiez-le :',
+        code
+      );
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Génération du code impossible');
+    }
+  };
+
   // Déconnecter de force tous les appareils d'un compte (il pourra se reconnecter avec son mot de passe)
   const logoutAllDevices = async (user: User) => {
     const ok = window.confirm(
@@ -178,6 +199,16 @@ export default function Users() {
                   >
                     {user.isActive ? '🔒' : '🔓'}
                   </button>
+                  {user.role !== 'ADMIN' && (
+                    <button
+                      style={styles.actionBtn}
+                      onClick={() => generateResetCode(user)}
+                      title="Mot de passe oublié : générer un code à envoyer par WhatsApp"
+                      aria-label={`Générer un code de réinitialisation pour ${user.firstName} ${user.lastName}`}
+                    >
+                      🔑
+                    </button>
+                  )}
                   <button
                     style={styles.actionBtn}
                     onClick={() => logoutAllDevices(user)}

@@ -14,6 +14,16 @@ const smsConfig: SMSConfig = {
   baseUrl: process.env.SMS_BASE_URL || 'https://api.africastalking.com/version1',
 };
 
+/** Vrai seulement si un vrai compte SMS est configuré (clé + compte autre que « sandbox »). */
+export function isSmsConfigured(): boolean {
+  if (!smsConfig.apiKey) return false;
+  if (smsConfig.provider === 'africas_talking') {
+    const user = (process.env.AFRICAS_TALKING_USERNAME || 'sandbox').trim();
+    return user !== '' && user !== 'sandbox';
+  }
+  return true;
+}
+
 export interface SMSRequest {
   to: string; // Format: 6XXXXXXXX
   message: string;
@@ -33,10 +43,11 @@ export async function sendSMS(data: SMSRequest): Promise<SMSResponse> {
 
   try {
     switch (smsConfig.provider) {
+      // « return await » : sinon une erreur réseau échappait au try/catch ci-dessous
       case 'africas_talking':
-        return sendViaAfricasTalking(phone, data.message);
+        return await sendViaAfricasTalking(phone, data.message);
       case 'infobip':
-        return sendViaInfobip(phone, data.message);
+        return await sendViaInfobip(phone, data.message);
       default:
         return sendViaAfricasTalking(phone, data.message);
     }

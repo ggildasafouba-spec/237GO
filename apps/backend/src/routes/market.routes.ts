@@ -6,7 +6,11 @@ import { AppError } from '../middleware/error.middleware';
 import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService } from '../services/escrow.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { PUBLIC_MERCHANT_SELECT } from '../lib/publicSelects';
+import { withSignedDocs, MERCHANT_DOC_FIELDS } from '../lib/privateDocs';
 import multer from 'multer';
+
+// Sa propre boutique : les documents d'identité du gérant passent en liens temporaires
+const ownShop = <T extends { userId: string } | null>(m: T): T => (m ? withSignedDocs(m, m.userId, MERCHANT_DOC_FIELDS) : m);
 import { parseMenuFile, importMenu, buildMenuTemplate, MENU_MAX_FILE_BYTES } from '../lib/menuImport';
 
 const router = Router();
@@ -227,7 +231,7 @@ router.get('/my-shop', authenticate, authorize('MERCHANT'), async (req: AuthRequ
       throw new AppError('Profil marchand non trouvé', 404);
     }
 
-    res.json({ success: true, data: merchant });
+    res.json({ success: true, data: ownShop(merchant) });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ success: false, message: error.message });
@@ -288,7 +292,7 @@ router.patch('/my-shop/toggle', authenticate, authorize('MERCHANT'), async (req:
       where: { id: merchant.id },
       data: { isOpen: !merchant.isOpen },
     });
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: ownShop(updated) });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ success: false, message: error.message });
@@ -387,7 +391,7 @@ router.patch('/my-shop/hours', authenticate, authorize('MERCHANT'), async (req: 
       where: { id: merchant.id },
       data: { openingHours },
     });
-    res.json({ success: true, data: updated, message: 'Horaires mis à jour' });
+    res.json({ success: true, data: ownShop(updated), message: 'Horaires mis à jour' });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ success: false, message: error.message });

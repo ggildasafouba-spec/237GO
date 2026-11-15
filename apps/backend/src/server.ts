@@ -18,7 +18,9 @@ import { businessRouter } from './routes/business.routes';
 import { userRouter } from './routes/user.routes';
 import { adminRouter } from './routes/admin.routes';
 import { webhookRouter } from './routes/webhook.routes';
-import { uploadRouter, UPLOAD_DIR } from './routes/upload.routes';
+import { uploadRouter, filesRouter, UPLOAD_DIR } from './routes/upload.routes';
+import { migrateSensitiveDocuments } from './lib/privateDocs';
+import { prisma } from './lib/prisma';
 import { aiRouter } from './routes/ai.routes';
 import { chatRouter } from './routes/chat.routes';
 import { setupSocketHandlers } from './socket';
@@ -201,11 +203,20 @@ app.use('/api/rentals', rentalRouter);
 app.use('/api/business', businessRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/files', filesRouter); // documents d'identité : liens signés et temporaires uniquement
 app.use('/api/ai', aiRouter);
 app.use('/api/chat', chatRouter);
 
-// Servir les fichiers téléversés
-app.use('/uploads', express.static(UPLOAD_DIR));
+// Servir les photos PUBLIQUES téléversées (produits, boutiques, véhicules…).
+// Les documents d'identité sont dans un autre dossier, jamais servi ici.
+// Cross-Origin-Resource-Policy « cross-origin » : sans ça (helmet impose « same-origin »),
+// le navigateur refusait d'afficher ces photos sur app.237go.app et admin.237go.app.
+app.use(
+  '/uploads',
+  express.static(UPLOAD_DIR, {
+    setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+  })
+);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -240,6 +251,14 @@ httpServer.listen(PORT, () => {
       .then((n) => { if (n > 0) console.log(`🔁 Recherche relancée pour ${n} demande(s) en attente`); })
       .catch((e) => console.error('Reprise des recherches échouée:', (e as Error).message));
   }, 15_000);
+
+  // Documents d'identité encore publics (enregistrés avant la mise en place du dossier privé) :
+  // déplacés une fois pour toutes. Sans effet si c'est déjà fait.
+  migrateSensitiveDocuments(prisma)
+    .then(({ moved, updated }) => {
+      if (updated > 0) console.log(`🔒 Documents d'identité rendus privés : ${moved} fichier(s) déplacé(s), ${updated} profil(s) mis à jour`);
+    })
+    .catch((e) => console.error('Migration des documents privés échouée:', (e as Error).message));
 });
 
 export { app, io };

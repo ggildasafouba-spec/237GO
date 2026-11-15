@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import api from '../config/api';
 import { pickAndUploadImage } from '../config/upload';
+import { useAuthStore } from '../store/authStore';
 import { Image } from 'react-native';
 import { colors, spacing, typography } from '../theme';
 
@@ -72,6 +73,8 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
   const [uploading, setUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [criteria, setCriteria] = useState<CategoryCriteria[]>(FALLBACK_CRITERIA);
+  const { user, updateUser } = useAuthStore();
+  const [email, setEmail] = useState('');
 
   // Charger les critères depuis le backend (source de vérité)
   useEffect(() => {
@@ -91,7 +94,8 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
   ) => {
     setUploading(which);
     try {
-      const url = await pickAndUploadImage();
+      // Documents d'identité → dossier privé ; seule la photo du véhicule est publique
+      const url = await pickAndUploadImage({ privateDoc: which !== 'vehicle' });
       if (url) {
         if (which === 'license') setLicensePhoto(url);
         else if (which === 'cni') setCniPhoto(url);
@@ -136,9 +140,16 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
       return;
     }
 
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!user?.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Alert.alert('Email requis', 'Un email valide est obligatoire pour les chauffeurs : il protège votre compte et vos gains.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       await api.post('/users/become-driver', {
+        ...(!user?.email ? { email: trimmedEmail } : {}),
         licenseNumber,
         licenseExpiry: new Date(licenseExpiry).toISOString(),
         cniNumber,
@@ -156,6 +167,7 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
         inspectionPhoto: inspectionPhoto || undefined,
       });
 
+      if (!user?.email) await updateUser({ email: trimmedEmail });
       Alert.alert(
         'Demande envoyée ✅',
         'Votre demande de chauffeur a été soumise. Notre équipe va vérifier vos informations. Vous serez notifié dès l\'approbation.',
@@ -177,6 +189,26 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
         <Text style={styles.subtitle}>
           Remplissez vos informations. Elles seront vérifiées par notre équipe avant activation.
         </Text>
+
+        {/* Email obligatoire pour les chauffeurs (récupération sûre du compte et des gains) */}
+        {!user?.email && (
+          <>
+            <Text style={styles.label}>Email *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="votre.email@exemple.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor={colors.textLight}
+              accessibilityLabel="Email"
+            />
+            <Text style={styles.emailHint}>
+              🔐 Obligatoire pour les chauffeurs : il vous permet de récupérer votre compte et vos gains en toute sécurité.
+            </Text>
+          </>
+        )}
 
         <Text style={styles.label}>Numéro de permis de conduire *</Text>
         <TextInput
@@ -340,6 +372,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: typography.sm, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.lg, lineHeight: 20 },
   label: { fontSize: typography.sm, fontWeight: '600', color: colors.text, marginBottom: spacing.xs, marginTop: spacing.md },
   input: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: 12, fontSize: typography.md, borderWidth: 1, borderColor: colors.border },
+  emailHint: { fontSize: typography.xs, color: colors.textSecondary, marginTop: spacing.xs },
   uploadRow: { flexDirection: 'row', gap: spacing.sm },
   uploadBox: { flex: 1, height: 90, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   uploadPreview: { width: '100%', height: '100%' },

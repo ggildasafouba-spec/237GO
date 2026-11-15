@@ -2,6 +2,19 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, authorize, AuthRequest, invalidateUserCache } from '../middleware/auth.middleware';
 import { revokeAllSessions } from '../lib/session';
+import {
+  signedDocUrl,
+  withSignedDocs,
+  DRIVER_DOC_FIELDS,
+  MERCHANT_DOC_FIELDS,
+  VEHICLE_DOC_FIELDS,
+} from '../lib/privateDocs';
+import { generateOtp, hashOtp } from '../lib/security';
+
+// Documents d'identité : l'admin reçoit des liens temporaires (15 min), jamais l'adresse du fichier
+const signDriverDocs = <T extends { userId: string }>(d: T): T => withSignedDocs(d, d.userId, DRIVER_DOC_FIELDS);
+const signMerchantDocs = <T extends { userId: string }>(m: T): T => withSignedDocs(m, m.userId, MERCHANT_DOC_FIELDS);
+const signVehicleDocs = <T extends { ownerId: string }>(v: T): T => withSignedDocs(v, v.ownerId, VEHICLE_DOC_FIELDS);
 import { releaseFunds, refundFunds } from '../services/escrow.service';
 import { sendPushNotification } from '../services/notification.service';
 import { aiVision, aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
@@ -144,6 +157,39 @@ router.patch('/users/:id/toggle', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// MOT DE PASSE OUBLIÉ via le support WhatsApp (comptes sans email) : l'admin génère un code
+// et l'envoie lui-même par WhatsApp, UNIQUEMENT au numéro du compte (vérifié par l'admin).
+// Le code n'est montré qu'à l'admin ; valable 15 minutes, 5 essais maximum.
+router.post('/users/:id/reset-code', async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, phone: true, firstName: true, lastName: true, role: true, isActive: true },
+    });
+    if (!user) return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    // Jamais pour un administrateur : un admin piraté ne doit pas pouvoir prendre les autres comptes admin
+    if (user.role === 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Impossible pour un compte administrateur' });
+    }
+    if (!user.isActive) {
+      return res.status(400).json({ success: false, message: 'Compte désactivé : réactivez-le d\'abord' });
+    }
+    const code = generateOtp();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetOtp: hashOtp(user.id, 'reset', code), resetOtpExpiry: new Date(Date.now() + 15 * 60 * 1000), resetOtpAttempts: 0 },
+    });
+    console.log(`🔑 Code de réinitialisation généré par l'admin ${req.user!.id} pour ${user.id}`);
+    res.json({
+      success: true,
+      message: 'Code généré',
+      data: { code, expiresInMinutes: 15, phone: user.phone, name: `${user.firstName} ${user.lastName}` },
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // Déconnecter de force tous les appareils d'un compte (compte suspect, téléphone volé…).
 // Le compte reste actif : la personne peut se reconnecter avec son mot de passe.
 router.post('/users/:id/logout-all', async (req: AuthRequest, res: Response) => {
@@ -219,7 +265,7 @@ router.get('/vehicles', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: vehicles });
+    res.json({ success: true, data: vehicles.map(signVehicleDocs) });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -233,7 +279,7 @@ router.get('/vehicles/pending', async (_req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: vehicles });
+    res.json({ success: true, data: vehicles.map(signVehicleDocs) });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -259,7 +305,7 @@ router.patch('/vehicles/:id/verify', async (req: AuthRequest, res: Response) => 
     res.json({
       success: true,
       message: `Véhicule ${status === 'VERIFIED' ? 'approuvé' : 'rejeté'}`,
-      data: vehicle,
+      data: signVehicleDocs(vehicle),
     });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
@@ -275,7 +321,7 @@ router.get('/drivers/pending', async (_req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'asc' },
     });
 
-    res.json({ success: true, data: drivers });
+    res.json({ success: true, data: drivers.map(signDriverDocs) });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -295,7 +341,7 @@ router.get('/drivers', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: drivers });
+    res.json({ success: true, data: drivers.map(signDriverDocs) });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -420,7 +466,7 @@ router.get('/merchants', async (_req: AuthRequest, res: Response) => {
       },
     });
 
-    res.json({ success: true, data: merchants });
+    res.json({ success: true, data: merchants.map(signMerchantDocs) });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -965,7 +1011,7 @@ router.post('/drivers/:id/ai-verify', async (req: AuthRequest, res: Response) =>
         `Analyse cette photo censée être un PERMIS DE CONDUIRE. ` +
         `Le chauffeur déclaré est "${fullName}", numéro de permis "${profile.licenseNumber}". ` +
         `Réponds en JSON: {"isLicense": bool, "readable": bool, "nameMatches": bool|null, "concerns": "texte court", "confidence": 0-100}`;
-      const raw = await aiVision({ system, prompt, imageUrl: profile.licensePhoto });
+      const raw = await aiVision({ system, prompt, imageUrl: signedDocUrl(profile.licensePhoto, profile.userId) || '' });
       analyses.license = parseAiJson(raw) || { raw };
     }
 
@@ -974,7 +1020,7 @@ router.post('/drivers/:id/ai-verify', async (req: AuthRequest, res: Response) =>
         `Analyse cette photo censée être une CNI (carte nationale d'identité camerounaise). ` +
         `La personne déclarée est "${fullName}", numéro CNI "${profile.cniNumber}". ` +
         `Réponds en JSON: {"isCni": bool, "readable": bool, "nameMatches": bool|null, "concerns": "texte court", "confidence": 0-100}`;
-      const raw = await aiVision({ system, prompt, imageUrl: profile.cniPhoto });
+      const raw = await aiVision({ system, prompt, imageUrl: signedDocUrl(profile.cniPhoto, profile.userId) || '' });
       analyses.cni = parseAiJson(raw) || { raw };
     }
 
