@@ -206,19 +206,11 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
 
   // Les modèles Gemini « qui réfléchissent » (2.5 et suivants) comptent cette réflexion dans
   // maxOutputTokens : avec 400 jetons, la réponse était coupée au milieu d'une phrase.
-  //  - 2.5 Flash / Flash-Lite : réflexion désactivée (thinkingBudget 0, plus rapide) ;
-  //  - autres modèles : marge supplémentaire réservée à la réflexion.
-  const response = await geminiPostWithRetry((model: string) => {
-    const noThinking = /2\.5-flash/.test(model);
-    return {
-      systemInstruction: { parts: [{ text: system }] },
-      contents,
-      generationConfig: {
-        maxOutputTokens: noThinking ? maxTokens : maxTokens + 1024,
-        temperature,
-        ...(noThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-      },
-    };
+  // On réserve donc une marge de jetons pour la réflexion, en plus de la réponse.
+  const response = await geminiPostWithRetry({
+    systemInstruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: { maxOutputTokens: maxTokens + 1536, temperature },
   });
 
   // Ne garder que le texte de la réponse (pas les éventuelles « pensées »), toutes parties jointes
