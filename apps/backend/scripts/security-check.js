@@ -314,6 +314,31 @@ const login = async (p, pw) => (await req('POST', '/api/auth/login', { body: { p
   const pubRes = await fetch(pub.url);
   check('photos publiques : affichables sur app.237go.app / admin (Cross-Origin-Resource-Policy)', pubRes.headers.get('cross-origin-resource-policy') === 'cross-origin');
 
+  console.log('\n=== Retraits bloqués 24 h après un changement de mot de passe ===');
+  const W = { amount: 1000, paymentMethod: 'ORANGE_MONEY', phone: '699990004' };
+  const wu = await prisma.user.create({ data: { id: randomUUID(), phone: phone(), firstName: 'W', lastName: 'D', passwordHash: await bcrypt.hash(PW, 4), wallet: { create: { balance: 50000 } } } });
+  let tW = await login(wu.phone, PW);
+  const w0 = await req('POST', '/api/wallet/withdraw', { token: tW, body: W });
+  check('compte jamais modifié : retrait autorisé', w0.status === 200, w0.body?.message);
+  const cpw = await req('POST', '/api/auth/change-password', { token: tW, body: { currentPassword: PW, newPassword: 'Nouveau-mdp-W1' } });
+  tW = cpw.body?.data?.token;
+  const balBefore = (await prisma.wallet.findUnique({ where: { userId: wu.id } })).balance;
+  const w1 = await req('POST', '/api/wallet/withdraw', { token: tW, body: W });
+  check('juste après le changement de mot de passe : retrait bloqué (date de fin indiquée)', w1.status === 403 && /24 h/.test(w1.body?.message || '') && /à partir du/.test(w1.body?.message || ''), w1.body?.message);
+  check('… le solde n\'a pas bougé', (await prisma.wallet.findUnique({ where: { userId: wu.id } })).balance === balBefore);
+  await prisma.user.update({ where: { id: wu.id }, data: { passwordChangedAt: new Date(Date.now() - 23 * 3_600_000) } });
+  check('23 h après : toujours bloqué', (await req('POST', '/api/wallet/withdraw', { token: tW, body: W })).status === 403);
+  await prisma.user.update({ where: { id: wu.id }, data: { passwordChangedAt: new Date(Date.now() - 25 * 3_600_000) } });
+  check('25 h après : retrait de nouveau autorisé', (await req('POST', '/api/wallet/withdraw', { token: tW, body: W })).status === 200);
+  // Réinitialisation (mot de passe oublié via le support) : bloque aussi
+  const tAdm = await login(admin.phone, PW);
+  const rcW = await req('POST', `/api/admin/users/${wu.id}/reset-code`, { token: tAdm });
+  await req('POST', '/api/auth/reset-password', { body: { identifier: wu.phone, otp: rcW.body?.data?.code, newPassword: 'Reset-mdp-W2' } });
+  const tW2 = await login(wu.phone, 'Reset-mdp-W2');
+  check('après « mot de passe oublié » : retrait bloqué aussi', (await req('POST', '/api/wallet/withdraw', { token: tW2, body: W })).status === 403);
+  check('… les dépenses (courses, commandes) restent possibles', (await req('GET', '/api/wallet/balance', { token: tW2 })).status === 200);
+  check('… l\'email d\'alerte mentionne le blocage', /bloqués pendant 24/.test(mails()) || !MAILS);
+
   console.log(fails === 0 ? '\nTOUS LES CONTROLES PASSENT' : `\n${fails} controle(s) en echec`);
   await prisma.$disconnect();
   process.exit(fails ? 1 : 0);

@@ -406,7 +406,7 @@ router.post(
       const hashedPassword = await bcrypt.hash(newPassword, 12);
       await prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash: hashedPassword, resetOtp: null, resetOtpExpiry: null, resetOtpAttempts: 0 },
+        data: { passwordHash: hashedPassword, resetOtp: null, resetOtpExpiry: null, resetOtpAttempts: 0, passwordChangedAt: new Date() },
       });
       // Nouveau mot de passe : TOUS les appareils encore connectés sont déconnectés
       // (si quelqu'un avait volé l'ancien mot de passe, il perd l'accès immédiatement).
@@ -452,7 +452,10 @@ router.post(
       }
       const weak = passwordProblem(newPassword, user.phone);
       if (weak) throw new AppError(weak, 400);
-      await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await bcrypt.hash(newPassword, 12), passwordChangedAt: new Date() },
+      });
       const tokenVersion = await revokeAllSessions(user.id, req.app.get('io'));
       if (user.email) sendPasswordChangedEmail(user.email, user.firstName).catch(() => {});
       res.json({

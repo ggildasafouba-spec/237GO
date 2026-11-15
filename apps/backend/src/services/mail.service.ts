@@ -120,6 +120,7 @@ export async function sendPasswordChangedEmail(to: string, firstName?: string | 
       <p>Bonjour${firstName ? ` ${firstName}` : ''},</p>
       <p>Le mot de passe de votre compte 237GO a été modifié le <strong>${when}</strong> (heure du Cameroun).
       Tous vos autres appareils ont été déconnectés.</p>
+      <p>Pour votre sécurité, les <strong>retraits sont bloqués pendant 24 h</strong>.</p>
       <p style="color:#D32F2F; font-size: 14px;"><strong>Ce n'est pas vous ?</strong> Contactez immédiatement le support 237GO
       pour bloquer votre compte.</p>
     `

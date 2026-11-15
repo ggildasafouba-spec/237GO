@@ -5,6 +5,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error.middleware';
 import { processPayment, verifyDepositTransaction, confirmDeposit } from '../services/payment.service';
 import { redeemLoyaltyPoints, addLoyaltyPoints, computeTier } from '../services/loyalty.service';
+import { withdrawalLockedUntil, WITHDRAWAL_LOCK_HOURS } from '../lib/security';
 
 const router = Router();
 
@@ -228,6 +229,18 @@ router.post(
       }
 
       const { amount, paymentMethod, phone } = req.body;
+
+      // Mot de passe changé ou réinitialisé il y a moins de 24 h : retraits bloqués
+      const owner = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { passwordChangedAt: true } });
+      const lockedUntil = withdrawalLockedUntil(owner?.passwordChangedAt);
+      if (lockedUntil) {
+        const when = lockedUntil.toLocaleString('fr-FR', { timeZone: 'Africa/Douala', dateStyle: 'short', timeStyle: 'short' });
+        throw new AppError(
+          `Pour votre sécurité, les retraits sont bloqués pendant ${WITHDRAWAL_LOCK_HOURS} h après un changement de mot de passe. ` +
+          `Vous pourrez retirer à partir du ${when} (heure du Cameroun). Ce n'est pas vous ? Contactez le support 237GO.`,
+          403
+        );
+      }
 
       const wallet = await prisma.wallet.findUnique({
         where: { userId: req.user!.id },

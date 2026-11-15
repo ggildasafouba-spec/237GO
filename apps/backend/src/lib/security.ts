@@ -68,5 +68,17 @@ export function maskEmail(email: string): string {
   return `${visible}${'*'.repeat(Math.min(6, Math.max(3, name.length - visible.length)))}@${domain}`;
 }
 
+// ===== Retraits après changement de mot de passe =====
+// Si un pirate prend un compte (mot de passe volé puis changé), il ne peut pas vider le
+// portefeuille tout de suite : le vrai titulaire, prévenu par email, a le temps de réagir.
+export const WITHDRAWAL_LOCK_HOURS = 24;
+
+/** Date de fin du blocage des retraits, ou null si les retraits sont autorisés. */
+export function withdrawalLockedUntil(passwordChangedAt: Date | null | undefined): Date | null {
+  if (!passwordChangedAt) return null;
+  const until = new Date(passwordChangedAt.getTime() + WITHDRAWAL_LOCK_HOURS * 3_600_000);
+  return until > new Date() ? until : null;
+}
+
 // Numéro WhatsApp du support (modifiable sur Railway sans toucher au code)
 export const SUPPORT_WHATSAPP = (process.env.SUPPORT_WHATSAPP || '+33650222474').trim();

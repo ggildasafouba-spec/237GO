@@ -35,6 +35,8 @@ model User {
   resetOtp          String?
   resetOtpExpiry    DateTime?
   resetOtpAttempts  Int                @default(0) // essais faux sur le code (annulé à 5)
+  // Dernier changement / réinitialisation du mot de passe : retraits bloqués 24 h ensuite
+  passwordChangedAt DateTime?
   // Double vérification de l'admin : code envoyé par email à chaque connexion
   twoFaCode         String?            // empreinte du code (jamais le code en clair)
   twoFaExpiry       DateTime?
