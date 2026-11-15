@@ -1,0 +1,54 @@
+name: Mise à jour à distance (OTA)
+
+# Envoie la dernière version des écrans de l'app aux téléphones qui ont DÉJÀ l'APK installé,
+# sans nouveau build (ne consomme pas le quota de builds Expo).
+# Les téléphones la reçoivent au démarrage de l'app et l'appliquent au démarrage suivant.
+#
+# Limite : une mise à jour à distance ne peut pas ajouter de module natif au téléphone.
+# Les fonctions qui en ont besoin restent indisponibles jusqu'au prochain APK (et le disent).
+#
+# Déclencheur : MANUEL (onglet "Actions" → Mise à jour à distance (OTA) → Run workflow).
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Description de la mise à jour"
+        required: false
+        default: "Mise à jour 237GO"
+        type: string
+
+concurrency:
+  group: ota-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: EAS Update (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installer EAS CLI + se connecter à Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Installer les dépendances (racine du monorepo)
+        run: npm ci
+
+      - name: Publier la mise à jour sur le canal des APK (production)
+        working-directory: apps/mobile
+        run: |
+          eas update \
+            --channel production \
+            --platform android \
+            --message "${{ github.event.inputs.message || 'Mise à jour 237GO' }}" \
+            --non-interactive

@@ -1,6 +1,24 @@
 import { Linking, Platform } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
 import api, { API_BASE_URL } from './api';
+
+/**
+ * Sélecteur de fichier chargé À LA DEMANDE : les applications installées avant l'ajout de
+ * cette fonction ne contiennent pas le module natif. Chargé au démarrage, il ferait planter
+ * l'app après une mise à jour à distance ; chargé ici, seul l'import du menu est indisponible.
+ */
+function loadDocumentPicker(): typeof import('expo-document-picker') | null {
+  try {
+    return require('expo-document-picker');
+  } catch {
+    return null;
+  }
+}
+
+export class MenuImportUnavailableError extends Error {
+  constructor() {
+    super('Pour importer un menu, installez la dernière version de l\'application 237GO (ou utilisez app.237go.app).');
+  }
+}
 
 export interface ParsedMenuRow {
   line: number;
@@ -36,7 +54,11 @@ export async function openMenuTemplate() {
  * Renvoie l'aperçu (rien n'est encore enregistré), ou null si l'utilisateur annule.
  */
 export async function pickAndParseMenu(): Promise<MenuPreview | null> {
-  const result = await DocumentPicker.getDocumentAsync({
+  const DocumentPicker = loadDocumentPicker();
+  if (!DocumentPicker) throw new MenuImportUnavailableError();
+  let result: Awaited<ReturnType<typeof DocumentPicker.getDocumentAsync>>;
+  try {
+    result = await DocumentPicker.getDocumentAsync({
     type: [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'text/csv',
@@ -46,7 +68,12 @@ export async function pickAndParseMenu(): Promise<MenuPreview | null> {
     ],
     copyToCacheDirectory: true,
     multiple: false,
-  });
+    });
+  } catch (e: any) {
+    // Module JS présent mais partie native absente (ancienne version de l'app)
+    if (/native module|ExpoDocumentPicker|Cannot find/i.test(String(e?.message || ''))) throw new MenuImportUnavailableError();
+    throw e;
+  }
   if (result.canceled || !result.assets?.[0]) return null;
 
   const asset = result.assets[0];
