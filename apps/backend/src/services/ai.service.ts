@@ -204,13 +204,18 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
     parts: [{ text: m.content }],
   }));
 
+  // Les modèles Gemini récents « réfléchissent » avant de répondre, et cette réflexion est
+  // comptée dans maxOutputTokens : avec 400 jetons, la réponse était coupée en pleine phrase.
+  // On réserve donc une marge pour la réflexion, en plus de la réponse.
   const response = await geminiPostWithRetry({
     systemInstruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { maxOutputTokens: maxTokens, temperature },
+    generationConfig: { maxOutputTokens: maxTokens + 1536, temperature },
   });
 
-  return response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  // Texte de la réponse uniquement (pas les « pensées »), toutes parties jointes
+  const parts: Array<{ text?: string; thought?: boolean }> = response?.candidates?.[0]?.content?.parts || [];
+  return parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('').trim();
 }
 
 // Cache de la liste des modèles disponibles (évite d'appeler ListModels à chaque requête).
