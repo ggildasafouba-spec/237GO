@@ -204,18 +204,13 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
     parts: [{ text: m.content }],
   }));
 
-  // Les modèles Gemini « qui réfléchissent » (2.5 et suivants) comptent cette réflexion dans
-  // maxOutputTokens : avec 400 jetons, la réponse était coupée au milieu d'une phrase.
-  // On réserve donc une marge de jetons pour la réflexion, en plus de la réponse.
   const response = await geminiPostWithRetry({
     systemInstruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { maxOutputTokens: maxTokens + 1536, temperature },
+    generationConfig: { maxOutputTokens: maxTokens, temperature },
   });
 
-  // Ne garder que le texte de la réponse (pas les éventuelles « pensées »), toutes parties jointes
-  const parts: Array<{ text?: string; thought?: boolean }> = response?.candidates?.[0]?.content?.parts || [];
-  return parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('').trim();
+  return response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 // Cache de la liste des modèles disponibles (évite d'appeler ListModels à chaque requête).
@@ -259,7 +254,7 @@ async function listGeminiModels(): Promise<string[]> {
  * disponibles pour la clé (découverts via ListModels). Fallback sur surcharge
  * (503/429) ou modèle introuvable (404/400).
  */
-async function geminiPostWithRetry(payload: any | ((model: string) => any)): Promise<any> {
+async function geminiPostWithRetry(payload: any): Promise<any> {
   const discovered = await listGeminiModels();
   const models = [MODEL, ...discovered]
     .filter((m) => !!m)
@@ -271,7 +266,7 @@ async function geminiPostWithRetry(payload: any | ((model: string) => any)): Pro
       try {
         const res = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
-          typeof payload === 'function' ? payload(model) : payload,
+          payload,
           { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
         );
         return res.data;
