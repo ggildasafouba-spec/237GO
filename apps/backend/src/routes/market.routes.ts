@@ -8,6 +8,7 @@ import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMe
 import { PUBLIC_MERCHANT_SELECT } from '../lib/publicSelects';
 import { withSignedDocs, MERCHANT_DOC_FIELDS } from '../lib/privateDocs';
 import { requestCourier, cancelCourierRequest, cancelCourierForOrder } from '../lib/marketCourier';
+import { baseDeliveryFee } from '../lib/deliveryPricing';
 
 // Livreur 237GO d'une commande : ce que le restaurant et le client en voient
 const COURIER_SELECT = {
@@ -67,7 +68,7 @@ async function computeOrderTotals(
   }
 
   const distance = calculateDistance(merchant.shopLat, merchant.shopLng, deliveryLat, deliveryLng);
-  const deliveryFee = Math.ceil((300 + distance * 100) / 50) * 50;
+  const deliveryFee = baseDeliveryFee(distance); // 1 000 F jusqu'à 3 km, puis +150 F/km
 
   return { merchant, totalAmount, deliveryFee, orderItems };
 }

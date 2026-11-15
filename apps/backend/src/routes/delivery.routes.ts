@@ -9,6 +9,7 @@ import { submitRating, RatingError } from '../services/rating.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { dispatchToNearbyDrivers } from '../services/matching.service';
 import { attachCourierPayment, releaseCourier, syncOrderWithCourier } from '../lib/marketCourier';
+import { packageDeliveryPrice } from '../lib/deliveryPricing';
 
 const router = Router();
 
@@ -34,18 +35,8 @@ router.post(
 
       const distance = calculateDistance(pickupLat, pickupLng, dropoffLat, dropoffLng);
 
-      // Tarification livraison (XAF)
-      const pricing: Record<string, { base: number; perKm: number }> = {
-        DOCUMENT: { base: 500, perKm: 100 },
-        SMALL_PACKAGE: { base: 700, perKm: 150 },
-        MEDIUM_PACKAGE: { base: 1000, perKm: 200 },
-        LARGE_PACKAGE: { base: 1500, perKm: 300 },
-        FOOD: { base: 500, perKm: 120 },
-        FRAGILE: { base: 1200, perKm: 250 },
-      };
-
-      const price = pricing[packageType];
-      const estimatedPrice = Math.ceil((price.base + price.perKm * distance) / 50) * 50;
+      // Tarif unique (devis = prix payé) : 1 000 F minimum, voir lib/deliveryPricing
+      const estimatedPrice = packageDeliveryPrice(packageType, distance);
 
       res.json({
         success: true,
@@ -94,16 +85,8 @@ router.post(
       } = req.body;
 
       const distance = calculateDistance(pickupLat, pickupLng, dropoffLat, dropoffLng);
-      const pricing: Record<string, { base: number; perKm: number }> = {
-        DOCUMENT: { base: 500, perKm: 100 },
-        SMALL_PACKAGE: { base: 700, perKm: 150 },
-        MEDIUM_PACKAGE: { base: 1000, perKm: 200 },
-        LARGE_PACKAGE: { base: 1500, perKm: 300 },
-        FOOD: { base: 500, perKm: 120 },
-        FRAGILE: { base: 1200, perKm: 250 },
-      };
-      const price = pricing[packageType];
-      const estimatedPrice = Math.ceil((price.base + price.perKm * distance) / 50) * 50;
+      // Même calcul que le devis : le client paie exactement le prix affiché
+      const estimatedPrice = packageDeliveryPrice(packageType, distance);
 
       const delivery = await prisma.delivery.create({
         data: {
