@@ -10,8 +10,10 @@ import {
   Alert,
   Platform,
   ScrollView,
+  Linking,
 } from 'react-native';
 import * as Location from 'expo-location';
+import { sendSos, getTripShare, shareText } from '../config/safety';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRideStore } from '../store/rideStore';
 import { useLocation } from '../hooks/useLocation';
@@ -69,8 +71,6 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     cancelRide,
     confirmArrival,
     openDispute,
-    sendSOS,
-    shareTrip,
     clearRide,
   } = useRideStore();
 
@@ -211,31 +211,56 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     }
   };
 
+  const [sosSending, setSosSending] = useState(false);
   const handleSOS = () => {
-    if (!currentRide) return;
-    sendSOS(pickup.lat, pickup.lng, currentRide.id);
-    Alert.alert('🚨 SOS envoyé', 'Alerte envoyée à vos contacts d\'urgence et à 237GO.');
+    if (!currentRide || sosSending) return;
+    Alert.alert(
+      '🚨 URGENCE',
+      'Envoyer une alerte SOS ?\n\nL\'équipe 237GO recevra votre position et votre course.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: '🚨 ENVOYER SOS',
+          style: 'destructive',
+          onPress: async () => {
+            setSosSending(true);
+            try {
+              // Position actuelle (et non le point de départ) ; à défaut, le point de départ
+              const loc = await getCurrentLocation();
+              const lat = loc?.latitude ?? pickup.lat;
+              const lng = loc?.longitude ?? pickup.lng;
+              const result = await sendSos(lat, lng, currentRide.id);
+              Alert.alert(
+                '✅ Alerte envoyée à 237GO',
+                'Prévenez aussi un proche : un message avec votre position et le suivi de la course est prêt.',
+                [
+                  { text: '📲 Prévenir un proche', onPress: () => shareText(result.shareMessage, 'Alerte SOS') },
+                  { text: '📞 Appeler le 117', onPress: () => Linking.openURL('tel:117') },
+                  { text: 'Fermer', style: 'cancel' },
+                ]
+              );
+            } catch {
+              Alert.alert('Échec de l\'alerte', 'Pas de connexion. Appelez le 117 directement.', [
+                { text: '📞 Appeler le 117', onPress: () => Linking.openURL('tel:117') },
+                { text: 'Fermer', style: 'cancel' },
+              ]);
+            } finally {
+              setSosSending(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
-  const handleShare = () => {
+  // Partage du trajet : lien de suivi en direct envoyé par WhatsApp, SMS… (menu du téléphone)
+  const handleShare = async () => {
     if (!currentRide) return;
-    Alert.prompt?.(
-      'Partager le trajet',
-      'Numéro du contact (6XXXXXXXX) :',
-      (phone?: string) => {
-        if (phone && /^6[0-9]{8}$/.test(phone)) {
-          shareTrip(currentRide.id, phone);
-          Alert.alert('Partagé', 'Lien de suivi envoyé par SMS à votre contact.');
-        } else if (phone) {
-          Alert.alert('Numéro invalide', 'Format attendu : 6XXXXXXXX');
-        }
-      },
-      'plain-text',
-      '',
-      'phone-pad'
-    );
-    if (!Alert.prompt) {
-      Alert.alert('Partager', 'Le partage de trajet nécessite iOS. Fonctionnalité bientôt disponible sur Android.');
+    try {
+      const share = await getTripShare(currentRide.id);
+      await shareText(share.message, 'Suivre mon trajet');
+    } catch (error: any) {
+      Alert.alert('Partage impossible', error?.response?.data?.message || 'Vérifiez votre connexion et réessayez.');
     }
   };
 
@@ -804,10 +829,11 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
           <TouchableOpacity
             style={styles.sosButton}
             onPress={handleSOS}
+            disabled={sosSending}
             accessibilityLabel="Bouton SOS urgence"
             accessibilityRole="button"
           >
-            <Text style={styles.sosText}>🚨 SOS</Text>
+            <Text style={styles.sosText}>{sosSending ? 'Envoi…' : '🚨 SOS'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

@@ -24,6 +24,7 @@ import { migrateSensitiveDocuments } from './lib/privateDocs';
 import { prisma } from './lib/prisma';
 import { aiRouter } from './routes/ai.routes';
 import { chatRouter } from './routes/chat.routes';
+import { safetyRouter, trackPage } from './routes/safety.routes';
 import { setupSocketHandlers } from './socket';
 import { JWT_KEY, JWT_VERIFY_OPTIONS } from './lib/jwtSecret';
 import { isAllowedOrigin } from './lib/allowedOrigins';
@@ -213,6 +214,17 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/files', filesRouter); // documents d'identité : liens signés et temporaires uniquement
 app.use('/api/ai', aiRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/safety', safetyRouter); // SOS, lien de suivi de trajet
+
+// Page publique de suivi d'un trajet partagé (lien envoyé par WhatsApp/SMS, sans connexion)
+const trackLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: (req: Request) => `track:${req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.get('/track/:token', trackLimiter, trackPage);
 
 // Servir les photos PUBLIQUES téléversées (produits, boutiques, véhicules…).
 // Les documents d'identité sont dans un autre dossier, jamais servi ici.

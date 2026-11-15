@@ -7,6 +7,55 @@ import { sendPushNotification } from '../services/notification.service';
 const router = Router();
 
 /**
+ * Le message doit concerner un vrai service qui relie les deux personnes.
+ * Avant : n'importe quel compte pouvait écrire (et envoyer une notification push) à
+ * n'importe quel autre compte en inventant un serviceId.
+ *  - RIDE / DELIVERY : uniquement le client et le chauffeur de CETTE course / livraison ;
+ *  - CARPOOL / RENTAL : l'un des deux est le conducteur du trajet / propriétaire du véhicule
+ *    (un client peut poser une question avant de réserver) ;
+ *  - MARKET : l'un des deux est le marchand de la boutique (ou de la commande) ;
+ *  - DIRECT : réservé aux échanges avec l'équipe 237GO (un des deux est admin).
+ */
+async function chatAllowed(serviceType: string, serviceId: string, a: string, b: string): Promise<boolean> {
+  const pair = (x?: string | null, y?: string | null) =>
+    !!x && !!y && ((x === a && y === b) || (x === b && y === a));
+  const oneOf = (owner?: string | null) => !!owner && (owner === a || owner === b);
+  switch (serviceType) {
+    case 'RIDE': {
+      const r = await prisma.ride.findUnique({ where: { id: serviceId }, select: { passengerId: true, driverId: true } });
+      return pair(r?.passengerId, r?.driverId);
+    }
+    case 'DELIVERY': {
+      const d = await prisma.delivery.findUnique({ where: { id: serviceId }, select: { senderId: true, driverId: true } });
+      return pair(d?.senderId, d?.driverId);
+    }
+    case 'CARPOOL': {
+      const c = await prisma.carpool.findUnique({ where: { id: serviceId }, select: { driverId: true } });
+      return oneOf(c?.driverId);
+    }
+    case 'RENTAL': {
+      const v = await prisma.vehicle.findUnique({ where: { id: serviceId }, select: { ownerId: true } });
+      return oneOf(v?.ownerId);
+    }
+    case 'MARKET': {
+      const m = await prisma.merchantProfile.findUnique({ where: { id: serviceId }, select: { userId: true } });
+      if (m) return oneOf(m.userId);
+      const o = await prisma.marketOrder.findUnique({
+        where: { id: serviceId },
+        select: { customerId: true, merchant: { select: { userId: true } } },
+      });
+      return pair(o?.customerId, o?.merchant?.userId);
+    }
+    case 'DIRECT': {
+      const admins = await prisma.user.count({ where: { id: { in: [a, b] }, role: 'ADMIN' } });
+      return admins > 0;
+    }
+    default:
+      return false;
+  }
+}
+
+/**
  * Liste des conversations de l'utilisateur connecté.
  * Une conversation = un interlocuteur + un service (serviceType/serviceId).
  * On renvoie le dernier message de chaque conversation + le nombre de non-lus.
@@ -114,6 +163,17 @@ router.post(
       }
       if (receiverId === req.user!.id) {
         return res.status(400).json({ success: false, message: 'Impossible de s\'envoyer un message' });
+      }
+      if (typeof content === 'string' && content.length > 2000) {
+        return res.status(400).json({ success: false, message: 'Message trop long (2000 caractères max)' });
+      }
+
+      const receiver = await prisma.user.findUnique({ where: { id: String(receiverId) }, select: { id: true, isActive: true } });
+      if (!receiver || !receiver.isActive) {
+        return res.status(404).json({ success: false, message: 'Destinataire introuvable' });
+      }
+      if (!(await chatAllowed(serviceType, String(serviceId), req.user!.id, receiver.id))) {
+        return res.status(403).json({ success: false, message: 'Vous ne pouvez pas écrire à cette personne pour ce service' });
       }
 
       const message = await prisma.message.create({

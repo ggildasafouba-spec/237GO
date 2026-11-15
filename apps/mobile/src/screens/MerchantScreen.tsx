@@ -79,6 +79,8 @@ interface Shop {
   shopLat?: number;
   shopLng?: number;
   isOpen: boolean;
+  openNow?: boolean;
+  nextOpening?: string | null;
   openingHours?: OpeningHours;
   products: Product[];
 }
@@ -234,7 +236,7 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
   const toggleShop = async () => {
     try {
       const res = await api.patch('/market/my-shop/toggle');
-      setShop((prev) => (prev ? { ...prev, isOpen: res.data.data.isOpen } : prev));
+      setShop((prev) => (prev ? { ...prev, isOpen: res.data.data.isOpen, openNow: res.data.data.openNow, nextOpening: res.data.data.nextOpening } : prev));
     } catch {
       Alert.alert('Erreur', 'Impossible de changer le statut de la boutique');
     }
@@ -420,11 +422,27 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
 
   const saveHours = async () => {
     setSavingHours(true);
+    // « 8h », « 8:00 », « 8.30 », « 0830 » → « 08:00 », « 08:30 » (format attendu par le serveur)
+    const norm = (v: string) => {
+      const m = String(v || '').trim().match(/^(\d{1,2})\s*(?:[:hH.]\s*(\d{2})?)?$/) || String(v || '').trim().match(/^(\d{2})(\d{2})$/);
+      if (!m) return v;
+      return `${m[1].padStart(2, '0')}:${m[2] || '00'}`;
+    };
+    const cleaned: OpeningHours = {};
+    Object.keys(hours).forEach((d) => {
+      cleaned[d] = { ...hours[d], open: norm(hours[d].open), close: norm(hours[d].close) };
+    });
     try {
-      await api.patch('/market/my-shop/hours', { openingHours: hours });
-      Alert.alert('✅ Horaires sauvegardés');
-    } catch {
-      Alert.alert('Erreur', 'Impossible de sauvegarder les horaires');
+      const res = await api.patch('/market/my-shop/hours', { openingHours: cleaned });
+      setHours(cleaned);
+      const updated = res.data?.data;
+      if (updated) setShop((prev) => (prev ? { ...prev, openNow: updated.openNow, nextOpening: updated.nextOpening } : prev));
+      Alert.alert(
+        '✅ Horaires sauvegardés',
+        'Les clients ne peuvent commander que pendant ces horaires (heure du Cameroun).'
+      );
+    } catch (error: any) {
+      Alert.alert('Erreur', error?.response?.data?.message || 'Impossible de sauvegarder les horaires');
     } finally {
       setSavingHours(false);
     }
@@ -489,7 +507,13 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: spacing.md }}>
           <Text style={styles.shopName}>{shop.shopName}</Text>
-          <Text style={styles.shopStatus}>{shop.isOpen ? '🟢 Ouverte' : '🔴 Fermée'}</Text>
+          <Text style={styles.shopStatus}>
+            {!shop.isOpen
+              ? '🔴 Fermée'
+              : shop.openNow === false
+                ? `🌙 Hors horaires${shop.nextOpening ? ` (ouvre ${shop.nextOpening})` : ''} — pas de commande`
+                : '🟢 Ouverte'}
+          </Text>
         </View>
         <Switch
           value={shop.isOpen}

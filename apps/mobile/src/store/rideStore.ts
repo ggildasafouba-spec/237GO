@@ -58,8 +58,6 @@ interface RideState {
   cancelRide: (rideId: string) => Promise<void>;
   confirmArrival: (rideId: string) => Promise<string>;
   openDispute: (rideId: string, reason: string) => Promise<void>;
-  sendSOS: (lat: number, lng: number, rideId?: string) => void;
-  shareTrip: (rideId: string, contactPhone: string) => void;
   listenToRideUpdates: () => void;
   refreshRide: () => Promise<void>;
   clearRide: () => void;
@@ -140,17 +138,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     await api.post(`/rides/${rideId}/dispute`, { reason });
   },
 
-  // Déclencher une alerte SOS via le socket
-  sendSOS: (lat, lng, rideId) => {
-    const socket = getSocket();
-    socket?.emit('sos', { lat, lng, rideId });
-  },
-
-  // Partager le trajet par SMS
-  shareTrip: (rideId, contactPhone) => {
-    const socket = getSocket();
-    socket?.emit('share:trip', { rideId, contactPhone });
-  },
+  // SOS et partage de trajet : voir config/safety.ts (API + menu de partage du téléphone)
 
   // Relit l'état de la course côté serveur (filet de sécurité si un événement socket est manqué).
   refreshRide: async () => {

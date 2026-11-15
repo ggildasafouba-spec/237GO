@@ -8,7 +8,7 @@ import {
   Vibration,
   Linking,
 } from 'react-native';
-import { getSocket } from '../config/socket';
+import { sendSos, shareText } from '../config/safety';
 import { useLocation } from '../hooks/useLocation';
 import { colors, spacing, typography } from '../theme';
 
@@ -24,7 +24,7 @@ export default function SOSButton({ rideId, style }: SOSButtonProps) {
   const handleSOS = () => {
     Alert.alert(
       '🚨 URGENCE',
-      'Envoyer une alerte SOS ?\n\nVotre position sera partagée avec vos contacts d\'urgence et l\'équipe 237GO.',
+      'Envoyer une alerte SOS ?\n\nVotre position sera envoyée à l\'équipe 237GO.',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -42,29 +42,24 @@ export default function SOSButton({ rideId, style }: SOSButtonProps) {
 
     try {
       const location = await getCurrentLocation();
-      const socket = getSocket();
+      if (!location) throw new Error('position');
+      const result = await sendSos(location.latitude, location.longitude, rideId);
 
-      if (socket && location) {
-        socket.emit('sos', {
-          lat: location.latitude,
-          lng: location.longitude,
-          rideId,
-        });
-      }
-
+      // Le SMS automatique n'est pas encore actif : on propose d'envoyer soi-même le message
       Alert.alert(
-        '✅ Alerte envoyée',
-        'Vos contacts d\'urgence et l\'équipe 237GO ont été alertés.\n\nAppeler la police ?',
+        '✅ Alerte envoyée à 237GO',
+        'Prévenez aussi un proche : un message avec votre position est prêt.',
         [
-          { text: 'Non' },
-          {
-            text: '📞 Appeler 117',
-            onPress: () => Linking.openURL('tel:117'),
-          },
+          { text: '📲 Prévenir un proche', onPress: () => shareText(result.shareMessage, 'Alerte SOS') },
+          { text: '📞 Appeler le 117', onPress: () => Linking.openURL('tel:117') },
+          { text: 'Fermer', style: 'cancel' },
         ]
       );
     } catch {
-      Alert.alert('Erreur', 'Impossible d\'envoyer l\'alerte. Appelez le 117 directement.');
+      Alert.alert('Erreur', 'Impossible d\'envoyer l\'alerte (position ou connexion). Appelez le 117 directement.', [
+        { text: '📞 Appeler le 117', onPress: () => Linking.openURL('tel:117') },
+        { text: 'Fermer', style: 'cancel' },
+      ]);
     } finally {
       setIsSending(false);
     }

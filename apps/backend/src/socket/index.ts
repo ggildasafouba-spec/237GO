@@ -3,7 +3,8 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
 import { JWT_KEY, JWT_VERIFY_OPTIONS } from '../lib/jwtSecret';
 import { sendPendingRequestsToDriver } from '../services/matching.service';
-import { sendSOSAlert, sendTripShareLink } from '../services/sms.service';
+import { isSmsConfigured, sendSMS } from '../services/sms.service';
+import { triggerSos, createTripShare } from '../lib/safety';
 
 interface AuthSocket extends Socket {
   userId?: string;
@@ -194,84 +195,36 @@ export function setupSocketHandlers(io: Server) {
     }
 
     // === SOS / URGENCE ===
-    socket.on('sos', async (data: { lat: number; lng: number; rideId?: string }) => {
-      console.log(`🚨 SOS de ${socket.userId} à (${data.lat}, ${data.lng})`);
-
+    // (l'app utilise maintenant POST /api/safety/sos ; ce canal reste pour les anciennes versions)
+    socket.on('sos', async (data: { lat?: number; lng?: number; rideId?: string }) => {
       try {
-        // Récupérer l'utilisateur et ses contacts d'urgence
-        const [user, contacts] = await Promise.all([
-          prisma.user.findUnique({
-            where: { id: socket.userId! },
-            select: { firstName: true, lastName: true },
-          }),
-          prisma.emergencyContact.findMany({ where: { userId: socket.userId! } }),
-        ]);
-
-        const userName = user ? `${user.firstName} ${user.lastName}` : 'Un utilisateur';
-
-        // Persister l'alerte pour qu'un admin non connecté au moment du SOS
-        // puisse la retrouver (tableau de bord).
-        const alert = await prisma.sosAlert.create({
-          data: {
-            userId: socket.userId!,
-            lat: data.lat,
-            lng: data.lng,
-            rideId: data.rideId || null,
-          },
-        });
-
-        // Notifier les admins en temps réel
-        io.to('admins').emit('sos_alert', {
-          id: alert.id,
-          userId: socket.userId,
-          userName,
-          lat: data.lat,
-          lng: data.lng,
-          rideId: data.rideId,
-          timestamp: alert.createdAt.toISOString(),
-        });
-
-        // Envoyer un SMS d'alerte aux contacts d'urgence
-        if (contacts.length > 0) {
-          await sendSOSAlert({
-            contacts: contacts.map((c) => ({ name: c.name, phone: c.phone })),
-            userName,
-            lat: data.lat,
-            lng: data.lng,
-            rideId: data.rideId,
-          });
+        const result = await triggerSos(io, socket.userId!, data || {});
+        if ('error' in result) {
+          socket.emit('sos_error', { message: result.error });
+          return;
         }
-
-        // Confirmer à l'émetteur
-        socket.emit('sos_sent', { contactsNotified: contacts.length });
+        console.log(`🚨 SOS (socket) de ${socket.userId} (alerte ${result.alertId})`);
+        socket.emit('sos_sent', { contactsNotified: result.smsSent, contactsCount: result.contactsCount, shareMessage: result.shareMessage });
       } catch (error) {
         console.error('Erreur SOS:', error);
         socket.emit('sos_error', { message: 'Échec de l\'envoi de l\'alerte SOS' });
       }
     });
 
-    // === PARTAGE DE TRAJET ===
-    socket.on('share:trip', async (data: { rideId: string; contactPhone: string }) => {
+    // === PARTAGE DE TRAJET (anciennes versions de l'app) ===
+    // Avant : n'importe quel compte pouvait faire envoyer un SMS à n'importe quel numéro
+    // avec n'importe quel identifiant de course. Maintenant : course vérifiée, lien signé,
+    // et SMS seulement si un fournisseur SMS est réellement configuré.
+    socket.on('share:trip', async (data: { rideId?: string; contactPhone?: string }) => {
       try {
-        const user = await prisma.user.findUnique({
-          where: { id: socket.userId! },
-          select: { firstName: true, lastName: true },
-        });
-        const passengerName = user ? `${user.firstName} ${user.lastName}` : 'Un passager';
-
-        // Construire le lien de suivi
-        const baseUrl = process.env.APP_BASE_URL || process.env.API_BASE_URL || 'https://237go.app';
-        const trackingUrl = `${baseUrl}/track/${data.rideId}`;
-
-        const result = await sendTripShareLink({
-          contactPhone: data.contactPhone,
-          passengerName,
-          rideId: data.rideId,
-          trackingUrl,
-        });
-
-        socket.emit('share:trip_result', { success: result.success });
-        console.log(`📤 Partage de trajet ${data.rideId} avec ${data.contactPhone} : ${result.success ? 'OK' : 'échec'}`);
+        const share = await createTripShare(String(data?.rideId || ''), socket.userId!);
+        const phone = String(data?.contactPhone || '');
+        if ('error' in share || !/^6\d{8}$/.test(phone) || !isSmsConfigured()) {
+          socket.emit('share:trip_result', { success: false, ...('url' in share ? { url: share.url, message: share.message } : {}) });
+          return;
+        }
+        const result = await sendSMS({ to: phone, message: share.message });
+        socket.emit('share:trip_result', { success: result.success, url: share.url, message: share.message });
       } catch (error) {
         console.error('Erreur partage trajet:', error);
         socket.emit('share:trip_result', { success: false });

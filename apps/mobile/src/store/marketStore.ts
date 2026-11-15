@@ -21,6 +21,10 @@ interface Merchant {
   category: string;
   description?: string;
   isOpen: boolean;
+  /** Ouvert maintenant (interrupteur + horaires, heure du Cameroun), calculé par le serveur */
+  openNow?: boolean;
+  /** Ex. « à 08:00 », « demain à 08:00 » quand la boutique est fermée à cette heure */
+  nextOpening?: string | null;
   products: Product[];
   user: {
     firstName: string;

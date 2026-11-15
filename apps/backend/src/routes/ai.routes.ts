@@ -3,8 +3,32 @@ import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { aiChat, isAiConfigured, AiMessage } from '../services/ai.service';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
+
+// Chaque question coûte un appel au fournisseur IA : limite par utilisateur
+// (le limiteur global de 300 req/min ne protège pas la facture).
+const aiLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: Number(process.env.AI_RATE_LIMIT_MAX || 30), // 30 questions / 10 min / utilisateur
+  keyGenerator: (req: AuthRequest) => `ai:${req.user?.id || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de questions à l\'assistant. Réessayez dans quelques minutes.' },
+});
+
+const MAX_MESSAGE_CHARS = 1000;
+
+// Historique envoyé par l'app : seuls les rôles user/assistant et du texte court sont gardés
+// (sinon on pouvait injecter un faux message « system » ou un texte géant facturé).
+function cleanHistory(history: unknown): AiMessage[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-6)
+    .map((m) => ({ role: m.role, content: String(m.content).slice(0, MAX_MESSAGE_CHARS) }));
+}
 
 // Base de connaissances 237GO injectée dans le system prompt
 const KNOWLEDGE = `
@@ -20,6 +44,12 @@ Paiements : Orange Money, MTN MoMo, Express Union, espèces, portefeuille 237GO.
 Sécurité : le paiement est protégé par un système de séquestre (escrow) — l'argent n'est versé au prestataire qu'après confirmation de la fin du service. Bouton SOS en cas d'urgence.
 Fidélité : 1 point par 100 XAF dépensés. Paliers Bronze, Silver, Gold, Platinum. 1 point = 10 XAF échangeable.
 Pour devenir chauffeur : fournir permis, CNI, infos véhicule. Validation par l'équipe 237GO.
+Prix de livraison (colis et GO Market) : 1 000 XAF jusqu'à 3 km, puis +150 XAF par km.
+Restaurants et boutiques : on ne peut commander que pendant leurs horaires d'ouverture.
+Partage de trajet : pendant une course, bouton « Partager » pour envoyer un lien de suivi (WhatsApp, SMS…).
+Mot de passe oublié : code reçu par email, sinon contacter le support WhatsApp.
+Support humain : WhatsApp +33 6 50 22 24 74.
+Ne jamais demander ni accepter de mot de passe ou de code reçu par email/SMS.
 `;
 
 /**
@@ -29,8 +59,10 @@ Pour devenir chauffeur : fournir permis, CNI, infos véhicule. Validation par l'
 router.post(
   '/chat',
   authenticate,
+  aiLimiter,
   [
-    body('message').trim().notEmpty().withMessage('Message requis'),
+    body('message').trim().notEmpty().withMessage('Message requis')
+      .isLength({ max: MAX_MESSAGE_CHARS }).withMessage(`Message trop long (${MAX_MESSAGE_CHARS} caractères max)`),
     body('history').optional().isArray(),
   ],
   async (req: AuthRequest, res: Response) => {
@@ -75,7 +107,7 @@ router.post(
         `=== BASE DE CONNAISSANCES ===\n${KNOWLEDGE}\n${userContext}`;
 
       const messages: AiMessage[] = [
-        ...(Array.isArray(history) ? history.slice(-6) : []),
+        ...cleanHistory(history),
         { role: 'user', content: message },
       ];
 
@@ -83,13 +115,13 @@ router.post(
 
       res.json({ success: true, data: { reply } });
     } catch (error: any) {
-      // Remonter le détail de l'erreur du fournisseur IA pour faciliter le diagnostic
+      // Le détail du fournisseur IA reste dans les logs Railway (il pouvait contenir des
+      // informations sur la clé ou le compte : il n'est plus envoyé à l'app).
       const detail = error?.response?.data?.error?.message || error?.response?.data || error?.message;
-      console.error('AI chat error:', detail);
+      console.error('AI chat error:', typeof detail === 'string' ? detail : JSON.stringify(detail));
       res.status(500).json({
         success: false,
         message: 'L\'assistant est momentanément indisponible.',
-        detail: typeof detail === 'string' ? detail : JSON.stringify(detail),
       });
     }
   }

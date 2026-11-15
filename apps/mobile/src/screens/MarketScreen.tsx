@@ -353,12 +353,17 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
                     {item.category === 'alimentation' ? '🥑' : item.category === 'restaurant' ? '🍽️' : '🏪'}
                   </Text>
                 </View>
-                <View style={styles.merchantInfo}>
+                <View style={[styles.merchantInfo, item.openNow === false && { opacity: 0.6 }]}>
                   <Text style={styles.merchantName}>{item.shopName}</Text>
                   <Text style={styles.merchantCategory}>{item.category}</Text>
                   <Text style={styles.merchantAddress}>{item.shopAddress}</Text>
+                  {item.openNow === false && (
+                    <Text style={styles.closedHint}>
+                      🌙 Fermé{item.nextOpening ? ` · ouvre ${item.nextOpening}` : ''}
+                    </Text>
+                  )}
                 </View>
-                <View style={[styles.statusDot, { backgroundColor: item.isOpen ? colors.success : colors.error }]} />
+                <View style={[styles.statusDot, { backgroundColor: (item.openNow ?? item.isOpen) ? colors.success : colors.error }]} />
               </TouchableOpacity>
             )}
           />
@@ -400,6 +405,15 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
               )}
             </View>
 
+            {selectedMerchant.openNow === false && (
+              <View style={styles.closedBanner}>
+                <Text style={styles.closedBannerText}>
+                  🌙 Fermé pour le moment{selectedMerchant.nextOpening ? ` — ouvre ${selectedMerchant.nextOpening}` : ''}.
+                  {'\n'}Vous pouvez consulter le menu ; la commande sera possible à l'ouverture.
+                </Text>
+              </View>
+            )}
+
             <Text style={styles.productsTitle}>Produits disponibles</Text>
 
             <FlatList
@@ -440,8 +454,9 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={styles.addBtn}
+                          style={[styles.addBtn, selectedMerchant.openNow === false && { opacity: 0.4 }]}
                           onPress={() => addToCart(item)}
+                          disabled={selectedMerchant.openNow === false}
                           accessibilityLabel={`Ajouter ${item.name} au panier`}
                           accessibilityRole="button"
                         >
@@ -788,6 +803,9 @@ const styles = StyleSheet.create({
   merchantCategory: { fontSize: typography.xs, color: colors.primary, textTransform: 'capitalize' },
   merchantAddress: { fontSize: typography.xs, color: colors.textSecondary, marginTop: 2 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
+  closedHint: { fontSize: typography.xs, color: colors.error, fontWeight: '600', marginTop: 2 },
+  closedBanner: { backgroundColor: '#FFF4E5', borderRadius: 12, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: '#F5C27A' },
+  closedBannerText: { fontSize: typography.sm, color: '#7A4A00', fontWeight: '600' },
   merchantHeader: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: 12, marginBottom: spacing.lg },
   merchantDetailName: { fontSize: typography.xl, fontWeight: '700', color: colors.text },
   merchantDetailAddress: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 4 },

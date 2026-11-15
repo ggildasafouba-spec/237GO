@@ -20,8 +20,12 @@ const COURIER_SELECT = {
 } as const;
 import multer from 'multer';
 
-// Sa propre boutique : les documents d'identité du gérant passent en liens temporaires
-const ownShop = <T extends { userId: string } | null>(m: T): T => (m ? withSignedDocs(m, m.userId, MERCHANT_DOC_FIELDS) : m);
+import { shopOpenState, withOpenState, validateOpeningHours } from '../lib/openingHours';
+
+// Sa propre boutique : les documents d'identité du gérant passent en liens temporaires,
+// et l'état d'ouverture réel (interrupteur + horaires) est joint.
+const ownShop = <T extends { userId: string; isOpen: boolean; openingHours?: unknown }>(m: T) =>
+  withOpenState(withSignedDocs(m, m.userId, MERCHANT_DOC_FIELDS));
 import { parseMenuFile, importMenu, buildMenuTemplate, MENU_MAX_FILE_BYTES } from '../lib/menuImport';
 
 const router = Router();
@@ -51,6 +55,14 @@ async function computeOrderTotals(
   }
   if (!merchant.isOpen) {
     throw new AppError('Cette boutique est fermée pour le moment. Réessayez plus tard.', 409);
+  }
+  // Horaires d'ouverture (heure du Cameroun) : hors horaires, aucune commande n'est acceptée.
+  const openState = shopOpenState(merchant);
+  if (!openState.openNow) {
+    throw new AppError(
+      `Cette boutique est fermée à cette heure.${openState.nextOpening ? ` Elle ouvre ${openState.nextOpening}.` : ''}`,
+      409
+    );
   }
 
   let totalAmount = 0;
@@ -145,7 +157,14 @@ router.get('/merchants', authenticate, async (req: AuthRequest, res: Response) =
       ? merchants.filter((m) => calculateDistance(userLat, userLng, m.shopLat, m.shopLng) <= maxRadius)
       : merchants;
 
-    res.json({ success: true, data: filtered });
+    // État réel selon les horaires : les boutiques fermées à cette heure restent visibles
+    // (avec « ouvre à 08:00 ») mais passent après les boutiques ouvertes.
+    const now = new Date();
+    const withState = filtered
+      .map((m) => withOpenState(m, now))
+      .sort((a, b) => Number(b.openNow) - Number(a.openNow));
+
+    res.json({ success: true, data: withState });
   } catch {
     res.status(500).json({ success: false, message: 'Erreur' });
   }
@@ -170,7 +189,7 @@ router.get('/merchants/:id', authenticate, async (req: AuthRequest, res: Respons
       throw new AppError('Marchand non trouvé', 404);
     }
 
-    res.json({ success: true, data: merchant });
+    res.json({ success: true, data: withOpenState(merchant) });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ success: false, message: error.message });
@@ -394,9 +413,11 @@ router.patch('/my-shop/hours', authenticate, authorize('MERCHANT'), async (req: 
     if (!merchant) {
       throw new AppError('Profil marchand non trouvé', 404);
     }
-    const { openingHours } = req.body;
-    if (!openingHours || typeof openingHours !== 'object') {
-      throw new AppError('Horaires invalides', 400);
+    let openingHours;
+    try {
+      openingHours = validateOpeningHours(req.body?.openingHours);
+    } catch (e) {
+      throw new AppError((e as Error).message, 400);
     }
     const updated = await prisma.merchantProfile.update({
       where: { id: merchant.id },
