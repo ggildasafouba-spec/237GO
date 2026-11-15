@@ -8,6 +8,7 @@ import { sendPushNotification } from '../services/notification.service';
 import { submitRating, RatingError } from '../services/rating.service';
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { dispatchToNearbyDrivers } from '../services/matching.service';
+import { attachCourierPayment, releaseCourier, syncOrderWithCourier } from '../lib/marketCourier';
 
 const router = Router();
 
@@ -178,7 +179,8 @@ router.patch(
       }
 
       // LIVRAISON EN ESPÈCES : le livreur doit pouvoir couvrir la commission sur son wallet
-      if (delivery.paymentMethod === 'CASH') {
+      // (les commandes GO Market livrées par 237GO sont toujours payées dans l'app)
+      if (delivery.paymentMethod === 'CASH' && !delivery.marketOrderId) {
         const commission = Math.round(delivery.estimatedPrice * 0.15);
         const wallet = await prisma.wallet.findUnique({ where: { userId: req.user!.id } });
         if (!wallet || wallet.balance < commission) {
@@ -200,34 +202,55 @@ router.patch(
         throw new AppError('Livraison déjà prise par un autre livreur', 409);
       }
 
-      // ESCROW : bloquer le prix de la livraison (versé au livreur après validation)
-      let escrow;
-      try {
-        escrow = await holdFunds({
-          amount: delivery.estimatedPrice,
-          payerId: delivery.senderId,
-          payeeId: req.user!.id,
-          paymentMethod: delivery.paymentMethod,
-          serviceType: 'DELIVERY',
-          serviceId: id,
-        });
-      } catch (holdError) {
-        // Blocage impossible (ex. solde insuffisant de l'expéditeur) : on remet en attente.
-        await prisma.delivery.updateMany({
-          where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
-          data: { driverId: null, status: 'PENDING' },
-        });
-        throw holdError;
-      }
+      if (delivery.marketOrderId) {
+        // COMMANDE GO MARKET : le client a déjà payé la livraison avec la commande.
+        // Les frais de livraison passent simplement du restaurant au livreur.
+        try {
+          await attachCourierPayment(id, delivery.marketOrderId, req.user!.id);
+        } catch (attachError) {
+          await prisma.delivery.updateMany({
+            where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+            data: { driverId: null, status: 'PENDING' },
+          });
+          throw attachError;
+        }
+        const stillAccepted = await prisma.delivery.findFirst({ where: { id, driverId: req.user!.id, status: 'ACCEPTED' }, select: { id: true } });
+        if (!stillAccepted) {
+          // Le restaurant a retiré sa demande au même instant : les frais reviennent à la commande
+          await releaseCourier(id, delivery.marketOrderId, req.app.get('io')).catch(() => {});
+          await prisma.delivery.updateMany({ where: { id, status: 'PENDING' }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
+          throw new AppError('Cette livraison vient d\'être annulée', 409);
+        }
+      } else {
+        // ESCROW : bloquer le prix de la livraison (versé au livreur après validation)
+        let escrow;
+        try {
+          escrow = await holdFunds({
+            amount: delivery.estimatedPrice,
+            payerId: delivery.senderId,
+            payeeId: req.user!.id,
+            paymentMethod: delivery.paymentMethod,
+            serviceType: 'DELIVERY',
+            serviceId: id,
+          });
+        } catch (holdError) {
+          // Blocage impossible (ex. solde insuffisant de l'expéditeur) : on remet en attente.
+          await prisma.delivery.updateMany({
+            where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+            data: { driverId: null, status: 'PENDING' },
+          });
+          throw holdError;
+        }
 
-      // L'expéditeur a pu annuler pendant l'opération : on rend l'argent.
-      const stillAccepted = await prisma.delivery.findFirst({
-        where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
-        select: { id: true },
-      });
-      if (!stillAccepted) {
-        await refundFunds(escrow.id, 'auto').catch(() => {});
-        throw new AppError('Cette livraison vient d\'être annulée', 409);
+        // L'expéditeur a pu annuler pendant l'opération : on rend l'argent.
+        const stillAccepted = await prisma.delivery.findFirst({
+          where: { id, driverId: req.user!.id, status: 'ACCEPTED' },
+          select: { id: true },
+        });
+        if (!stillAccepted) {
+          await refundFunds(escrow.id, 'auto').catch(() => {});
+          throw new AppError('Cette livraison vient d\'être annulée', 409);
+        }
       }
 
       const updated = await prisma.delivery.findUniqueOrThrow({ where: { id } });
@@ -244,10 +267,21 @@ router.patch(
         driverId: req.user!.id,
         driver: driverUser,
       });
+      if (delivery.marketOrderId) {
+        // Commande GO Market : prévenir le restaurant (le livreur arrive) et le client
+        const order = await prisma.marketOrder.findUnique({
+          where: { id: delivery.marketOrderId },
+          select: { merchant: { select: { userId: true } } },
+        });
+        if (order) io.to(`user:${order.merchant.userId}`).emit('order_courier_update', { orderId: delivery.marketOrderId, deliveryStatus: 'ACCEPTED' });
+        io.to(`user:${delivery.senderId}`).emit('order_status_update', { orderId: delivery.marketOrderId, courier: 'ACCEPTED' });
+      }
       await sendPushNotification({
         userId: delivery.senderId,
-        title: '📦 Livreur en route',
-        body: 'Un livreur a accepté votre colis et vient le récupérer.',
+        title: delivery.marketOrderId ? '🛵 Livreur trouvé' : '📦 Livreur en route',
+        body: delivery.marketOrderId
+          ? `${driverUser?.firstName || 'Un livreur'} va récupérer votre commande et vous l'apporter.`
+          : 'Un livreur a accepté votre colis et vient le récupérer.',
         type: 'delivery',
         data: { deliveryId: id },
       });
@@ -287,6 +321,18 @@ router.patch(
       // Une livraison livrée ou annulée ne change plus d'état
       if (existingDelivery.status === 'DELIVERED' || existingDelivery.status === 'CANCELLED') {
         throw new AppError(`Livraison déjà ${existingDelivery.status === 'DELIVERED' ? 'livrée' : 'annulée'}`, 409);
+      }
+
+      // Commande GO Market : le livreur qui se désiste ne pénalise ni le client ni le restaurant.
+      // Les frais reviennent à la commande et la livraison est reproposée aux autres chauffeurs.
+      if (status === 'CANCELLED' && existingDelivery.marketOrderId) {
+        if (existingDelivery.status === 'IN_TRANSIT') {
+          throw new AppError('Vous avez déjà récupéré la commande : livrez-la, ou contactez le support 237GO.', 409);
+        }
+        await releaseCourier(id, existingDelivery.marketOrderId, req.app.get('io'));
+        const order = await prisma.marketOrder.findUnique({ where: { id: existingDelivery.marketOrderId }, select: { merchant: { select: { userId: true } } } });
+        if (order) req.app.get('io').to(`user:${order.merchant.userId}`).emit('order_courier_update', { orderId: existingDelivery.marketOrderId, deliveryStatus: 'PENDING' });
+        return res.json({ success: true, message: 'Livraison libérée : elle est reproposée aux autres livreurs.' });
       }
 
       const updateData: Record<string, unknown> = { status };
@@ -337,11 +383,21 @@ router.patch(
           }).catch(() => {});
         }
 
-        io.to(`user:${delivery.senderId}`).emit('delivery_completed', {
-          deliveryId: id,
-          finalPrice,
-          action: 'confirm_reception', // l'expéditeur doit confirmer pour libérer le paiement
-        });
+        // Commande GO Market : le client confirme la réception depuis « Mes commandes »
+        if (!delivery.marketOrderId) {
+          io.to(`user:${delivery.senderId}`).emit('delivery_completed', {
+            deliveryId: id,
+            finalPrice,
+            action: 'confirm_reception', // l'expéditeur doit confirmer pour libérer le paiement
+          });
+        }
+      }
+
+      // Commande GO Market : la commande suit l'avancement du livreur
+      if (delivery.marketOrderId) {
+        await syncOrderWithCourier(delivery.marketOrderId, status, io).catch((e) =>
+          console.error('Mise à jour de la commande échouée:', (e as Error).message)
+        );
       }
 
       res.json({ success: true, data: delivery });
@@ -390,6 +446,9 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response) => 
 router.patch('/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    // Livraison d'une commande GO Market : gérée par le restaurant (le client annule la commande)
+    const market = await prisma.delivery.findFirst({ where: { id, senderId: req.user!.id, marketOrderId: { not: null } }, select: { id: true } });
+    if (market) throw new AppError('Cette livraison est gérée par le restaurant : contactez-le pour modifier la commande.', 409);
     const cancelled = await prisma.delivery.updateMany({
       where: { id, senderId: req.user!.id, status: 'PENDING', driverId: null },
       data: { status: 'CANCELLED', cancelledAt: new Date() },

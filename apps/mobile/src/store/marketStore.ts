@@ -45,6 +45,12 @@ interface MarketOrder {
   deliveryAddress?: string;
   escrowStatus?: 'HELD' | 'RELEASED' | 'REFUNDED' | 'DISPUTED' | null;
   clientConfirmed?: boolean;
+  // Livreur 237GO (si le restaurant en a demandé un)
+  courierDelivery?: {
+    id: string;
+    status: string;
+    driver?: { firstName: string; lastName: string; phone: string } | null;
+  } | null;
 }
 
 interface MarketState {

@@ -260,7 +260,9 @@ const login = async (p, pw) => (await req('POST', '/api/auth/login', { body: { p
   check('… introuvable par l\'adresse publique /uploads', asPublic.status === 404);
   check('… lien signé : affichable', (await fetch(cni.previewUrl)).status === 200);
   check('… lien sans signature : refusé', (await fetch(cni.url)).status === 404);
-  check('… signature modifiée : refusée', (await fetch(cni.previewUrl.replace(/sig=./, 'sig=0'))).status === 404);
+  // (on change VRAIMENT le 1er caractère : avant, « 0 » remplaçait parfois un « 0 »)
+  const tampered = cni.previewUrl.replace(/sig=(.)/, (_m, c) => `sig=${c === 'a' ? 'b' : 'a'}`);
+  check('… signature modifiée : refusée', tampered !== cni.previewUrl && (await fetch(tampered)).status === 404);
   check('… lien expiré : refusé', (await fetch(cni.previewUrl.replace(/exp=\d+/, 'exp=1000'))).status === 404);
   check('… nom de fichier piégé (../) : refusé', (await fetch(`${API}/api/files/private/..%2F..%2Fpackage.json?exp=9999999999&sig=x`)).status === 404);
 

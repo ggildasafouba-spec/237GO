@@ -608,6 +608,14 @@ export default function MarketScreen({ navigation }: { navigation: any }) {
               {item.status === 'PENDING' && (
                 <Text style={styles.orderHint}>En attente de la confirmation du marchand…</Text>
               )}
+              {/* Livreur 237GO */}
+              {item.courierDelivery && item.courierDelivery.status !== 'CANCELLED' && item.status !== 'CANCELLED' && (
+                <Text style={styles.orderHint}>
+                  {item.courierDelivery.driver
+                    ? `🛵 Livreur 237GO : ${item.courierDelivery.driver.firstName} ${item.courierDelivery.driver.lastName} · 📞 ${item.courierDelivery.driver.phone}`
+                    : '🛵 Le restaurant recherche un livreur 237GO…'}
+                </Text>
+              )}
               {item.status === 'CANCELLED' && (
                 <Text style={styles.orderHint}>
                   Commande annulée.{item.escrowStatus === 'REFUNDED' ? ' Vous avez été remboursé sur votre portefeuille.' : ''}

@@ -216,6 +216,9 @@ export function deliveryRequestPayload(d: DeliveryRow) {
     packageType: d.packageType,
     estimatedPrice: d.estimatedPrice,
     distance: d.distance,
+    // Commande de restaurant / boutique (GO Market) : affichée comme telle au livreur
+    packageDesc: d.packageDesc,
+    isMarketOrder: !!(d as { marketOrderId?: string | null }).marketOrderId,
   };
 }
 

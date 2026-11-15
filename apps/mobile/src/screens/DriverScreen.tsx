@@ -37,6 +37,8 @@ interface DeliveryRequest {
   packageType: string;
   estimatedPrice: number;
   distance: number;
+  packageDesc?: string | null;
+  isMarketOrder?: boolean; // commande de restaurant / boutique (GO Market)
 }
 
 interface ActiveJob {
@@ -514,8 +516,11 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
                         {item.pickup.address} → {item.dropoff.address}
                       </Text>
                       <Text style={styles.requestDetails}>
-                        {item.distance.toFixed(1)} km • {item.packageType}
+                        {(item.distance ?? 0).toFixed(1)} km • {item.isMarketOrder ? `🍽️ ${item.packageDesc || 'Commande GO Market'}` : item.packageType}
                       </Text>
+                      {item.isMarketOrder && (
+                        <Text style={styles.requestDetails}>Déjà payée par le client : rien à encaisser</Text>
+                      )}
                     </View>
                     <Text style={styles.requestPrice}>{item.estimatedPrice.toLocaleString()} F</Text>
                     <TouchableOpacity

@@ -1,4 +1,5 @@
 import express, { Request } from 'express';
+import { createHash } from 'crypto';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -133,9 +134,15 @@ const globalLimiter = rateLimit({
 // mais les autres utilisateurs derrière la même IP partagée ne sont pas touchés.
 // skipSuccessfulRequests : seules les tentatives ÉCHOUÉES comptent (un login réussi ne consomme rien).
 const authAccountKey = (req: Request): string => {
-  const id = String(req.body?.identifier || req.body?.phone || req.body?.email || '')
+  let id = String(req.body?.identifier || req.body?.phone || req.body?.email || '')
     .trim()
     .toLowerCase();
+  // Étape 2 de la connexion admin (code par email) : compteur propre à CETTE tentative de
+  // connexion, et non à toute l'adresse IP (sinon un tiers sur le même réseau pourrait bloquer
+  // l'admin). Chaque code reste de toute façon limité à 5 essais.
+  if (!id && typeof req.body?.challengeToken === 'string') {
+    id = `2fa:${createHash('sha256').update(req.body.challengeToken).digest('hex').slice(0, 24)}`;
+  }
   return `auth:${req.ip}|${id}`;
 };
 

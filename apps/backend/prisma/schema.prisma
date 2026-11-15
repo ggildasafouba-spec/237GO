@@ -252,6 +252,9 @@ model Delivery {
   deliveredAt     DateTime?
   cancelledAt     DateTime?
   cancelReason    String?
+  // Livraison d'une commande GO Market par un chauffeur 237GO (null = colis classique)
+  marketOrderId   String?        @unique
+  marketOrder     MarketOrder?   @relation(fields: [marketOrderId], references: [id])
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -336,6 +339,7 @@ model MarketOrder {
   deliveryLng    Float
   paymentMethod  PaymentMethod
   isPaid         Boolean          @default(false)
+  courierDelivery Delivery?       // livreur 237GO demandé par le marchand (optionnel)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 

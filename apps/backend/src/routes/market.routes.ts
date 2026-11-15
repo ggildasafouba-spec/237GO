@@ -7,6 +7,16 @@ import { holdFunds, refundFunds, confirmSide, openDispute, getEscrowForService }
 import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMethods';
 import { PUBLIC_MERCHANT_SELECT } from '../lib/publicSelects';
 import { withSignedDocs, MERCHANT_DOC_FIELDS } from '../lib/privateDocs';
+import { requestCourier, cancelCourierRequest, cancelCourierForOrder } from '../lib/marketCourier';
+
+// Livreur 237GO d'une commande : ce que le restaurant et le client en voient
+const COURIER_SELECT = {
+  select: {
+    id: true,
+    status: true,
+    driver: { select: { firstName: true, lastName: true, phone: true } },
+  },
+} as const;
 import multer from 'multer';
 
 // Sa propre boutique : les documents d'identité du gérant passent en liens temporaires
@@ -400,6 +410,38 @@ router.patch('/my-shop/hours', authenticate, authorize('MERCHANT'), async (req: 
   }
 });
 
+// ========== LIVRAISON PAR UN CHAUFFEUR 237GO ==========
+
+// Le restaurant demande un livreur 237GO pour une commande (payée dans l'app)
+router.post('/orders/:id/request-courier', authenticate, authorize('MERCHANT'), async (req: AuthRequest, res: Response) => {
+  try {
+    const delivery = await requestCourier(req.params.id, req.user!.id, req.app.get('io'));
+    res.json({
+      success: true,
+      message: 'Recherche d\'un livreur 237GO en cours. Vous serez prévenu dès qu\'il accepte.',
+      data: { deliveryId: delivery.id, status: delivery.status },
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+// Le restaurant retire sa demande (tant qu'aucun livreur n'a accepté)
+router.post('/orders/:id/cancel-courier', authenticate, authorize('MERCHANT'), async (req: AuthRequest, res: Response) => {
+  try {
+    await cancelCourierRequest(req.params.id, req.user!.id);
+    res.json({ success: true, message: 'Demande de livreur retirée' });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
 // ========== IMPORT DU MENU (Excel / CSV) ==========
 
 // Modèle Excel à remplir (public : simple fichier vide d'exemple, aucune donnée)
@@ -479,6 +521,7 @@ router.get('/my-orders', authenticate, authorize('MERCHANT'), async (req: AuthRe
       include: {
         customer: { select: { firstName: true, lastName: true, phone: true } },
         items: { include: { product: { select: { name: true } } } },
+        courierDelivery: COURIER_SELECT,
       },
     });
 
@@ -615,6 +658,16 @@ router.patch(
         throw new AppError(`Commande déjà ${existingOrder.status === 'DELIVERED' ? 'livrée' : 'annulée'}`, 409);
       }
 
+      // Livreur 237GO en charge : c'est LUI qui fait avancer la livraison (récupérée, livrée)
+      const courier = await prisma.delivery.findUnique({ where: { marketOrderId: id }, select: { status: true } });
+      const courierActive = !!courier && courier.status !== 'CANCELLED';
+      if (courierActive && ['PICKED_UP', 'DELIVERING', 'DELIVERED'].includes(status)) {
+        throw new AppError('Un livreur 237GO s\'occupe de cette commande : c\'est lui qui la marquera récupérée puis livrée.', 409);
+      }
+      if (courierActive && status === 'CANCELLED' && courier!.status === 'IN_TRANSIT') {
+        throw new AppError('Le livreur a déjà récupéré la commande : annulation impossible.', 409);
+      }
+
       const order = await prisma.marketOrder.update({
         where: { id },
         data: { status },
@@ -623,6 +676,10 @@ router.patch(
       // Annulation par le marchand : rembourser le client.
       // (Avant : aucun remboursement, l'argent restait bloqué en séquestre.)
       if (status === 'CANCELLED') {
+        // Livraison 237GO demandée : annulée aussi, et les frais de livraison rendus au client
+        await cancelCourierForOrder(id, req.app.get('io')).catch((e) =>
+          console.error(`Annulation du livreur (commande ${id}) échouée:`, (e as Error).message)
+        );
         try {
           const escrow = await getEscrowForService('MARKET', id);
           if (escrow && (escrow.status === 'HELD' || escrow.status === 'DISPUTED')) {
@@ -677,6 +734,7 @@ router.get('/orders', authenticate, async (req: AuthRequest, res: Response) => {
       include: {
         merchant: { select: { shopName: true, user: { select: { phone: true } } } },
         items: { include: { product: { select: { name: true } } } },
+        courierDelivery: COURIER_SELECT,
       },
     });
 
@@ -709,6 +767,9 @@ router.post('/orders/:id/confirm-reception', authenticate, async (req: AuthReque
   try {
     const { id } = req.params;
     const result = await confirmSide('MARKET', id, 'client', req.user!.id);
+    // Livrée par un livreur 237GO : la même confirmation paie aussi le livreur
+    const courier = await prisma.delivery.findUnique({ where: { marketOrderId: id }, select: { id: true } });
+    if (courier) await confirmSide('DELIVERY', courier.id, 'client', req.user!.id).catch(() => {});
 
     res.json({
       success: true,

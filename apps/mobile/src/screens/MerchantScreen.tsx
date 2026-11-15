@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import api from '../config/api';
+import { getSocket } from '../config/socket';
 import { pickAndUploadImage } from '../config/upload';
 import { openMenuTemplate, pickAndParseMenu, commitMenuImport, MenuPreview } from '../config/menuImport';
 import { useSafeScreen } from '../hooks/useSafeScreen';
@@ -51,7 +52,21 @@ interface Order {
   createdAt: string;
   customer: { firstName: string; lastName: string; phone: string };
   items: OrderItem[];
+  // Livreur 237GO demandé par le restaurant (facultatif)
+  courierDelivery?: {
+    id: string;
+    status: string;
+    driver?: { firstName: string; lastName: string; phone: string } | null;
+  } | null;
 }
+
+const COURIER_LABELS: Record<string, string> = {
+  PENDING: '🔎 Recherche d\'un livreur 237GO…',
+  ACCEPTED: '🛵 Livreur en route vers votre boutique',
+  PICKING_UP: '📍 Livreur arrivé à la boutique',
+  IN_TRANSIT: '🛵 Commande récupérée, en route vers le client',
+  DELIVERED: '✅ Livrée par le livreur 237GO',
+};
 
 interface OpeningHours {
   [day: string]: { open: string; close: string; closed: boolean };
@@ -338,6 +353,60 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
     ]);
   };
 
+  // ===== Livreur 237GO =====
+  const [courierBusy, setCourierBusy] = useState<string | null>(null);
+
+  const requestCourier = (order: Order) => {
+    Alert.alert(
+      'Demander un livreur 237GO ?',
+      `Un chauffeur 237GO proche viendra récupérer la commande et la livrera au client.\n\n` +
+      `Les frais de livraison (${order.deliveryFee.toLocaleString()} F, déjà payés par le client) lui reviennent. ` +
+      'Vous recevez le prix des produits comme d\'habitude.',
+      [
+        { text: 'Retour', style: 'cancel' },
+        {
+          text: 'Demander',
+          onPress: async () => {
+            setCourierBusy(order.id);
+            try {
+              const res = await api.post(`/market/orders/${order.id}/request-courier`);
+              Alert.alert('🔎 Recherche en cours', res.data?.message || 'Recherche d\'un livreur…');
+              loadOrders();
+            } catch (e: any) {
+              Alert.alert('Impossible', e?.response?.data?.message || 'Réessayez dans un instant');
+            } finally {
+              setCourierBusy(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const cancelCourier = async (order: Order) => {
+    setCourierBusy(order.id);
+    try {
+      await api.post(`/market/orders/${order.id}/cancel-courier`);
+      loadOrders();
+    } catch (e: any) {
+      Alert.alert('Impossible', e?.response?.data?.message || 'Réessayez dans un instant');
+    } finally {
+      setCourierBusy(null);
+    }
+  };
+
+  // Mise à jour en direct quand le livreur accepte / récupère / livre
+  useEffect(() => {
+    const socket = getSocket();
+    const refresh = () => { loadOrders(); };
+    socket?.on('order_courier_update', refresh);
+    socket?.on('new_order', refresh);
+    return () => {
+      socket?.off('order_courier_update', refresh);
+      socket?.off('new_order', refresh);
+    };
+  }, [loadOrders]);
+
   const advanceOrder = async (order: Order) => {
     const next = NEXT_STATUS[order.status];
     if (!next) return;
@@ -498,8 +567,12 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
             </View>
           }
           renderItem={({ item }) => {
-            const next = NEXT_STATUS[item.status];
+            const courier = item.courierDelivery && item.courierDelivery.status !== 'CANCELLED' ? item.courierDelivery : null;
+            // Livreur 237GO en charge : c'est lui qui marque la commande récupérée puis livrée
+            const next = courier && item.status === 'READY' ? undefined : NEXT_STATUS[item.status];
             const isPending = item.status === 'PENDING';
+            const canRequestCourier =
+              !courier && item.paymentMethod === 'WALLET' && ['CONFIRMED', 'PREPARING', 'READY'].includes(item.status);
             return (
               <View style={[styles.orderCard, isPending && styles.orderCardPending]}>
                 {isPending && (
@@ -535,6 +608,37 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
                     <Text style={styles.orderActionText}>{next.label}</Text>
                   </TouchableOpacity>
                 )}
+
+                {/* Livraison par un chauffeur 237GO */}
+                {courier ? (
+                  <View style={styles.courierBox}>
+                    <Text style={styles.courierStatus}>{COURIER_LABELS[courier.status] || courier.status}</Text>
+                    {courier.driver && (
+                      <Text style={styles.courierDriver}>
+                        {courier.driver.firstName} {courier.driver.lastName} · 📞 {formatPhone(courier.driver.phone)}
+                      </Text>
+                    )}
+                    {courier.status === 'PENDING' && (
+                      <TouchableOpacity onPress={() => cancelCourier(item)} disabled={courierBusy === item.id}>
+                        <Text style={styles.courierCancel}>Retirer la demande</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : canRequestCourier ? (
+                  <TouchableOpacity
+                    style={[styles.courierBtn, courierBusy === item.id && { opacity: 0.6 }]}
+                    onPress={() => requestCourier(item)}
+                    disabled={courierBusy === item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel="Demander un livreur 237GO"
+                  >
+                    {courierBusy === item.id ? (
+                      <ActivityIndicator color={colors.primaryDark} />
+                    ) : (
+                      <Text style={styles.courierBtnText}>🛵 Demander un livreur 237GO</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
               </View>
             );
           }}
@@ -889,6 +993,15 @@ export default function MerchantScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  courierBtn: {
+    marginTop: spacing.sm, borderWidth: 1, borderColor: colors.primary, borderRadius: 10,
+    paddingVertical: spacing.md, alignItems: 'center', backgroundColor: '#fff',
+  },
+  courierBtnText: { color: colors.primaryDark, fontWeight: '700', fontSize: typography.sm },
+  courierBox: { marginTop: spacing.sm, backgroundColor: '#E8F5E9', borderRadius: 10, padding: spacing.md },
+  courierStatus: { fontSize: typography.sm, fontWeight: '700', color: colors.text },
+  courierDriver: { fontSize: typography.sm, color: colors.textSecondary, marginTop: 4 },
+  courierCancel: { fontSize: typography.sm, color: colors.error, fontWeight: '600', marginTop: spacing.sm },
   shopLocationBar: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: '#fff', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
