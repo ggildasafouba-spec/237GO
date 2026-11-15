@@ -5,15 +5,10 @@ name: Build APK (Android)
 # RACINE (où vit le package-lock.json et la config workspaces), puis le build
 # EAS est lancé depuis apps/mobile.
 #
-# Déclencheurs :
-#   - à chaque push sur main qui modifie l'app mobile
-#   - manuellement depuis l'onglet "Actions" (workflow_dispatch)
+# Déclencheur : MANUEL uniquement (onglet "Actions" → Build APK (Android) → Run workflow).
+# Avant, un build partait à chaque modification de l'app mobile : le quota gratuit de builds
+# Expo était épuisé en quelques jours, puis tous les builds échouaient.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
     inputs:
       profile:
