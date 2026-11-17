@@ -12,12 +12,9 @@ import api from './api';
  *   pour l'aperçu ET à envoyer tel quel au serveur (qui en retient la référence privée).
  */
 export async function pickAndUploadImage(options: { privateDoc?: boolean } = {}): Promise<string | null> {
-  // Demander la permission d'accès à la galerie
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) {
-    throw new Error('Permission d\'accès aux photos refusée');
-  }
-
+  // Pas de demande de permission : la galerie s'ouvre avec le sélecteur de photos du système
+  // (Android 13+ : aucune permission « photos » nécessaire). Avant, la demande imposait la
+  // permission READ_MEDIA_IMAGES, que Google Play réserve aux applis de galerie.
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     quality: 0.6,

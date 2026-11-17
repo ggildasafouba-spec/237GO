@@ -111,8 +111,8 @@ export function useLocation(): UseLocationReturn {
     const hasPermission = await requestPermission();
     if (!hasPermission) return;
 
-    // Demander aussi la permission background pour le tracking chauffeur
-    const { status } = await Location.requestBackgroundPermissionsAsync();
+    // Position suivie uniquement quand l'app est ouverte (pas de localisation en arrière-plan :
+    // l'app ne s'en sert pas, et Google Play exige sinon une justification et une vidéo).
 
     watcherRef.current = await Location.watchPositionAsync(
       {

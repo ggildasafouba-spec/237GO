@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
+import SosWatcher from './SosWatcher';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -78,7 +79,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Voile sombre pour fermer le menu en tapant à côté (mobile) */}
       <div className="admin-overlay" onClick={closeMenu} />
 
-      <main className="admin-main">{children}</main>
+      <main className="admin-main">
+        <SosWatcher />
+        {children}
+      </main>
     </div>
   );
 }
