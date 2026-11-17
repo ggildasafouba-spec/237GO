@@ -204,14 +204,20 @@ async function geminiChat(system: string, messages: AiMessage[], maxTokens: numb
     parts: [{ text: m.content }],
   }));
 
-  // Les modèles Gemini récents « réfléchissent » avant de répondre, et cette réflexion est
-  // comptée dans maxOutputTokens : avec 400 jetons, la réponse était coupée en pleine phrase.
-  // On réserve donc une marge pour la réflexion, en plus de la réponse.
-  const response = await geminiPostWithRetry({
+  // Les modèles Gemini récents « réfléchissent » avant de répondre :
+  //  - cette réflexion est comptée dans maxOutputTokens (400 jetons → réponse coupée) ;
+  //  - plus on lui laisse de place, plus elle dure (au-delà de 25 s → « indisponible »).
+  // Pour un assistant de questions simples, on réduit donc la réflexion au minimum
+  // (thinkingConfig adapté à chaque génération de modèle) et on garde une petite marge.
+  const response = await geminiPostWithRetry((model: string, withThinkingConfig: boolean) => ({
     systemInstruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { maxOutputTokens: maxTokens + 1536, temperature },
-  });
+    generationConfig: {
+      maxOutputTokens: maxTokens + 512,
+      temperature,
+      ...(withThinkingConfig ? geminiLowThinking(model) : {}),
+    },
+  }));
 
   // Texte de la réponse uniquement (pas les « pensées »), toutes parties jointes
   const parts: Array<{ text?: string; thought?: boolean }> = response?.candidates?.[0]?.content?.parts || [];
@@ -259,34 +265,50 @@ async function listGeminiModels(): Promise<string[]> {
  * disponibles pour la clé (découverts via ListModels). Fallback sur surcharge
  * (503/429) ou modèle introuvable (404/400).
  */
-async function geminiPostWithRetry(payload: any): Promise<any> {
+/** Réflexion minimale selon la génération du modèle (champ différent en 2.5 et en 3.x). */
+function geminiLowThinking(model: string): Record<string, unknown> {
+  if (/gemini-2\.5-flash/.test(model)) return { thinkingConfig: { thinkingBudget: 0 } };
+  if (/gemini-[3-9]/.test(model)) return { thinkingConfig: { thinkingLevel: 'low' } };
+  return {};
+}
+
+type GeminiPayload = any | ((model: string, withThinkingConfig: boolean) => any);
+
+async function geminiPostWithRetry(payload: GeminiPayload): Promise<any> {
   const discovered = await listGeminiModels();
   const models = [MODEL, ...discovered]
     .filter((m) => !!m)
     .filter((m, i, arr) => arr.indexOf(m) === i); // dédoublonner
 
+  // L'app attend 90 s : on s'arrête avant, pour lui renvoyer un vrai message d'erreur.
+  const deadline = Date.now() + 75_000;
   let lastError: any;
   for (const model of models) {
+    let withThinkingConfig = true;
     for (let i = 0; i < 2; i++) {
+      const remaining = deadline - Date.now();
+      if (remaining < 5_000) throw lastError || new Error('Délai de l\'assistant dépassé');
+      const body = typeof payload === 'function' ? payload(model, withThinkingConfig) : payload;
       try {
         const res = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
-          payload,
-          { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
+          body,
+          { headers: { 'Content-Type': 'application/json' }, timeout: Math.min(35_000, remaining) }
         );
         return res.data;
       } catch (err: any) {
         lastError = err;
         const status = err?.response?.status;
         const isTimeout = err?.code === 'ECONNABORTED';
-        // 503/429 = surcharge, 404/400 = modèle introuvable/non supporté
-        // → on passe au modèle suivant de la liste.
-        if (status === 503 || status === 429 || status === 404 || status === 400) break;
-        // timeout → une 2e tentative sur le même modèle
-        if (isTimeout && i === 0) {
-          await new Promise((r) => setTimeout(r, 800));
+        console.error(`Gemini ${model} : ${isTimeout ? 'délai dépassé' : `HTTP ${status ?? '?'}`}`);
+        // Réglage de réflexion refusé par ce modèle → même modèle, sans ce réglage
+        if (status === 400 && withThinkingConfig && body?.generationConfig?.thinkingConfig) {
+          withThinkingConfig = false;
           continue;
         }
+        // 503/429 = surcharge, 404/400 = modèle introuvable/non supporté, délai dépassé
+        // → on passe au modèle suivant (réessayer un modèle trop lent ne sert à rien).
+        if (isTimeout || status === 503 || status === 429 || status === 404 || status === 400) break;
         throw err;
       }
     }
