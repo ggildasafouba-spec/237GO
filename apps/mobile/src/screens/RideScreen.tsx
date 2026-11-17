@@ -164,11 +164,23 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     setConfirming(true);
     try {
       const message = await confirmArrival(currentRide.id);
+      const rideId = currentRide.id;
       const driverName = currentRide.driver ? `${currentRide.driver.firstName} ${currentRide.driver.lastName}` : undefined;
-      Alert.alert('Course validée ✅', message, [
-        { text: 'Évaluer', onPress: () => { navigation.navigate('Rating', { rideId: currentRide.id, driverName }); clearRide(); } },
-        { text: 'Fermer', onPress: () => clearRide() },
-      ]);
+      // Course terminée : on remet l'écran à zéro. Avant, seule la course était effacée et
+      // l'écran restait en mode « attente » : il affichait « Recherche d'un chauffeur… ».
+      // Fait tout de suite (et pas seulement dans les boutons) : si la fenêtre est fermée
+      // autrement, l'écran ne reste pas bloqué.
+      clearRide();
+      setStep('location');
+      Alert.alert(
+        'Course validée ✅',
+        message,
+        [
+          { text: 'Évaluer', onPress: () => navigation.replace('Rating', { rideId, driverName }) },
+          { text: 'Fermer', onPress: () => navigation.navigate('Main') },
+        ],
+        { cancelable: false }
+      );
     } catch (error: any) {
       Alert.alert('Erreur', error?.response?.data?.message || 'Impossible de valider la course');
     } finally {
