@@ -24,6 +24,11 @@ import {
   passwordProblem,
 } from '../lib/security';
 import { withSignedDocs, DRIVER_DOC_FIELDS, MERCHANT_DOC_FIELDS } from '../lib/privateDocs';
+import { sendAccountDeletedEmail } from '../services/mail.service';
+import { deletionBlockers, anonymizeAccount, MIN_WITHDRAWAL } from '../lib/accountDeletion';
+import { TERMS_VERSION } from '../lib/legal';
+import { invalidateUserCache } from '../middleware/auth.middleware';
+import rateLimit from 'express-rate-limit';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -55,12 +60,16 @@ router.post(
     body('role').optional().isIn(['PASSENGER', 'DRIVER', 'MERCHANT']),
     // Email : optionnel, mais requis pour les numéros internationaux (diaspora)
     body('email').optional({ values: 'falsy' }).isEmail().withMessage('Email invalide'),
+    // Case « J'accepte les conditions d'utilisation » : obligatoire
+    body('acceptTerms')
+      .custom((v) => v === true || v === 'true')
+      .withMessage('Vous devez accepter les conditions d\'utilisation pour créer un compte (mettez l\'application à jour si la case n\'apparaît pas).'),
   ],
   async (req: Request, res: Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ success: false, errors: errors.array() });
+        return res.status(400).json({ success: false, message: errors.array()[0].msg, errors: errors.array() });
       }
 
       const { phone, firstName, lastName, password, role, language, email } = req.body;
@@ -106,6 +115,8 @@ router.post(
           passwordHash: hashedPassword,
           role: role || 'PASSENGER',
           language: language || 'fr',
+          termsAcceptedAt: new Date(),
+          termsVersion: TERMS_VERSION,
           wallet: { create: { balance: 0 } },
           loyaltyPoints: { create: { points: 0 } },
         },
@@ -486,6 +497,91 @@ router.post('/logout-all', authenticate, async (req: AuthRequest, res: Response)
     res.status(500).json({ success: false, message: 'Erreur' });
   }
 });
+
+// ========== SUPPRESSION DU COMPTE (exigée par Google Play) ==========
+
+// Mauvais mots de passe sur la suppression : limités (un téléphone volé et déverrouillé
+// ne doit pas permettre de deviner le mot de passe à l'infini)
+const deleteAccountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req: AuthRequest) => `delacct:${req.user?.id || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop d\'essais. Réessayez dans 15 minutes.' },
+});
+
+// Vérifier si le compte peut être supprimé maintenant (affiché avant la confirmation)
+router.get('/delete-account/check', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { blockers, balance } = await deletionBlockers(req.user!.id);
+    res.json({
+      success: true,
+      data: {
+        canDelete: blockers.length === 0,
+        blockers,
+        // Petit solde impossible à retirer : l'utilisateur doit accepter de le perdre
+        smallBalance: balance > 0 && balance < MIN_WITHDRAWAL ? balance : 0,
+      },
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Erreur' });
+  }
+});
+
+router.post(
+  '/delete-account',
+  authenticate,
+  deleteAccountLimiter,
+  [body('password').isString().notEmpty().withMessage('Mot de passe requis')],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, message: errors.array()[0].msg });
+      }
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { id: true, passwordHash: true, email: true, firstName: true },
+      });
+      if (!user?.passwordHash || !(await bcrypt.compare(String(req.body.password), user.passwordHash))) {
+        throw new AppError('Mot de passe incorrect', 400);
+      }
+
+      const { blockers, balance } = await deletionBlockers(user.id);
+      if (blockers.length > 0) {
+        return res.status(409).json({ success: false, message: blockers[0].message, data: { blockers } });
+      }
+      const smallBalance = balance > 0 ? balance : 0;
+      if (smallBalance > 0 && req.body.forfeitBalance !== true) {
+        return res.status(409).json({
+          success: false,
+          message: `Il reste ${Math.floor(smallBalance)} F sur votre portefeuille (moins que le minimum de retrait de ${MIN_WITHDRAWAL} F). Confirmez que vous y renoncez.`,
+          data: { smallBalance },
+        });
+      }
+
+      const email = user.email;
+      const firstName = user.firstName;
+      await anonymizeAccount(user.id, smallBalance);
+      invalidateUserCache(user.id);
+      try {
+        req.app.get('io')?.in(`user:${user.id}`).disconnectSockets(true);
+      } catch { /* pas de connexion ouverte */ }
+      if (email) sendAccountDeletedEmail(email, firstName).catch(() => {});
+      console.log(`🗑️  Compte supprimé par son titulaire : ${user.id}`);
+
+      res.json({ success: true, message: 'Votre compte a été supprimé. Merci d\'avoir utilisé 237GO.' });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ success: false, message: error.message });
+      }
+      console.error('Suppression de compte échouée:', (error as Error).message);
+      res.status(500).json({ success: false, message: 'Erreur lors de la suppression du compte' });
+    }
+  }
+);
 
 // Profil utilisateur
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {

@@ -200,7 +200,7 @@ const login = async (p, pw) => (await req('POST', '/api/auth/login', { body: { p
   check('code à usage unique (2e utilisation refusée)', reuse.status === 400);
 
   console.log('\n=== Règles de mot de passe et email obligatoire ===');
-  const reg = (body) => req('POST', '/api/auth/register', { body: { firstName: 'R', lastName: 'T', ...body } });
+  const reg = (body) => req('POST', '/api/auth/register', { body: { firstName: 'R', lastName: 'T', acceptTerms: true, ...body } });
   const p1 = phone();
   check('inscription avec « 1234567 » (7 caractères) : refusée', (await reg({ phone: phone(), password: '1234567' })).status === 400);
   check('inscription avec « 12345678 » (trop courant) : refusée', (await reg({ phone: phone(), password: '12345678' })).status === 400);

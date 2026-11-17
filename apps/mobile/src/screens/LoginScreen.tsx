@@ -17,6 +17,7 @@ import { useAuthStore } from '../store/authStore';
 import Logo from '../components/Logo';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography, gradients } from '../theme';
+import { LEGAL_URLS, openUrl } from '../config/legal';
 
 export default function LoginScreen({ navigation }: { navigation: any }) {
   const safe = useSafeScreen();
@@ -32,6 +33,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [accountType, setAccountType] = useState<'PASSENGER' | 'DRIVER' | 'MERCHANT'>('PASSENGER');
   const [isInternational, setIsInternational] = useState(false);
   const [countryDialCode, setCountryDialCode] = useState('+33'); // indicatif par défaut à l'étranger (France)
@@ -152,6 +154,14 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           setIsLoading(false);
           return;
         }
+        if (!acceptTerms) {
+          Alert.alert(
+            'Conditions d\'utilisation',
+            'Pour créer votre compte, cochez la case « J\'accepte les conditions d\'utilisation et la politique de confidentialité ».'
+          );
+          setIsLoading(false);
+          return;
+        }
         if (password.length < 8) {
           Alert.alert('Mot de passe trop court', 'Choisissez un mot de passe d\'au moins 8 caractères.');
           setIsLoading(false);
@@ -181,7 +191,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         // Le compte est créé en PASSENGER (sécurité). Si l'utilisateur a choisi
         // Chauffeur ou Marchand, on l'orientera vers le formulaire de demande
         // (validation par l'admin ensuite).
-        await register({ phone: fullPhone, firstName, lastName, password, email: trimmedEmail || undefined });
+        await register({ phone: fullPhone, firstName, lastName, password, email: trimmedEmail || undefined, acceptTerms: true });
 
         if (accountType === 'DRIVER') {
           Alert.alert(
@@ -437,8 +447,30 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </TouchableOpacity>
           </View>
 
+          {/* Case obligatoire : accepter les CGU avant la création du compte */}
+          {!isLogin && (
+            <View style={styles.termsRow}>
+              <TouchableOpacity
+                onPress={() => setAcceptTerms(!acceptTerms)}
+                style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: acceptTerms }}
+                accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
+              >
+                {acceptTerms && <Text style={styles.checkboxTick}>✓</Text>}
+              </TouchableOpacity>
+              <Text style={styles.termsText} onPress={() => setAcceptTerms(!acceptTerms)}>
+                J'accepte les{' '}
+                <Text style={styles.termsLink} onPress={() => openUrl(LEGAL_URLS.terms)}>conditions d'utilisation</Text>
+                {' '}et la{' '}
+                <Text style={styles.termsLink} onPress={() => openUrl(LEGAL_URLS.privacy)}>politique de confidentialité</Text>
+                {' '}de 237GO.
+              </Text>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[styles.submitButton, isLoading && styles.buttonDisabled]}
+            style={[styles.submitButton, (isLoading || (!isLogin && !acceptTerms)) && styles.buttonDisabled]}
             onPress={handleSubmit}
             disabled={isLoading}
             accessibilityLabel={isLogin ? 'Se connecter' : "S'inscrire"}
@@ -755,6 +787,41 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: spacing.md,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.primary,
+  },
+  checkboxTick: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 15,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: typography.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: colors.primary,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   submitButtonText: {
     color: '#fff',

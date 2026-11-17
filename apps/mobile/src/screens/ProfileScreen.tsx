@@ -16,6 +16,7 @@ import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import { formatPhone } from '../utils/phone';
+import { LEGAL_URLS, openUrl } from '../config/legal';
 
 interface EmergencyContact {
   id: string;
@@ -448,22 +449,28 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem} accessibilityRole="button">
+        <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('History')} accessibilityRole="button">
           <Text style={styles.actionIcon}>📋</Text>
           <Text style={styles.actionText}>Historique des courses</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem} accessibilityRole="button">
+        <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Help')} accessibilityRole="button">
           <Text style={styles.actionIcon}>❓</Text>
           <Text style={styles.actionText}>Aide et support</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem} accessibilityRole="button">
+        <TouchableOpacity style={styles.actionItem} onPress={() => openUrl(LEGAL_URLS.terms)} accessibilityRole="link">
           <Text style={styles.actionIcon}>📜</Text>
           <Text style={styles.actionText}>Conditions d'utilisation</Text>
-          <Text style={styles.actionArrow}>→</Text>
+          <Text style={styles.actionArrow}>↗</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionItem} onPress={() => openUrl(LEGAL_URLS.privacy)} accessibilityRole="link">
+          <Text style={styles.actionIcon}>🔒</Text>
+          <Text style={styles.actionText}>Politique de confidentialité</Text>
+          <Text style={styles.actionArrow}>↗</Text>
         </TouchableOpacity>
       </View>
 
@@ -527,7 +534,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
         )}
 
         <TouchableOpacity
-          style={[styles.actionItem, { borderBottomWidth: 0 }]}
+          style={[styles.actionItem, user?.role === 'ADMIN' && { borderBottomWidth: 0 }]}
           onPress={handleLogoutAll}
           disabled={securityBusy}
           accessibilityRole="button"
@@ -537,6 +544,19 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
           <Text style={styles.actionText}>Déconnecter tous mes autres appareils</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
+
+        {user?.role !== 'ADMIN' && (
+          <TouchableOpacity
+            style={[styles.actionItem, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('DeleteAccount')}
+            accessibilityRole="button"
+            accessibilityLabel="Supprimer mon compte"
+          >
+            <Text style={styles.actionIcon}>🗑️</Text>
+            <Text style={[styles.actionText, { color: colors.error }]}>Supprimer mon compte</Text>
+            <Text style={styles.actionArrow}>→</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Changer de compte (déconnexion directe, pratique pour tester) */}

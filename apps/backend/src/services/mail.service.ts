@@ -127,3 +127,22 @@ export async function sendPasswordChangedEmail(to: string, firstName?: string | 
   );
   return sendMail({ to, subject: 'Votre mot de passe 237GO a été modifié', html });
 }
+
+/**
+ * Confirmation : le compte a été supprimé à la demande de l'utilisateur.
+ */
+export async function sendAccountDeletedEmail(to: string, firstName?: string | null): Promise<boolean> {
+  const when = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Douala', dateStyle: 'long', timeStyle: 'short' });
+  const html = layout(
+    'Votre compte 237GO a été supprimé',
+    `
+      <p>Bonjour${firstName ? ` ${firstName}` : ''},</p>
+      <p>Votre compte 237GO a été supprimé le <strong>${when}</strong> (heure du Cameroun), à votre demande.</p>
+      <p>Vos données personnelles (nom, numéro, email, photos, documents d'identité, contacts d'urgence) ont été effacées.
+      L'historique de vos courses et paiements est conservé de façon anonyme, pour la comptabilité et les obligations légales.</p>
+      <p>Vous pouvez créer un nouveau compte à tout moment avec le même numéro.</p>
+      <p style="color:#D32F2F; font-size: 14px;"><strong>Ce n'est pas vous ?</strong> Contactez immédiatement le support 237GO.</p>
+    `
+  );
+  return sendMail({ to, subject: 'Votre compte 237GO a été supprimé', html });
+}

@@ -48,6 +48,11 @@ model User {
   // Version des sessions : l'augmenter invalide TOUS les jetons de connexion déjà émis
   // (changement de mot de passe, « déconnecter tous mes appareils », action admin).
   tokenVersion      Int                @default(0)
+  // Acceptation des conditions d'utilisation (case obligatoire à l'inscription)
+  termsAcceptedAt   DateTime?
+  termsVersion      String?
+  // Compte supprimé par l'utilisateur : données personnelles effacées, historique anonymisé
+  deletedAt         DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 

@@ -28,6 +28,7 @@ interface AuthState {
     email?: string;
     role?: string;
     language?: string;
+    acceptTerms: boolean;
   }) => Promise<void>;
   // Renvoie une demande de code si le compte est ADMIN (double vérification par email)
   login: (phone: string, password: string) => Promise<{ challengeToken: string; maskedEmail: string } | null>;

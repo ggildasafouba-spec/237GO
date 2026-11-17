@@ -25,6 +25,8 @@ import PlaceholderScreen from '../screens/PlaceholderScreen';
 import BecomeDriverScreen from '../screens/BecomeDriverScreen';
 import BecomeMerchantScreen from '../screens/BecomeMerchantScreen';
 import AssistantScreen from '../screens/AssistantScreen';
+import HelpScreen from '../screens/HelpScreen';
+import DeleteAccountScreen from '../screens/DeleteAccountScreen';
 import MerchantScreen from '../screens/MerchantScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -208,6 +210,8 @@ export default function AppNavigator() {
             <Stack.Screen name="History" component={HistoryScreen} />
             <Stack.Screen name="BecomeDriver" component={BecomeDriverScreen} />
             <Stack.Screen name="Assistant" component={AssistantScreen} />
+            <Stack.Screen name="Help" component={HelpScreen} />
+            <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="BecomeMerchant" component={BecomeMerchantScreen} />

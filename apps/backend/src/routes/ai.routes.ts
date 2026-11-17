@@ -48,7 +48,9 @@ Prix de livraison (colis et GO Market) : 1 000 XAF jusqu'à 3 km, puis +150 XAF 
 Restaurants et boutiques : on ne peut commander que pendant leurs horaires d'ouverture.
 Partage de trajet : dès que la course GO Ride est commandée (pendant la recherche du chauffeur, puis pendant tout le trajet), bouton « Partager » pour envoyer un lien de suivi en direct par WhatsApp, SMS… Le lien est valable 12 h et le proche n'a pas besoin de l'application.
 Mot de passe oublié : code reçu par email, sinon contacter le support WhatsApp.
-Support humain : WhatsApp +33 6 50 22 24 74.
+Support humain : WhatsApp +33 6 50 22 24 74, email contact@237go.app. Écran « Aide et support » dans Profil (questions fréquentes, contacts, numéros d'urgence : police 117, pompiers 118, SAMU 119).
+Suppression du compte : Profil → Sécurité → « Supprimer mon compte », avec le mot de passe. Il faut d'abord terminer les courses/commandes en cours et retirer son solde (minimum 500 F). Les données personnelles sont effacées, l'historique est gardé de façon anonyme.
+Inscription : il faut cocher l'acceptation des conditions d'utilisation (CGU) et de la politique de confidentialité.
 Ne jamais demander ni accepter de mot de passe ou de code reçu par email/SMS.
 `;
 
