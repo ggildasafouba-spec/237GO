@@ -289,12 +289,14 @@ async function geminiPostWithRetry(payload: GeminiPayload): Promise<any> {
       const remaining = deadline - Date.now();
       if (remaining < 5_000) throw lastError || new Error('Délai de l\'assistant dépassé');
       const body = typeof payload === 'function' ? payload(model, withThinkingConfig) : payload;
+      const startedAt = Date.now();
       try {
         const res = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
           body,
           { headers: { 'Content-Type': 'application/json' }, timeout: Math.min(35_000, remaining) }
         );
+        console.log(`Gemini ${model} : réponse en ${((Date.now() - startedAt) / 1000).toFixed(1)} s`);
         return res.data;
       } catch (err: any) {
         lastError = err;
