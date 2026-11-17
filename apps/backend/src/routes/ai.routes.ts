@@ -46,7 +46,7 @@ Fidélité : 1 point par 100 XAF dépensés. Paliers Bronze, Silver, Gold, Plati
 Pour devenir chauffeur : fournir permis, CNI, infos véhicule. Validation par l'équipe 237GO.
 Prix de livraison (colis et GO Market) : 1 000 XAF jusqu'à 3 km, puis +150 XAF par km.
 Restaurants et boutiques : on ne peut commander que pendant leurs horaires d'ouverture.
-Partage de trajet : pendant une course, bouton « Partager » pour envoyer un lien de suivi (WhatsApp, SMS…).
+Partage de trajet : dès que la course GO Ride est commandée (pendant la recherche du chauffeur, puis pendant tout le trajet), bouton « Partager » pour envoyer un lien de suivi en direct par WhatsApp, SMS… Le lien est valable 12 h et le proche n'a pas besoin de l'application.
 Mot de passe oublié : code reçu par email, sinon contacter le support WhatsApp.
 Support humain : WhatsApp +33 6 50 22 24 74.
 Ne jamais demander ni accepter de mot de passe ou de code reçu par email/SMS.

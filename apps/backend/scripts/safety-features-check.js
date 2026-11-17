@@ -293,6 +293,25 @@ const hhmm = (min) => {
   const bad = await fetch(`${API}/track/n.importe.quoi`);
   check('page web : lien invalide → 404 lisible', bad.status === 404 && /expiré/.test(await bad.text()));
 
+  // Partage dès la commande (course en attente d'un chauffeur)
+  const pendingRide = await prisma.ride.create({
+    data: {
+      passengerId: client.id, status: 'PENDING', vehicleType: 'MOTO',
+      pickupLat: POS.lat, pickupLng: POS.lng, pickupAddress: 'Poste centrale',
+      dropoffLat: 3.8667, dropoffLng: 11.5167, dropoffAddress: 'Bastos', estimatedPrice: 1500, paymentMethod: 'CASH',
+    },
+  });
+  r = await api('POST', `/safety/rides/${pendingRide.id}/share`, T.client);
+  check('course commandée (en attente) : partage possible', r.status === 200 && !!r.body?.data?.url, msg(r));
+  const pendingTok = r.body?.data?.url?.split('/track/')[1];
+  r = await api('GET', `/safety/track/${pendingTok}`);
+  check('suivi en attente : statut PENDING, pas encore de chauffeur', r.body?.data?.status === 'PENDING' && r.body?.data?.driver === null && r.body?.data?.driverPosition === null, msg(r));
+  const pendingPage = await (await fetch(`${API}/track/${pendingTok}`)).text();
+  check('page web en attente : « Recherche d\'un chauffeur »', pendingPage.includes('Recherche d'));
+  await prisma.ride.update({ where: { id: pendingRide.id }, data: { driverId: driver.id, status: 'ACCEPTED' } });
+  r = await api('GET', `/safety/track/${pendingTok}`);
+  check('même lien après acceptation : chauffeur et position visibles', r.body?.data?.status === 'ACCEPTED' && r.body?.data?.driver?.plate === 'LT-237-SF' && !!r.body?.data?.driverPosition, msg(r));
+
   // Fin de course
   await prisma.ride.update({ where: { id: ride.id }, data: { status: 'COMPLETED', completedAt: new Date() } });
   r = await api('GET', `/safety/track/${tok}`);

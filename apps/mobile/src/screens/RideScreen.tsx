@@ -719,6 +719,18 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
         <Text style={styles.waitingTitle}>Recherche d'un chauffeur...</Text>
         <Text style={styles.waitingSubtitle}>Veuillez patienter</Text>
 
+        {/* Partage possible dès la commande : le proche verra le chauffeur dès qu'il accepte */}
+        {currentRide?.id && (
+          <TouchableOpacity
+            style={[styles.shareButton, { marginTop: spacing.lg }]}
+            onPress={handleShare}
+            accessibilityLabel="Partager le trajet"
+            accessibilityRole="button"
+          >
+            <Text style={styles.shareText}>📤 Partager mon trajet</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={[styles.button, styles.cancelButton]}
           onPress={handleCancel}
