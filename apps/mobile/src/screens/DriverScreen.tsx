@@ -399,19 +399,8 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
             </TouchableOpacity>
           )}
 
-          {/* Bouton pour envoyer la position GPS */}
-          <TouchableOpacity
-            style={styles.gpsButton}
-            onPress={() => {
-              const socket = socketRef.current;
-              if (socket) {
-                socket.emit('driver:location', { lat: 4.052, lng: 9.769, rideId: activeJob.type === 'ride' ? activeJob.id : undefined });
-              }
-            }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.gpsButtonText}>📡 Envoyer ma position</Text>
-          </TouchableOpacity>
+          {/* La position réelle est envoyée automatiquement toutes les 8 s pendant une course.
+              (L'ancien bouton « Envoyer ma position » envoyait une position FIXE à Douala.) */}
         </View>
       </View>
     );
@@ -612,8 +601,6 @@ const styles = StyleSheet.create({
   statusValue: { fontSize: typography.md, fontWeight: '700', color: colors.primary, marginTop: 2 },
   nextButton: { backgroundColor: colors.primary, padding: spacing.md, borderRadius: 12, alignItems: 'center', marginBottom: spacing.sm },
   nextButtonText: { color: '#fff', fontWeight: '700', fontSize: typography.md },
-  gpsButton: { backgroundColor: '#E3F2FD', padding: spacing.sm, borderRadius: 8, alignItems: 'center' },
-  gpsButtonText: { color: colors.info, fontWeight: '600' },
   callPassenger: { backgroundColor: '#E8F5E9', padding: spacing.md, borderRadius: 10, alignItems: 'center', marginBottom: spacing.md },
   callPassengerText: { color: colors.primaryDark, fontWeight: '700' },
 });
