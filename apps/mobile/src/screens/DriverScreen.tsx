@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import { getSocket } from '../config/socket';
 import { useLocation } from '../hooks/useLocation';
 import RideMap from '../components/RideMap';
+import SOSButton from '../components/SOSButton';
 import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
@@ -380,6 +381,12 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
             <Text style={styles.statusLabel}>Statut actuel</Text>
             <Text style={styles.statusValue}>{activeJob.status}</Text>
           </View>
+
+          {/* Le chauffeur / livreur aussi peut être en danger */}
+          <SOSButton
+            context={{ serviceType: activeJob.type === 'ride' ? 'RIDE' : 'DELIVERY', serviceId: activeJob.id }}
+            style={{ marginBottom: spacing.md }}
+          />
 
           {nextAction && (
             <TouchableOpacity

@@ -15,8 +15,15 @@ import { useCarpoolStore } from '../store/carpoolStore';
 import { useAuthStore } from '../store/authStore';
 import EscrowActions from '../components/EscrowActions';
 import CancelAction from '../components/CancelAction';
+import SOSButton from '../components/SOSButton';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
+
+// Le bouton SOS s'affiche autour du trajet : de 2 h avant le départ à 24 h après
+const nearTrip = (departureTime: string) => {
+  const t = new Date(departureTime).getTime();
+  return Date.now() >= t - 2 * 3_600_000 && Date.now() <= t + 24 * 3_600_000;
+};
 
 // Coordonnées connues des grandes villes camerounaises (fallback si géocodage indispo)
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -454,6 +461,13 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
                 {new Date(trip.departureTime).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}
                 {trip.status === 'CANCELLED' ? '  ·  ❌ Annulé' : ''}
               </Text>
+              {/* SOS du conducteur pendant le trajet */}
+              {['ACTIVE', 'FULL', 'DEPARTED'].includes(trip.status) && nearTrip(trip.departureTime) && (
+                <SOSButton
+                  context={{ serviceType: 'CARPOOL', serviceId: trip.id }}
+                  style={{ marginTop: spacing.sm }}
+                />
+              )}
               {/* Le chauffeur annule son trajet avant le départ : passagers remboursés à 100 % */}
               {(trip.status === 'ACTIVE' || trip.status === 'FULL') && new Date(trip.departureTime).getTime() > Date.now() && (
                 <CancelAction
@@ -514,6 +528,14 @@ export default function CarpoolScreen({ navigation }: { navigation: any }) {
                 {item.status === 'CONFIRMED' ? '✅ Confirmé' : item.status === 'CANCELLED' ? '❌ Annulé' : item.status === 'COMPLETED' ? '🏁 Terminé' : '⏳ En attente'}
               </Text>
             </View>
+
+            {/* SOS pendant le trajet */}
+            {item.status === 'CONFIRMED' && nearTrip(item.carpool.departureTime) && (
+              <SOSButton
+                context={{ serviceType: 'CARPOOL', serviceId: item.id }}
+                style={{ marginTop: spacing.sm }}
+              />
+            )}
 
             {/* Actions escrow : confirmer l'arrivée pour libérer le paiement au chauffeur */}
             {item.status === 'CONFIRMED' && (

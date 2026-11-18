@@ -118,10 +118,50 @@ export async function publicTrip(token: string) {
 
 const SOS_DEDUP_MS = 2 * 60 * 1000; // un 2e appui dans les 2 min met à jour la même alerte
 
+export const SOS_SERVICE_LABELS: Record<string, string> = {
+  RIDE: 'Course',
+  DELIVERY: 'Livraison',
+  CARPOOL: 'Covoiturage',
+  RENTAL: 'Location',
+};
+
+/**
+ * Le service n'est rattaché à l'alerte que si l'utilisateur y participe vraiment
+ * (sinon on pourrait attirer l'équipe 237GO sur le service de quelqu'un d'autre).
+ *  - RIDE : passager ou chauffeur de la course ;
+ *  - DELIVERY : client ou livreur ;
+ *  - CARPOOL : passager de la réservation, ou conducteur (réservation ou trajet) ;
+ *  - RENTAL : locataire ou propriétaire du véhicule de la réservation.
+ */
+async function verifiedService(userId: string, type: string, id: string): Promise<boolean> {
+  switch (type) {
+    case 'RIDE': {
+      const r = await prisma.ride.findUnique({ where: { id }, select: { passengerId: true, driverId: true } });
+      return !!r && (r.passengerId === userId || r.driverId === userId);
+    }
+    case 'DELIVERY': {
+      const d = await prisma.delivery.findUnique({ where: { id }, select: { senderId: true, driverId: true } });
+      return !!d && (d.senderId === userId || d.driverId === userId);
+    }
+    case 'CARPOOL': {
+      const b = await prisma.carpoolBooking.findUnique({ where: { id }, select: { passengerId: true, carpool: { select: { driverId: true } } } });
+      if (b) return b.passengerId === userId || b.carpool.driverId === userId;
+      const c = await prisma.carpool.findUnique({ where: { id }, select: { driverId: true } });
+      return !!c && c.driverId === userId;
+    }
+    case 'RENTAL': {
+      const b = await prisma.rentalBooking.findUnique({ where: { id }, select: { renterId: true, vehicle: { select: { ownerId: true } } } });
+      return !!b && (b.renterId === userId || b.vehicle.ownerId === userId);
+    }
+    default:
+      return false;
+  }
+}
+
 export async function triggerSos(
   io: Server | undefined,
   userId: string,
-  input: { lat?: unknown; lng?: unknown; rideId?: unknown }
+  input: { lat?: unknown; lng?: unknown; rideId?: unknown; serviceType?: unknown; serviceId?: unknown }
 ) {
   const lat = Number(input?.lat);
   const lng = Number(input?.lng);
@@ -129,12 +169,18 @@ export async function triggerSos(
     return { error: 'Position GPS invalide', status: 400 as const };
   }
 
-  // La course n'est rattachée que si l'utilisateur y participe vraiment
-  let rideId: string | null = null;
-  if (typeof input?.rideId === 'string' && input.rideId) {
-    const ride = await prisma.ride.findUnique({ where: { id: input.rideId }, select: { passengerId: true, driverId: true } });
-    if (ride && (ride.passengerId === userId || ride.driverId === userId)) rideId = input.rideId;
+  // Service concerné (les anciennes versions de l'app n'envoient que rideId)
+  let serviceType = typeof input?.serviceType === 'string' ? input.serviceType.toUpperCase() : null;
+  let serviceId = typeof input?.serviceId === 'string' && input.serviceId ? input.serviceId : null;
+  if (!serviceType && typeof input?.rideId === 'string' && input.rideId) {
+    serviceType = 'RIDE';
+    serviceId = input.rideId;
   }
+  if (!serviceType || !serviceId || !SOS_SERVICE_LABELS[serviceType] || !(await verifiedService(userId, serviceType, serviceId))) {
+    serviceType = null;
+    serviceId = null;
+  }
+  const rideId = serviceType === 'RIDE' ? serviceId : null;
 
   const [user, contacts] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true, phone: true } }),
@@ -147,8 +193,19 @@ export async function triggerSos(
     orderBy: { createdAt: 'desc' },
   });
   const alert = recent
-    ? await prisma.sosAlert.update({ where: { id: recent.id }, data: { lat, lng, rideId: rideId ?? recent.rideId } })
-    : await prisma.sosAlert.create({ data: { userId, lat, lng, rideId } });
+    ? await prisma.sosAlert.update({
+        where: { id: recent.id },
+        data: {
+          lat, lng,
+          rideId: rideId ?? recent.rideId,
+          serviceType: serviceType ?? recent.serviceType,
+          serviceId: serviceId ?? recent.serviceId,
+        },
+      })
+    : await prisma.sosAlert.create({ data: { userId, lat, lng, rideId, serviceType, serviceId } });
+  const serviceLine = alert.serviceType && alert.serviceId
+    ? `${SOS_SERVICE_LABELS[alert.serviceType] || alert.serviceType} #${alert.serviceId.slice(0, 8)}`
+    : null;
 
   const mapLink = `https://maps.google.com/?q=${lat},${lng}`;
   const share = alert.rideId ? await createTripShare(alert.rideId, userId) : null;
@@ -156,7 +213,8 @@ export async function triggerSos(
 
   // Tableau de bord admin en temps réel (à chaque appui : la position est actualisée)
   io?.to('admins').emit('sos_alert', {
-    id: alert.id, userId, userName, lat, lng, rideId: alert.rideId, timestamp: alert.createdAt.toISOString(),
+    id: alert.id, userId, userName, lat, lng, rideId: alert.rideId,
+    serviceType: alert.serviceType, serviceId: alert.serviceId, timestamp: alert.createdAt.toISOString(),
   });
 
   let smsSent = 0;
@@ -168,7 +226,7 @@ export async function triggerSos(
         <h2 style="color:#C62828">🚨 Alerte SOS</h2>
         <p><b>${escapeHtml(userName)}</b> (${escapeHtml(user?.phone || '')}) a déclenché une alerte SOS.</p>
         <p>Position : <a href="${mapLink}">${lat.toFixed(5)}, ${lng.toFixed(5)}</a></p>
-        ${alert.rideId ? `<p>Course #${alert.rideId.slice(0, 8)}${followLink ? ` — <a href="${followLink}">suivre en direct</a>` : ''}</p>` : ''}
+        ${serviceLine ? `<p>${escapeHtml(serviceLine)}${followLink ? ` — <a href="${followLink}">suivre en direct</a>` : ''}</p>` : ''}
         <p>Contacts d'urgence enregistrés : ${contacts.length}</p>
         <p>Rappelez la personne immédiatement, puis marquez l'alerte comme traitée dans l'administration.</p>
       </div>`;

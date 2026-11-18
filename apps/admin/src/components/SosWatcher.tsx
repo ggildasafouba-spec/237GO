@@ -17,12 +17,20 @@ interface SosAlert {
   lat: number;
   lng: number;
   rideId: string | null;
+  serviceType?: string | null;
+  serviceId?: string | null;
   createdAt: string;
   updatedAt: string;
   user?: { firstName: string; lastName: string; phone: string };
 }
 
 const POLL_MS = 10_000;
+const SERVICE_LABELS: Record<string, string> = {
+  RIDE: '🚗 Course',
+  DELIVERY: '📦 Livraison',
+  CARPOOL: '🚙 Covoiturage',
+  RENTAL: '🔑 Location',
+};
 const BASE_TITLE = document.title;
 
 function beep(ctx: AudioContext | null) {
@@ -164,7 +172,9 @@ export default function SosWatcher() {
                 <div style={styles.meta}>
                   Déclenchée {since(a.createdAt)}
                   {a.updatedAt !== a.createdAt ? ` · position mise à jour ${since(a.updatedAt)}` : ''}
-                  {a.rideId ? ` · Course #${a.rideId.substring(0, 8)}` : ''}
+                  {a.serviceType && a.serviceId
+                    ? ` · ${SERVICE_LABELS[a.serviceType] || a.serviceType} #${a.serviceId.substring(0, 8)}`
+                    : a.rideId ? ` · Course #${a.rideId.substring(0, 8)}` : ' · hors service'}
                 </div>
               </div>
               <a href={`https://maps.google.com/?q=${a.lat},${a.lng}`} target="_blank" rel="noreferrer" style={styles.mapBtn}>📍 Position</a>

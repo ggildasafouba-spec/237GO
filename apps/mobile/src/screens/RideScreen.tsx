@@ -241,7 +241,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
               const loc = await getCurrentLocation();
               const lat = loc?.latitude ?? pickup.lat;
               const lng = loc?.longitude ?? pickup.lng;
-              const result = await sendSos(lat, lng, currentRide.id);
+              const result = await sendSos(lat, lng, { serviceType: 'RIDE', serviceId: currentRide.id });
               Alert.alert(
                 '✅ Alerte envoyée à 237GO',
                 'Prévenez aussi un proche : un message avec votre position et le suivi de la course est prêt.',

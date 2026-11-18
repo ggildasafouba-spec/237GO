@@ -14,6 +14,7 @@ import { useDeliveryStore } from '../store/deliveryStore';
 import { useLocation } from '../hooks/useLocation';
 import EscrowActions from '../components/EscrowActions';
 import CancelAction from '../components/CancelAction';
+import SOSButton from '../components/SOSButton';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -435,6 +436,14 @@ export default function DeliveryScreen({ navigation }: { navigation: any }) {
           </View>
         )}
       </View>
+
+      {/* SOS pendant la livraison (livreur trouvé → livré) */}
+      {currentDelivery?.id && ['ACCEPTED', 'PICKING_UP', 'IN_TRANSIT'].includes(currentDelivery.status || '') && (
+        <SOSButton
+          context={{ serviceType: 'DELIVERY', serviceId: currentDelivery.id }}
+          style={{ marginTop: spacing.md }}
+        />
+      )}
 
       {/* Quand livré : confirmation de réception (escrow) */}
       {currentDelivery?.status === 'DELIVERED' && currentDelivery?.id && (

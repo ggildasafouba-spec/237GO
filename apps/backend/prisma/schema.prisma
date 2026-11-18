@@ -678,6 +678,9 @@ model SosAlert {
   lat       Float
   lng       Float
   rideId    String?        // course associée, le cas échéant
+  // Service en cours au moment de l'alerte : RIDE | DELIVERY | CARPOOL | RENTAL (+ son identifiant)
+  serviceType String?
+  serviceId   String?
   status    SosAlertStatus @default(ACTIVE)
   resolvedBy String?       // id de l'admin qui a traité l'alerte
   resolvedAt DateTime?

@@ -1,49 +1,32 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  Vibration,
-  Linking,
-} from 'react-native';
-import { sendSos, shareText } from '../config/safety';
+import { Text, StyleSheet, TouchableOpacity, Alert, Vibration, Linking } from 'react-native';
+import { sendSos, shareText, SosContext } from '../config/safety';
 import { useLocation } from '../hooks/useLocation';
 import { colors, spacing, typography } from '../theme';
 
 interface SOSButtonProps {
-  rideId?: string;
+  /** Service en cours (course, livraison, covoiturage, location) : rattaché à l'alerte */
+  context?: SosContext;
+  /** Libellé complet (« 🚨 SOS — Urgence ») ou court (« 🚨 SOS ») */
+  compact?: boolean;
   style?: object;
 }
 
-export default function SOSButton({ rideId, style }: SOSButtonProps) {
+/**
+ * Bouton SOS réutilisable : alerte l'équipe 237GO avec la position actuelle et le service
+ * en cours, puis propose de prévenir un proche (WhatsApp, SMS…) et d'appeler le 117.
+ */
+export default function SOSButton({ context, compact, style }: SOSButtonProps) {
   const [isSending, setIsSending] = useState(false);
   const { getCurrentLocation } = useLocation();
 
-  const handleSOS = () => {
-    Alert.alert(
-      '🚨 URGENCE',
-      'Envoyer une alerte SOS ?\n\nVotre position sera envoyée à l\'équipe 237GO.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: '🚨 ENVOYER SOS',
-          style: 'destructive',
-          onPress: sendSOS,
-        },
-      ]
-    );
-  };
-
-  const sendSOS = async () => {
+  const sendNow = async () => {
     setIsSending(true);
     Vibration.vibrate([0, 500, 200, 500, 200, 500]);
-
     try {
       const location = await getCurrentLocation();
       if (!location) throw new Error('position');
-      const result = await sendSos(location.latitude, location.longitude, rideId);
+      const result = await sendSos(location.latitude, location.longitude, context);
 
       // Le SMS automatique n'est pas encore actif : on propose d'envoyer soi-même le message
       Alert.alert(
@@ -65,6 +48,18 @@ export default function SOSButton({ rideId, style }: SOSButtonProps) {
     }
   };
 
+  const handleSOS = () => {
+    if (isSending) return;
+    Alert.alert(
+      '🚨 URGENCE',
+      'Envoyer une alerte SOS ?\n\nL\'équipe 237GO recevra votre position.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: '🚨 ENVOYER SOS', style: 'destructive', onPress: sendNow },
+      ]
+    );
+  };
+
   return (
     <TouchableOpacity
       style={[styles.sosButton, style, isSending && styles.sending]}
@@ -72,40 +67,24 @@ export default function SOSButton({ rideId, style }: SOSButtonProps) {
       disabled={isSending}
       accessibilityLabel="Bouton SOS urgence"
       accessibilityRole="button"
-      accessibilityHint="Appuyez pour envoyer une alerte d'urgence"
+      accessibilityHint="Appuyez pour envoyer une alerte d'urgence à l'équipe 237GO"
     >
-      <Text style={styles.sosIcon}>🚨</Text>
-      <Text style={styles.sosText}>{isSending ? 'Envoi...' : 'SOS'}</Text>
+      <Text style={styles.sosText}>{isSending ? 'Envoi…' : compact ? '🚨 SOS' : '🚨 SOS — Urgence'}</Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   sosButton: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#FFEBEE',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm + 2,
     borderRadius: 25,
     borderWidth: 2,
     borderColor: colors.error,
-    elevation: 4,
-    shadowColor: colors.error,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
-  sending: {
-    opacity: 0.6,
-  },
-  sosIcon: {
-    fontSize: 18,
-    marginRight: spacing.xs,
-  },
-  sosText: {
-    color: colors.error,
-    fontWeight: '900',
-    fontSize: typography.md,
-  },
+  sending: { opacity: 0.6 },
+  sosText: { color: colors.error, fontWeight: '900', fontSize: typography.md },
 });

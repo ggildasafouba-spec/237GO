@@ -13,14 +13,24 @@ export interface SosResult {
  * Déclenche une alerte SOS. Passe par l'API (réponse garantie) ; si le réseau HTTP échoue,
  * on tente encore le canal temps réel. L'équipe 237GO est prévenue côté serveur.
  */
-export async function sendSos(lat: number, lng: number, rideId?: string): Promise<SosResult> {
+export type SosServiceType = 'RIDE' | 'DELIVERY' | 'CARPOOL' | 'RENTAL';
+export interface SosContext { serviceType: SosServiceType; serviceId: string }
+
+export async function sendSos(lat: number, lng: number, context?: SosContext): Promise<SosResult> {
+  // rideId : compris aussi par les anciennes versions du serveur
+  const body = {
+    lat, lng,
+    serviceType: context?.serviceType,
+    serviceId: context?.serviceId,
+    rideId: context?.serviceType === 'RIDE' ? context.serviceId : undefined,
+  };
   try {
-    const res = await api.post('/safety/sos', { lat, lng, rideId }, { timeout: 15000 });
+    const res = await api.post('/safety/sos', body, { timeout: 15000 });
     return res.data.data as SosResult;
   } catch (error) {
     const socket = getSocket();
     if (socket?.connected) {
-      socket.emit('sos', { lat, lng, rideId });
+      socket.emit('sos', body);
       return {
         contactsCount: 0,
         smsSent: 0,

@@ -258,6 +258,102 @@ const hhmm = (min) => {
   check('SOS socket position invalide : erreur, pas de crash', !!(await err));
 
   // =====================================================================
+  console.log('\n=== 4b. SOS SUR LES AUTRES SERVICES ===');
+  {
+    const sos = (t, body) => api('POST', '/safety/sos', t, { lat: 3.85, lng: 11.5, ...body });
+    const alertOf = (res) => prisma.sosAlert.findUnique({ where: { id: res.body?.data?.alertId } });
+    const fresh = async (role) => { const u = await mkUser(role); return { u, t: token(u.id) }; };
+
+    // Chauffeur de la course (côté chauffeur)
+    const rd = await fresh('DRIVER');
+    const rp = await fresh('PASSENGER');
+    const r2 = await prisma.ride.create({
+      data: {
+        passengerId: rp.u.id, driverId: rd.u.id, status: 'IN_PROGRESS', vehicleType: 'MOTO',
+        pickupLat: 3.84, pickupLng: 11.5, pickupAddress: 'A', dropoffLat: 3.86, dropoffLng: 11.52, dropoffAddress: 'B',
+        estimatedPrice: 1500, paymentMethod: 'CASH',
+      },
+    });
+    let res = await sos(rd.t, { serviceType: 'RIDE', serviceId: r2.id });
+    let a = await alertOf(res);
+    check('SOS du chauffeur rattaché à sa course', a?.serviceType === 'RIDE' && a?.serviceId === r2.id && a?.rideId === r2.id, msg(res));
+
+    // Livraison : client et livreur
+    const ds = await fresh('PASSENGER');
+    const dd = await fresh('DRIVER');
+    const del = await prisma.delivery.create({
+      data: {
+        senderId: ds.u.id, driverId: dd.u.id, status: 'IN_TRANSIT', packageType: 'SMALL_PACKAGE',
+        pickupLat: 3.84, pickupLng: 11.5, pickupAddress: 'A', pickupContact: '699990001',
+        dropoffLat: 3.86, dropoffLng: 11.52, dropoffAddress: 'B', dropoffContact: '699990002',
+        estimatedPrice: 1000, paymentMethod: 'CASH',
+      },
+    });
+    res = await sos(dd.t, { serviceType: 'DELIVERY', serviceId: del.id });
+    a = await alertOf(res);
+    check('SOS du livreur rattaché à la livraison', a?.serviceType === 'DELIVERY' && a?.serviceId === del.id && a?.rideId === null, msg(res));
+    res = await sos(ds.t, { serviceType: 'DELIVERY', serviceId: del.id });
+    check('SOS du client rattaché à la livraison', (await alertOf(res))?.serviceType === 'DELIVERY');
+
+    // Covoiturage : passager (réservation) et conducteur (trajet)
+    const cd = await fresh('DRIVER');
+    const cp = await fresh('PASSENGER');
+    const carpool = await prisma.carpool.create({
+      data: {
+        driverId: cd.u.id, departureLat: 3.85, departureLng: 11.5, departureCity: 'Yaoundé', departureAddress: 'Mvan',
+        arrivalLat: 4.05, arrivalLng: 9.7, arrivalCity: 'Douala', arrivalAddress: 'Akwa',
+        departureTime: new Date(), availableSeats: 3, pricePerSeat: 5000, status: 'DEPARTED',
+      },
+    });
+    const booking = await prisma.carpoolBooking.create({ data: { carpoolId: carpool.id, passengerId: cp.u.id, seats: 1, status: 'CONFIRMED' } });
+    res = await sos(cp.t, { serviceType: 'CARPOOL', serviceId: booking.id });
+    check('SOS du passager de covoiturage rattaché à sa réservation', (await alertOf(res))?.serviceId === booking.id, msg(res));
+    res = await sos(cd.t, { serviceType: 'CARPOOL', serviceId: carpool.id });
+    check('SOS du conducteur de covoiturage rattaché à son trajet', (await alertOf(res))?.serviceId === carpool.id, msg(res));
+
+    // Location : locataire
+    const owner = await fresh('PASSENGER');
+    const renter = await fresh('PASSENGER');
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        ownerId: owner.u.id, type: 'CAR_ECONOMY', brand: 'Toyota', model: 'Corolla', year: 2018, plate: 'CE-1-' + Date.now(),
+        pricePerDay: 25000, locationLat: 3.85, locationLng: 11.5, locationAddress: 'Bastos', verificationStatus: 'VERIFIED',
+      },
+    });
+    const rental = await prisma.rentalBooking.create({
+      data: { vehicleId: vehicle.id, renterId: renter.u.id, startDate: new Date(), endDate: new Date(Date.now() + 86400000), totalPrice: 25000, status: 'ACTIVE', paymentMethod: 'CASH' },
+    });
+    res = await sos(renter.t, { serviceType: 'RENTAL', serviceId: rental.id });
+    check('SOS du locataire rattaché à la location', (await alertOf(res))?.serviceType === 'RENTAL', msg(res));
+
+    // Sécurité : service d'un autre / type inconnu → alerte envoyée, mais non rattachée
+    const intruder = await fresh('PASSENGER');
+    res = await sos(intruder.t, { serviceType: 'DELIVERY', serviceId: del.id });
+    a = await alertOf(res);
+    check('SOS avec la livraison d\'un autre : alerte envoyée, service non rattaché', res.status === 200 && a?.serviceType === null && a?.serviceId === null, msg(res));
+    const intruder2 = await fresh('PASSENGER');
+    res = await sos(intruder2.t, { serviceType: 'HACK', serviceId: del.id });
+    check('type de service inconnu : non rattaché', (await alertOf(res))?.serviceType === null);
+
+    // Ancien format (rideId seul) toujours compris
+    const op = await fresh('PASSENGER');
+    const r3 = await prisma.ride.create({
+      data: {
+        passengerId: op.u.id, driverId: rd.u.id, status: 'ACCEPTED', vehicleType: 'MOTO',
+        pickupLat: 3.84, pickupLng: 11.5, pickupAddress: 'A', dropoffLat: 3.86, dropoffLng: 11.52, dropoffAddress: 'B',
+        estimatedPrice: 1500, paymentMethod: 'CASH',
+      },
+    });
+    res = await sos(op.t, { rideId: r3.id });
+    a = await alertOf(res);
+    check('ancien format (rideId seul) : rattaché comme course', a?.serviceType === 'RIDE' && a?.rideId === r3.id, msg(res));
+
+    r = await api('GET', '/admin/sos-alerts?status=ACTIVE', T.admin);
+    const listed = (r.body?.data || []).find((x) => x.serviceId === del.id && x.serviceType === 'DELIVERY');
+    check('liste admin : type et identifiant du service présents', !!listed, msg(r));
+  }
+
+  // =====================================================================
   console.log('\n=== 5. PARTAGE DE TRAJET ===');
   r = await api('POST', `/safety/rides/${ride.id}/share`, T.client);
   const share = r.body?.data;

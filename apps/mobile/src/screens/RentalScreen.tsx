@@ -13,6 +13,7 @@ import {
 import { useRentalStore } from '../store/rentalStore';
 import EscrowActions from '../components/EscrowActions';
 import CancelAction from '../components/CancelAction';
+import SOSButton from '../components/SOSButton';
 import { pickAndUploadImage } from '../config/upload';
 import { useSafeScreen } from '../hooks/useSafeScreen';
 import { colors, spacing, typography } from '../theme';
@@ -786,6 +787,16 @@ export default function RentalScreen({ navigation }: { navigation: any }) {
               <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>{bookingStatusLabel(item.status)}</Text>
               <Text style={styles.vehicleCardPrice}>{item.totalPrice.toLocaleString()} XAF</Text>
             </View>
+
+            {/* SOS pendant la location (du jour de début jusqu'au lendemain de la fin) */}
+            {(item.status === 'CONFIRMED' || item.status === 'ACTIVE') &&
+              Date.now() >= new Date(item.startDate).getTime() - 2 * 3_600_000 &&
+              Date.now() <= new Date(item.endDate).getTime() + 24 * 3_600_000 && (
+              <SOSButton
+                context={{ serviceType: 'RENTAL', serviceId: item.id }}
+                style={{ marginTop: spacing.sm }}
+              />
+            )}
 
             {/* Actions escrow : confirmer le retour pour libérer le paiement au propriétaire */}
             {item.status === 'CONFIRMED' && (
