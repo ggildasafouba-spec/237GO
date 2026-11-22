@@ -1,0 +1,103 @@
+name: Build Play Store (AAB, sans quota Expo)
+
+# Construit le fichier AAB à envoyer sur Google Play, DIRECTEMENT sur la machine Linux de
+# GitHub (« eas build --local ») : ne consomme PAS le quota gratuit de builds Expo.
+#
+# - Même configuration que les builds Expo (eas.json, profil « production » : app-bundle,
+#   canal OTA « production »).
+# - Même clé de signature : elle est gérée par Expo et téléchargée pendant le build
+#   (le token EXPO_TOKEN suffit). Les mises à jour resteront compatibles.
+# - Le numéro de version (versionCode) est augmenté automatiquement par Expo.
+#
+# Résultat : onglet Actions → ce build → section « Artifacts » → 237go-play-store (.zip
+# contenant le fichier .aab à envoyer dans Play Console).
+#
+# Déclencheur : MANUEL (Actions → Build Play Store (AAB, sans quota Expo) → Run workflow).
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profil EAS (production = AAB pour le Play Store, preview = APK à installer)"
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - preview
+
+concurrency:
+  group: build-local-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Android local (GitHub)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Libérer de l'espace disque (le build Android en demande beaucoup)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/node_modules/@angular /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL || true
+          docker image prune --all --force || true
+          df -h /
+
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installer Java 17 (requis par Android/Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android SDK (préinstallé sur la machine GitHub) + licences
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Installer EAS CLI + se connecter à Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Installer les dépendances (racine du monorepo)
+        run: npm ci
+
+      - name: Construire (eas build --local)
+        working-directory: apps/mobile
+        env:
+          # Gradle : assez de mémoire sans dépasser celle de la machine GitHub
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -Dorg.gradle.daemon=false"
+          NODE_OPTIONS: "--max-old-space-size=6144"
+        run: |
+          PROFILE="${{ github.event.inputs.profile || 'production' }}"
+          if [ "$PROFILE" = "production" ]; then OUT="$GITHUB_WORKSPACE/out/237go.aab"; else OUT="$GITHUB_WORKSPACE/out/237go.apk"; fi
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          eas build \
+            --platform android \
+            --profile "$PROFILE" \
+            --local \
+            --non-interactive \
+            --output "$OUT"
+          ls -lh "$GITHUB_WORKSPACE/out"
+
+      - name: Mettre le fichier à disposition (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 237go-play-store
+          path: out/*
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Où trouver le fichier
+        run: |
+          echo "✅ Build terminé."
+          echo "Téléchargez le fichier : en haut de cette page → Summary → Artifacts → 237go-play-store"
+          echo "Puis Play Console → 237GO → Production → Créer une release → importer le .aab"
