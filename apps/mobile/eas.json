@@ -18,6 +18,10 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "production-play": {
+      "extends": "production",
+      "credentialsSource": "local"
     }
   },
   "submit": {

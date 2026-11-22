@@ -70,6 +70,34 @@ jobs:
       - name: Installer les dépendances (racine du monorepo)
         run: npm ci
 
+      # Clé d'importation Google Play (SHA-1 73:8A…), stockée chiffrée dans le secret
+      # ANDROID_PLAY_SIGNING. Écrite seulement le temps du build, jamais affichée ni envoyée.
+      - name: Préparer la clé de signature Google Play
+        if: ${{ (github.event.inputs.profile || 'production') == 'production' }}
+        working-directory: apps/mobile
+        env:
+          PLAY_SIGNING: ${{ secrets.ANDROID_PLAY_SIGNING }}
+        run: |
+          if [ -z "$PLAY_SIGNING" ]; then
+            echo "::error::Secret ANDROID_PLAY_SIGNING absent : le fichier serait signé avec une clé refusée par Google Play."
+            exit 1
+          fi
+          node -e '
+            const fs = require("fs");
+            const s = JSON.parse(Buffer.from(process.env.PLAY_SIGNING, "base64").toString("utf8"));
+            fs.mkdirSync("credentials/android", { recursive: true });
+            fs.writeFileSync("credentials/android/keystore.jks", Buffer.from(s.keystore, "base64"));
+            fs.writeFileSync("credentials.json", JSON.stringify({ android: { keystore: {
+              keystorePath: "credentials/android/keystore.jks",
+              keystorePassword: s.keystorePassword, keyAlias: s.keyAlias, keyPassword: s.keyPassword } } }));
+          '
+          FP=$(keytool -list -v -keystore credentials/android/keystore.jks -storepass "$(node -p 'JSON.parse(require("fs").readFileSync("credentials.json")).android.keystore.keystorePassword')" 2>/dev/null | grep -m1 'SHA1' | sed 's/.*SHA1: //')
+          echo "Empreinte de la clé : $FP"
+          if [ "$FP" != "73:8A:B0:D1:4D:B1:25:2C:0F:F5:96:64:B9:83:58:C5:9E:09:38:91" ]; then
+            echo "::error::Ce n'est pas la clé attendue par Google Play (73:8A…)."
+            exit 1
+          fi
+
       - name: Construire (eas build --local)
         working-directory: apps/mobile
         env:
@@ -78,15 +106,26 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=6144"
         run: |
           PROFILE="${{ github.event.inputs.profile || 'production' }}"
+          # Play Store : profil qui signe avec la clé locale (secret) au lieu de celle d'Expo
+          EAS_PROFILE="$PROFILE"; if [ "$PROFILE" = "production" ]; then EAS_PROFILE="production-play"; fi
           if [ "$PROFILE" = "production" ]; then OUT="$GITHUB_WORKSPACE/out/237go.aab"; else OUT="$GITHUB_WORKSPACE/out/237go.apk"; fi
           mkdir -p "$GITHUB_WORKSPACE/out"
           eas build \
             --platform android \
-            --profile "$PROFILE" \
+            --profile "$EAS_PROFILE" \
             --local \
             --non-interactive \
             --output "$OUT"
           ls -lh "$GITHUB_WORKSPACE/out"
+          if [ "$PROFILE" = "production" ]; then
+            echo "Signature du fichier :"
+            keytool -printcert -jarfile "$OUT" | grep -m1 'SHA1'
+          fi
+
+      - name: Effacer la clé de la machine GitHub
+        if: always()
+        working-directory: apps/mobile
+        run: rm -rf credentials credentials.json
 
       - name: Mettre le fichier à disposition (Artifacts)
         uses: actions/upload-artifact@v4

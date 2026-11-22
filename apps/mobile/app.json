@@ -75,7 +75,8 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/withOptionalPortrait"
     ],
     "owner": "ggildas",
     "extra": {
