@@ -18,6 +18,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
 import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
 import { colors, spacing, typography } from '../theme';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 
 const CATEGORIES = [
   { value: 'alimentation', label: '🥬 Alimentation' },
@@ -46,6 +47,7 @@ function UploadBox({ label, uri, loading, onPress, required }: { label: string; 
 }
 
 export default function BecomeMerchantScreen({ navigation }: { navigation: any }) {
+  const safe = useSafeScreen();
   const [shopName, setShopName] = useState('');
   const [shopAddress, setShopAddress] = useState('');
   const [shopLat, setShopLat] = useState(4.0511);
@@ -156,7 +158,7 @@ export default function BecomeMerchantScreen({ navigation }: { navigation: any }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scroll, safe.scroll, { paddingBottom: safe.insets.bottom + 120 }]} keyboardShouldPersistTaps="handled">
         <Text style={styles.icon}>🏪</Text>
         <Text style={styles.title}>Devenir marchand</Text>
         <Text style={styles.subtitle}>

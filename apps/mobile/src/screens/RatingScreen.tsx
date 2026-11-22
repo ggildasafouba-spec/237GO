@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import api from '../config/api';
 import { useSafeScreen } from '../hooks/useSafeScreen';
@@ -65,7 +68,12 @@ export default function RatingScreen({ navigation, route }: { navigation: any; r
   const stars = [1, 2, 3, 4, 5];
 
   return (
-    <View style={[styles.container, safe.topBottom]}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={[styles.container, safe.scroll]}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>Comment s'est passée votre {serviceLabel} ?</Text>
       {ratedName && <Text style={styles.driverName}>Avec {ratedName}</Text>}
 
@@ -121,12 +129,14 @@ export default function RatingScreen({ navigation, route }: { navigation: any; r
       >
         <Text style={styles.skipText}>Passer</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg, alignItems: 'center' },
+  flex: { flex: 1, backgroundColor: colors.background },
+  container: { flexGrow: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg, alignItems: 'center' },
   title: { fontSize: typography.xl, fontWeight: '700', color: colors.text, textAlign: 'center' },
   driverName: { fontSize: typography.md, color: colors.textSecondary, marginTop: spacing.xs },
   starsRow: { flexDirection: 'row', marginTop: spacing.xl, marginBottom: spacing.md },

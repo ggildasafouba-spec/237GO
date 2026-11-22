@@ -81,6 +81,8 @@ interface RentalState {
     registrationPhoto?: string;
     insurancePhoto?: string;
     ownerIdPhoto?: string;
+    localContactName: string;
+    localContactPhone: string;
   }) => Promise<void>;
 
   bookVehicle: (data: {

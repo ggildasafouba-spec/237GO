@@ -17,6 +17,7 @@ import { pickAndUploadImage } from '../config/upload';
 import { useAuthStore } from '../store/authStore';
 import { Image } from 'react-native';
 import { colors, spacing, typography } from '../theme';
+import { useSafeScreen } from '../hooks/useSafeScreen';
 
 interface CategoryCriteria {
   type: string;
@@ -55,6 +56,7 @@ function UploadBox({ label, uri, loading, onPress }: { label: string; uri: strin
 }
 
 export default function BecomeDriverScreen({ navigation }: { navigation: any }) {
+  const safe = useSafeScreen();
   const [licenseNumber, setLicenseNumber] = useState('');
   const [licenseExpiry, setLicenseExpiry] = useState('');
   const [cniNumber, setCniNumber] = useState('');
@@ -183,7 +185,7 @@ export default function BecomeDriverScreen({ navigation }: { navigation: any }) 
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scroll, safe.scroll]} keyboardShouldPersistTaps="handled">
         <Text style={styles.icon}>🚕</Text>
         <Text style={styles.title}>Devenir chauffeur</Text>
         <Text style={styles.subtitle}>

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +13,6 @@ import { useWalletStore } from '../store/walletStore';
 import Logo from '../components/Logo';
 import { colors, spacing, typography, gradients } from '../theme';
 
-const { width } = Dimensions.get('window');
 
 interface ServiceItem {
   id: string;
@@ -430,8 +428,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   serviceCard: {
-    width: (width - spacing.lg * 2 - spacing.md) / 2,
-    margin: spacing.xs,
+    // Pourcentages : s'adapte à tout écran (téléphone, tablette, cadre web de 480 px)
+    width: '47%',
+    margin: '1.5%',
     padding: spacing.md,
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -490,7 +489,7 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     alignItems: 'center',
-    width: (width - spacing.lg * 2 - spacing.md * 3) / 4,
+    width: '23%',
     padding: spacing.sm,
     backgroundColor: '#fff',
     borderRadius: 12,
