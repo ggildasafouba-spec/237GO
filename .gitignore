@@ -36,3 +36,9 @@ coverage/
 apps/backend/uploads/
 .vercel
 .env*
+
+# Clés de signature Android : ne JAMAIS les envoyer sur GitHub
+credentials.json
+credentials/
+*.jks
+*.keystore
