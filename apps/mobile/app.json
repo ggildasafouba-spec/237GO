@@ -31,7 +31,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#121A17"
+        "backgroundColor": "#006F52"
       },
       "package": "com.go237.app",
       "permissions": [

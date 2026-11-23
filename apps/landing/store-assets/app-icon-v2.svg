@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 400 400">
+  <!-- Icône 237GO v2 : fond vert, étoile du drapeau, rubans rouge / jaune / blanc.
+       Carré plein sans coins arrondis : Android et iOS appliquent leur propre masque. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00966E"/>
+      <stop offset="1" stop-color="#004D3A"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <polygon transform="translate(200,108) scale(0.24)" fill="#FCD116"
+    points="0,-100 22.45,-30.9 95.1,-30.9 36.33,11.8 58.78,80.9 0,38.2 -58.78,80.9 -36.33,11.8 -95.1,-30.9 -22.45,-30.9"/>
+  <text x="200" y="205" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="80" font-weight="bold" fill="#ffffff">237<tspan fill="#FCD116">GO</tspan></text>
+  <path d="M85 268 Q200 252 318 224" stroke="#CE1126" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <path d="M85 292 Q200 276 318 248" stroke="#FCD116" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <path d="M85 316 Q200 300 318 272" stroke="#ffffff" stroke-width="13" stroke-linecap="round" fill="none"/>
+</svg>
