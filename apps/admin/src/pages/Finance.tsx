@@ -14,6 +14,7 @@ interface Transaction {
 interface FinanceData {
   totalRevenue: number;
   commission: number;
+  commissionPercent?: number;
   walletDeposits: number;
   walletWithdrawals: number;
   recentTransactions: Transaction[];
@@ -161,7 +162,7 @@ export default function Finance() {
               <p style={styles.cardValue}>{fmt(data.totalRevenue)}</p>
             </div>
             <div style={{ ...styles.card, borderTop: '4px solid #FFB300' }}>
-              <p style={styles.cardLabel}>Commissions 237GO (15%)</p>
+              <p style={styles.cardLabel}>{`Commissions 237GO (${data.commissionPercent ?? 10}%)`}</p>
               <p style={styles.cardValue}>{fmt(data.commission)}</p>
             </div>
             <div style={{ ...styles.card, borderTop: '4px solid #1976D2' }}>

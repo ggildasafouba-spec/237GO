@@ -20,6 +20,7 @@ import { sendPushNotification } from '../services/notification.service';
 import { aiVision, aiChat, isAiConfigured, parseAiJson } from '../services/ai.service';
 import { importMenu } from '../lib/menuImport';
 import { AppError } from '../middleware/error.middleware';
+import { getPricingSettings, getCommissionRate, validatePricingInput, savePricingSettings } from '../lib/pricingSettings';
 
 const router = Router();
 
@@ -572,7 +573,8 @@ router.get('/finance/summary', async (req: AuthRequest, res: Response) => {
     ]);
 
     const totalRevenue = rideRevenue._sum.finalPrice || 0;
-    const commissionRate = 0.15;
+    // Taux actuel (approximation : les courses plus anciennes ont pu être payées à un autre taux)
+    const commissionRate = await getCommissionRate();
 
     // Transactions récentes
     const recentTransactions = await prisma.transaction.findMany({
@@ -588,6 +590,7 @@ router.get('/finance/summary', async (req: AuthRequest, res: Response) => {
       data: {
         totalRevenue,
         commission: totalRevenue * commissionRate,
+        commissionPercent: Math.round(commissionRate * 1000) / 10,
         walletDeposits: deposits._sum.amount || 0,
         walletWithdrawals: withdrawals._sum.amount || 0,
         period,
@@ -649,17 +652,9 @@ router.patch('/sos-alerts/:id/resolve', async (req: AuthRequest, res: Response) 
 // ========== PARAMÈTRES DE L'APPLICATION ==========
 
 // Valeurs par défaut si aucun paramètre n'a encore été enregistré.
+// La tarification (courses + commission) est gérée par lib/pricingSettings.ts : c'est elle
+// que le serveur lit pour calculer les prix et la commission.
 const DEFAULT_SETTINGS = {
-  pricing: {
-    motoBase: 200, motoPerKm: 150,
-    ecoBase: 500, ecoPerKm: 300,
-    comfortBase: 1000, comfortPerKm: 450,
-    vipBase: 2000, vipPerKm: 700,
-    commissionRate: 15,
-    loyaltyPointsPerXAF: 100,
-    bonusRechargeThreshold: 5000,
-    bonusRechargePercent: 5,
-  },
   sms: {
     provider: 'africas_talking',
     senderId: '237GO',
@@ -679,7 +674,7 @@ router.get('/settings', async (_req: AuthRequest, res: Response) => {
     res.json({
       success: true,
       data: {
-        pricing: { ...DEFAULT_SETTINGS.pricing, ...(stored.pricing as object || {}) },
+        pricing: await getPricingSettings(),
         sms: { ...DEFAULT_SETTINGS.sms, ...(stored.sms as object || {}) },
       },
     });
@@ -692,23 +687,31 @@ router.get('/settings', async (_req: AuthRequest, res: Response) => {
 router.put('/settings', async (req: AuthRequest, res: Response) => {
   try {
     const { pricing, sms } = req.body || {};
-    const entries: { key: string; value: unknown }[] = [];
-    if (pricing && typeof pricing === 'object') entries.push({ key: 'pricing', value: pricing });
-    if (sms && typeof sms === 'object') entries.push({ key: 'sms', value: sms });
+    const hasPricing = pricing && typeof pricing === 'object' && pricing.tariffs;
+    const hasSms = sms && typeof sms === 'object';
 
-    if (entries.length === 0) {
+    if (!hasPricing && !hasSms) {
       return res.status(400).json({ success: false, message: 'Aucun paramètre fourni' });
     }
 
-    await prisma.$transaction(
-      entries.map((e) =>
-        prisma.appSetting.upsert({
-          where: { key: e.key },
-          create: { key: e.key, value: e.value as any },
-          update: { value: e.value as any },
-        })
-      )
-    );
+    // Tarification : validée avant tout enregistrement (une valeur absurde ferait payer
+    // n'importe quel prix à tous les passagers). Une ancienne version de l'admin qui envoie
+    // l'ancien format (sans « tariffs ») est ignorée pour la tarification, sans bloquer le reste.
+    if (hasPricing) {
+      const checked = validatePricingInput(pricing);
+      if (!checked.value) {
+        return res.status(400).json({ success: false, message: checked.error || 'Tarification invalide' });
+      }
+      await savePricingSettings(checked.value);
+    }
+
+    if (hasSms) {
+      await prisma.appSetting.upsert({
+        where: { key: 'sms' },
+        create: { key: 'sms', value: sms as any },
+        update: { value: sms as any },
+      });
+    }
 
     res.json({ success: true, message: 'Paramètres enregistrés' });
   } catch {

@@ -1,8 +1,9 @@
 /**
  * TARIF DES LIVRAISONS (XAF) — source UNIQUE pour les devis et les paiements.
  *
- * Règle : 1 000 F minimum pour toute livraison (le livreur touche au moins 850 F après la
- * commission de 15 %), qui couvre les 3 premiers km, puis +150 F par km. Arrondi aux 50 F.
+ * Règle : 1 000 F minimum pour toute livraison (le livreur en garde 900 F avec la commission
+ * actuelle de 10 %, réglable dans l'admin), qui couvre les 3 premiers km, puis +150 F par km.
+ * Arrondi aux 50 F.
  *   3 km → 1 000 F · 5 km → 1 300 F · 8 km → 1 750 F · 10 km → 2 050 F
  *
  * Colis (GO Deliver) : chaque type garde son tarif (gros et fragiles plus chers),

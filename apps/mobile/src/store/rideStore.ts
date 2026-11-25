@@ -16,13 +16,35 @@ interface RideEstimate {
   vehicleType: string;
 }
 
+// Offre d'un chauffeur (contre-proposition de prix) pour une course en attente
+export interface RideOffer {
+  id: string;
+  price: number;
+  distanceToPickup?: number | null;
+  etaMin?: number | null;
+  driver: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    vehicleBrand?: string | null;
+    vehicleModel?: string | null;
+    vehiclePlate?: string | null;
+    averageRating?: number | null;
+    totalTrips?: number | null;
+  };
+}
+
 interface Ride {
   id: string;
   status: string;
   pickupAddress: string;
   dropoffAddress: string;
   estimatedPrice: number;
+  /** Prix proposé par le passager ; devient le prix convenu quand il choisit une offre. */
+  proposedPrice?: number | null;
   finalPrice?: number;
+  /** Offres reçues des chauffeurs (course en attente uniquement). */
+  offers?: RideOffer[];
   vehicleType: string;
   driver?: {
     id?: string;
@@ -56,6 +78,8 @@ interface RideState {
     luggageSize?: string;
   }) => Promise<void>;
   cancelRide: (rideId: string) => Promise<void>;
+  acceptOffer: (rideId: string, offerId: string) => Promise<void>;
+  declineOffer: (rideId: string, offerId: string) => Promise<void>;
   confirmArrival: (rideId: string) => Promise<string>;
   openDispute: (rideId: string, reason: string) => Promise<void>;
   listenToRideUpdates: () => void;
@@ -127,6 +151,35 @@ export const useRideStore = create<RideState>((set, get) => ({
     set({ currentRide: null, driverLocation: null });
   },
 
+  // Le passager choisit l'offre d'un chauffeur : la course est attribuée au prix de l'offre.
+  acceptOffer: async (rideId, offerId) => {
+    const response = await api.post(`/rides/${rideId}/offers/${offerId}/accept`);
+    const ride = response.data?.data;
+    set((state) =>
+      state.currentRide && state.currentRide.id === rideId
+        ? {
+            currentRide: {
+              ...state.currentRide,
+              status: ride?.status || 'ACCEPTED',
+              driver: ride?.driver || state.currentRide.driver,
+              proposedPrice: ride?.proposedPrice ?? state.currentRide.proposedPrice,
+              offers: [],
+            },
+          }
+        : {}
+    );
+  },
+
+  // Le passager refuse l'offre d'un chauffeur (elle disparaît de la liste)
+  declineOffer: async (rideId, offerId) => {
+    await api.post(`/rides/${rideId}/offers/${offerId}/decline`);
+    set((state) =>
+      state.currentRide && state.currentRide.id === rideId
+        ? { currentRide: { ...state.currentRide, offers: (state.currentRide.offers || []).filter((o) => o.id !== offerId) } }
+        : {}
+    );
+  },
+
   // Le passager confirme son arrivée → libère le paiement (escrow)
   confirmArrival: async (rideId) => {
     const response = await api.post(`/rides/${rideId}/confirm-arrival`);
@@ -150,7 +203,18 @@ export const useRideStore = create<RideState>((set, get) => ({
       if (!fresh) return;
       set((state) =>
         state.currentRide && state.currentRide.id === fresh.id
-          ? { currentRide: { ...state.currentRide, status: fresh.status, driver: fresh.driver || state.currentRide.driver, finalPrice: fresh.finalPrice ?? state.currentRide.finalPrice } }
+          ? {
+              currentRide: {
+                ...state.currentRide,
+                status: fresh.status,
+                driver: fresh.driver || state.currentRide.driver,
+                finalPrice: fresh.finalPrice ?? state.currentRide.finalPrice,
+                proposedPrice: fresh.proposedPrice ?? state.currentRide.proposedPrice,
+                // Les offres reçues : la liste du serveur fait foi (elle contient aussi celles
+                // dont l'événement temps réel aurait été manqué, et retire les expirées).
+                offers: fresh.status === 'PENDING' ? (fresh.offers ?? state.currentRide.offers ?? []) : [],
+              },
+            }
           : {}
       );
     } catch {
@@ -181,9 +245,26 @@ export const useRideStore = create<RideState>((set, get) => ({
         if (!isCurrent(data?.rideId)) return;
         set((state) => ({
           currentRide: state.currentRide
-            ? { ...state.currentRide, status: 'ACCEPTED', driver: data.driver }
+            ? { ...state.currentRide, status: 'ACCEPTED', driver: data.driver, offers: [] }
             : null,
         }));
+      },
+
+      // Un chauffeur propose un autre prix : on l'ajoute (ou on remplace son offre précédente)
+      ride_offer: (data: any) => {
+        if (!isCurrent(data?.rideId) || !data?.offer) return;
+        set((state) => {
+          if (!state.currentRide || state.currentRide.status !== 'PENDING') return {};
+          const others = (state.currentRide.offers || []).filter(
+            (o) => o.id !== data.offer.id && o.driver?.id !== data.offer.driver?.id
+          );
+          return {
+            currentRide: {
+              ...state.currentRide,
+              offers: [...others, data.offer].sort((a, b) => a.price - b.price),
+            },
+          };
+        });
       },
 
       ride_status_update: (data: any) => {

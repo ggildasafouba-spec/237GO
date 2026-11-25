@@ -9,6 +9,8 @@ import {
   Alert,
   Vibration,
   Linking,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { getSocket } from '../config/socket';
@@ -42,6 +44,15 @@ interface DeliveryRequest {
   isMarketOrder?: boolean; // commande de restaurant / boutique (GO Market)
 }
 
+// Une offre de prix n'est valable que 3 minutes (même durée que sur le serveur)
+const OFFER_TTL_MS = 3 * 60 * 1000;
+
+interface SentOffer {
+  price: number;
+  at: number;
+  declined?: boolean;
+}
+
 interface ActiveJob {
   type: 'ride' | 'delivery';
   id: string;
@@ -61,6 +72,18 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
   const [deliveryRequests, setDeliveryRequests] = useState<DeliveryRequest[]>([]);
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
   const [earnings, setEarnings] = useState({ today: 0, trips: 0 });
+
+  // Négociation : le chauffeur peut proposer un AUTRE prix au lieu d'accepter celui demandé
+  const [offerFor, setOfferFor] = useState<RideRequest | null>(null);
+  const [offerPrice, setOfferPrice] = useState('');
+  const [sendingOffer, setSendingOffer] = useState(false);
+  const [sentOffers, setSentOffers] = useState<Record<string, SentOffer>>({});
+  // Fait passer les offres de plus de 3 min à « expirées » sans action de l'utilisateur
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 20000);
+    return () => clearInterval(timer);
+  }, []);
 
   const socketRef = useRef(getSocket());
   const { getCurrentLocation } = useLocation();
@@ -119,6 +142,41 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
       setDeliveryRequests((prev) => [data, ...prev.filter((d) => d.deliveryId !== data.deliveryId)]);
     });
 
+    // Le passager a choisi MON offre : la course démarre au prix convenu
+    socket.on('ride_offer_accepted', (d: any) => {
+      Vibration.vibrate([0, 300, 100, 300]);
+      setActiveJob({
+        type: 'ride',
+        id: d.rideId,
+        status: 'ACCEPTED',
+        pickupAddress: d.pickup?.address || '',
+        dropoffAddress: d.dropoff?.address || '',
+        price: d.price,
+        passengerPhone: d.passengerPhone || undefined,
+        pickupCoords: d.pickup ? { lat: d.pickup.lat, lng: d.pickup.lng } : undefined,
+        dropoffCoords: d.dropoff ? { lat: d.dropoff.lat, lng: d.dropoff.lng } : undefined,
+      });
+      setRideRequests([]);
+      setSentOffers({});
+      setOfferFor(null);
+      Alert.alert('✅ Offre acceptée !', `Le passager a accepté ${Number(d.price).toLocaleString()} F.\nDirection : ${d.pickup?.address || 'le point de départ'}`);
+    });
+
+    // Le passager a refusé mon offre
+    socket.on('ride_offer_declined', (d: any) => {
+      setSentOffers((prev) => (prev[d?.rideId] ? { ...prev, [d.rideId]: { ...prev[d.rideId], declined: true } } : prev));
+    });
+
+    // Course annulée, ou un autre chauffeur a été choisi : la demande disparaît
+    socket.on('ride_offer_closed', (d: any) => {
+      setSentOffers((prev) => {
+        const next = { ...prev };
+        delete next[d?.rideId];
+        return next;
+      });
+      setRideRequests((prev) => prev.filter((r) => r.rideId !== d?.rideId));
+    });
+
     // Mise en ligne refusée par le serveur (dossier non validé, GPS invalide...) : on l'affiche
     // au lieu de laisser croire au chauffeur qu'il est en ligne.
     socket.on('driver:online_error', (data: { message?: string }) => {
@@ -137,6 +195,9 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
     return () => {
       socket.off('new_ride_request');
       socket.off('new_delivery_request');
+      socket.off('ride_offer_accepted');
+      socket.off('ride_offer_declined');
+      socket.off('ride_offer_closed');
       socket.off('driver:online_error');
       socket.off('connect', onReconnect);
     };
@@ -220,6 +281,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
         dropoffCoords: { lat: request.dropoff.lat, lng: request.dropoff.lng },
       });
       setRideRequests([]);
+      setSentOffers({});
       Alert.alert('✅ Course acceptée !', `Direction: ${request.pickup.address}`);
     } catch (error: any) {
       // 402 = solde insuffisant pour couvrir la commission d'une course en espèces
@@ -236,6 +298,54 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
         Alert.alert('Erreur', error?.response?.data?.message || 'Course déjà prise par un autre chauffeur');
         setRideRequests((prev) => prev.filter((r) => r.rideId !== request.rideId));
       }
+    }
+  };
+
+  // ---- Négociation : proposer un autre prix au passager ----
+  const openOffer = (request: RideRequest) => {
+    const current = sentOffers[request.rideId]?.price ?? (request.proposedPrice || request.estimatedPrice);
+    setOfferPrice(String(Math.round(current)));
+    setOfferFor(request);
+  };
+
+  const adjustOffer = (delta: number) => {
+    const current = parseFloat(offerPrice.replace(',', '.')) || offerFor?.estimatedPrice || 0;
+    setOfferPrice(String(Math.max(1, Math.round(current + delta))));
+  };
+
+  const sendOffer = async () => {
+    if (!offerFor || sendingOffer) return;
+    const price = Math.round(parseFloat(offerPrice.replace(',', '.')));
+    if (!price || price <= 0) {
+      Alert.alert('Prix invalide', 'Entrez un prix en francs, par exemple 1500.');
+      return;
+    }
+    setSendingOffer(true);
+    const rideId = offerFor.rideId;
+    try {
+      await api.post(`/rides/${rideId}/offers`, { price });
+      setSentOffers((prev) => ({ ...prev, [rideId]: { price, at: Date.now() } }));
+      setOfferFor(null);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const message: string = error?.response?.data?.message || 'Impossible d\'envoyer l\'offre. Réessayez.';
+      if (status === 402) {
+        // Course en espèces : il faut de quoi couvrir la commission sur le portefeuille
+        setOfferFor(null);
+        Alert.alert('Solde insuffisant 💰', message, [
+          { text: 'Plus tard' },
+          { text: 'Recharger', onPress: () => navigation.navigate('Wallet') },
+        ]);
+      } else {
+        if (status === 409) setSentOffers((prev) => ({ ...prev, [rideId]: { price, at: Date.now(), declined: true } }));
+        if (status === 400 && /non disponible/i.test(message)) {
+          setRideRequests((prev) => prev.filter((r) => r.rideId !== rideId));
+          setOfferFor(null);
+        }
+        Alert.alert('Offre non envoyée', message);
+      }
+    } finally {
+      setSendingOffer(false);
     }
   };
 
@@ -455,6 +565,7 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
               <Text style={styles.requestsTitle}>🚗 Demandes de course ({rideRequests.length})</Text>
               <FlatList
                 data={rideRequests}
+                extraData={{ sentOffers, tick }}
                 keyExtractor={(item) => item.rideId}
                 renderItem={({ item }) => (
                   <View style={styles.requestCard}>
@@ -492,6 +603,41 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
                         <Text style={styles.rejectText}>✕</Text>
                       </TouchableOpacity>
                     </View>
+
+                    {/* Négociation : proposer un autre prix, ou suivre l'offre déjà envoyée */}
+                    {(() => {
+                      const sent = sentOffers[item.rideId];
+                      const live = !!sent && Date.now() - sent.at < OFFER_TTL_MS;
+                      if (live && sent.declined) {
+                        return (
+                          <Text style={styles.offerDeclinedText}>
+                            ❌ Le passager a refusé votre offre de {sent.price.toLocaleString()} F
+                          </Text>
+                        );
+                      }
+                      if (live) {
+                        return (
+                          <View style={styles.offerSentRow}>
+                            <Text style={styles.offerSentText}>
+                              ⏳ Offre envoyée : {sent.price.toLocaleString()} F, en attente du passager
+                            </Text>
+                            <TouchableOpacity onPress={() => openOffer(item)} accessibilityRole="button" accessibilityLabel="Modifier mon offre">
+                              <Text style={styles.offerEditText}>Modifier</Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      }
+                      return (
+                        <TouchableOpacity
+                          style={styles.proposeButton}
+                          onPress={() => openOffer(item)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Proposer un autre prix"
+                        >
+                          <Text style={styles.proposeText}>💬 Proposer un autre prix</Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
                   </View>
                 )}
               />
@@ -541,6 +687,62 @@ export default function DriverScreen({ navigation }: { navigation: any }) {
           )}
         </>
       )}
+
+      {/* Fenêtre de saisie du prix proposé */}
+      <Modal visible={!!offerFor} transparent animationType="fade" onRequestClose={() => setOfferFor(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>💬 Proposer un autre prix</Text>
+            {offerFor && (
+              <Text style={styles.modalHint}>
+                Prix demandé : {(offerFor.proposedPrice || offerFor.estimatedPrice).toLocaleString()} F{'\n'}
+                Prix conseillé : {offerFor.estimatedPrice.toLocaleString()} F
+              </Text>
+            )}
+            <View style={styles.modalInputRow}>
+              <TextInput
+                style={styles.modalInput}
+                value={offerPrice}
+                onChangeText={(t) => setOfferPrice(t.replace(/[^0-9]/g, ''))}
+                keyboardType="numeric"
+                placeholder="Ex : 1500"
+                placeholderTextColor={colors.textLight}
+                autoFocus
+                accessibilityLabel="Prix proposé en francs"
+              />
+              <Text style={styles.modalUnit}>F</Text>
+            </View>
+            <View style={styles.chipsRow}>
+              {[-100, 100, 200, 500].map((delta) => (
+                <TouchableOpacity key={delta} style={styles.chip} onPress={() => adjustOffer(delta)} accessibilityRole="button">
+                  <Text style={styles.chipText}>{delta > 0 ? `+${delta}` : delta}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.chip}
+                onPress={() => offerFor && setOfferPrice(String(Math.round(offerFor.estimatedPrice)))}
+                accessibilityRole="button"
+              >
+                <Text style={styles.chipText}>Conseillé</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalNote}>Le passager choisit parmi les offres reçues. Votre offre reste valable 3 minutes.</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setOfferFor(null)} accessibilityRole="button">
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSend, sendingOffer && { opacity: 0.6 }]}
+                onPress={sendOffer}
+                disabled={sendingOffer}
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalSendText}>{sendingOffer ? 'Envoi…' : 'Envoyer l\'offre'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -586,6 +788,29 @@ const styles = StyleSheet.create({
   acceptText: { color: colors.success, fontWeight: '700' },
   rejectButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center' },
   rejectText: { color: colors.error, fontWeight: '700', fontSize: 18 },
+  // Négociation
+  proposeButton: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: colors.primary },
+  proposeText: { color: colors.primary, fontWeight: '700', fontSize: typography.sm },
+  offerSentRow: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF8E1', padding: spacing.sm, borderRadius: 8 },
+  offerSentText: { flex: 1, color: '#8D6E00', fontSize: typography.xs, fontWeight: '600' },
+  offerEditText: { color: colors.primary, fontWeight: '700', fontSize: typography.xs, marginLeft: spacing.sm },
+  offerDeclinedText: { marginTop: spacing.sm, color: colors.error, fontSize: typography.xs, fontWeight: '600' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
+  modalCard: { backgroundColor: '#fff', borderRadius: 16, padding: spacing.lg },
+  modalTitle: { fontSize: typography.lg, fontWeight: '800', color: colors.text },
+  modalHint: { fontSize: typography.sm, color: colors.textSecondary, marginTop: spacing.sm, lineHeight: 20 },
+  modalInputRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md },
+  modalInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: typography.xl, fontWeight: '800', color: colors.text },
+  modalUnit: { marginLeft: spacing.sm, fontSize: typography.lg, fontWeight: '700', color: colors.textSecondary },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm },
+  chip: { backgroundColor: colors.background, borderRadius: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, marginRight: spacing.sm, marginTop: spacing.xs },
+  chipText: { color: colors.text, fontWeight: '600', fontSize: typography.sm },
+  modalNote: { fontSize: typography.xs, color: colors.textSecondary, marginTop: spacing.md },
+  modalActions: { flexDirection: 'row', marginTop: spacing.lg },
+  modalCancel: { flex: 1, padding: spacing.md, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
+  modalCancelText: { color: colors.textSecondary, fontWeight: '700' },
+  modalSend: { flex: 2, padding: spacing.md, borderRadius: 10, alignItems: 'center', backgroundColor: colors.primary },
+  modalSendText: { color: '#fff', fontWeight: '700' },
   // Active job
   activeJobCard: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: 16, elevation: 4 },
   jobHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },

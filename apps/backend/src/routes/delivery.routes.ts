@@ -10,6 +10,7 @@ import { SERVICE_PAYMENT_METHODS, SERVICE_PAYMENT_ERROR } from '../lib/paymentMe
 import { dispatchToNearbyDrivers } from '../services/matching.service';
 import { attachCourierPayment, releaseCourier, syncOrderWithCourier } from '../lib/marketCourier';
 import { packageDeliveryPrice } from '../lib/deliveryPricing';
+import { getCommissionRate } from '../lib/pricingSettings';
 
 const router = Router();
 
@@ -164,7 +165,7 @@ router.patch(
       // LIVRAISON EN ESPÈCES : le livreur doit pouvoir couvrir la commission sur son wallet
       // (les commandes GO Market livrées par 237GO sont toujours payées dans l'app)
       if (delivery.paymentMethod === 'CASH' && !delivery.marketOrderId) {
-        const commission = Math.round(delivery.estimatedPrice * 0.15);
+        const commission = Math.round(delivery.estimatedPrice * (await getCommissionRate()));
         const wallet = await prisma.wallet.findUnique({ where: { userId: req.user!.id } });
         if (!wallet || wallet.balance < commission) {
           throw new AppError(

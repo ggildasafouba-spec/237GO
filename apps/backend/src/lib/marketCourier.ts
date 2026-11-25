@@ -5,8 +5,8 @@
  *  1. une livraison est créée (retrait : la boutique ; dépôt : l'adresse du client) et proposée
  *     aux chauffeurs proches, comme un colis ;
  *  2. à l'acceptation, le paiement déjà bloqué pour la commande est PARTAGÉ :
- *       - le prix des produits reste au restaurant (versé après réception, −15 %) ;
- *       - les frais de livraison passent au livreur (versés après réception, −15 %).
+ *       - le prix des produits reste au restaurant (versé après réception, moins la commission) ;
+ *       - les frais de livraison passent au livreur (versés après réception, moins la commission).
  *     Aucun argent n'est redébité au client : il a déjà payé la commande ET la livraison ;
  *  3. le livreur fait avancer la commande (récupérée → en route → livrée) ;
  *  4. le client confirme la réception une seule fois : le restaurant ET le livreur sont payés.
@@ -17,7 +17,8 @@
 import type { Server } from 'socket.io';
 import { prisma } from './prisma';
 import { AppError } from '../middleware/error.middleware';
-import { PLATFORM_COMMISSION_RATE, refundFunds, confirmSide } from '../services/escrow.service';
+import { refundFunds, confirmSide } from '../services/escrow.service';
+import { getCommissionRate } from './pricingSettings';
 import { dispatchToNearbyDrivers, deliveryRequestPayload } from '../services/matching.service';
 
 const ACTIVE = ['PENDING', 'ACCEPTED', 'PICKING_UP', 'IN_TRANSIT'] as const;
@@ -30,7 +31,7 @@ function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): num
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-const commissionOf = (amount: number) => Math.round(amount * PLATFORM_COMMISSION_RATE);
+const commissionOf = (amount: number, rate: number) => Math.round(amount * rate);
 
 /** Le restaurant demande un livreur 237GO pour une de ses commandes. */
 export async function requestCourier(orderId: string, merchantUserId: string, io: Server) {
@@ -120,6 +121,7 @@ export async function cancelCourierRequest(orderId: string, merchantUserId: stri
  * pour un paiement propre au livreur (même argent, déjà bloqué : rien n'est redébité).
  */
 export async function attachCourierPayment(deliveryId: string, marketOrderId: string, driverId: string) {
+  const rate = await getCommissionRate();
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`escrow:MARKET:${marketOrderId}`}))`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`escrow:DELIVERY:${deliveryId}`}))`;
@@ -134,13 +136,13 @@ export async function attachCourierPayment(deliveryId: string, marketOrderId: st
 
     const fee = Math.min(order.deliveryFee, market.amount);
     const rest = market.amount - fee;
-    await tx.escrow.update({ where: { id: market.id }, data: { amount: rest, commission: commissionOf(rest) } });
+    await tx.escrow.update({ where: { id: market.id }, data: { amount: rest, commission: commissionOf(rest, rate) } });
     await tx.escrow.create({
       data: {
         serviceType: 'DELIVERY',
         serviceId: deliveryId,
         amount: fee,
-        commission: commissionOf(fee),
+        commission: commissionOf(fee, rate),
         payerId: order.customerId,
         payeeId: driverId,
         paymentMethod: market.paymentMethod,
@@ -156,6 +158,7 @@ export async function attachCourierPayment(deliveryId: string, marketOrderId: st
  */
 export async function releaseCourier(deliveryId: string, marketOrderId: string, io: Server) {
   let orphanEscrowId: string | null = null;
+  const rate = await getCommissionRate();
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`escrow:MARKET:${marketOrderId}`}))`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`escrow:DELIVERY:${deliveryId}`}))`;
@@ -163,7 +166,7 @@ export async function releaseCourier(deliveryId: string, marketOrderId: string, 
     const market = await tx.escrow.findFirst({ where: { serviceType: 'MARKET', serviceId: marketOrderId, status: 'HELD' } });
     if (courier && market) {
       const back = market.amount + courier.amount;
-      await tx.escrow.update({ where: { id: market.id }, data: { amount: back, commission: commissionOf(back) } });
+      await tx.escrow.update({ where: { id: market.id }, data: { amount: back, commission: commissionOf(back, rate) } });
       await tx.escrow.update({
         where: { id: courier.id },
         data: { status: 'REFUNDED', refundedAt: new Date(), resolvedBy: 'courier-reassigned' },

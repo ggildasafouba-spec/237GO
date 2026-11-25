@@ -62,6 +62,7 @@ model User {
   merchantProfile   MerchantProfile?
   ridesAsPassenger  Ride[]             @relation("PassengerRides")
   ridesAsDriver     Ride[]             @relation("DriverRides")
+  rideOffers        RideOffer[]        @relation("DriverRideOffers")
   deliveriesSender  Delivery[]         @relation("SenderDeliveries")
   deliveriesDriver  Delivery[]         @relation("DeliveryDriver")
   ratings           Rating[]           @relation("RaterRatings")
@@ -213,10 +214,36 @@ model Ride {
   cancelledAt     DateTime?
   cancelReason    String?
   ratings         Rating[]
+  offers          RideOffer[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   @@map("rides")
+}
+
+// Contre-proposition de prix d'un chauffeur pour une course en attente (négociation).
+// Une seule offre par chauffeur et par course : un nouvel envoi remplace l'ancienne.
+model RideOffer {
+  id        String          @id @default(uuid())
+  rideId    String
+  ride      Ride            @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  driverId  String
+  driver    User            @relation("DriverRideOffers", fields: [driverId], references: [id], onDelete: Cascade)
+  price     Float
+  status    RideOfferStatus @default(PENDING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([rideId, driverId])
+  @@index([rideId, status])
+  @@map("ride_offers")
+}
+
+enum RideOfferStatus {
+  PENDING   // en attente de la réponse du passager
+  ACCEPTED  // le passager a choisi cette offre
+  DECLINED  // refusée par le passager
+  EXPIRED   // dépassée (trop ancienne, course prise par un autre ou annulée)
 }
 
 enum RideStatus {

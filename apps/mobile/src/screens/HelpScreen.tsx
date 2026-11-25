@@ -50,7 +50,7 @@ const FAQ: FaqGroup[] = [
     items: [
       { q: 'Comment devenir chauffeur ?', a: 'Profil → Devenir chauffeur. Il faut un permis de conduire, une CNI, les informations du véhicule et une adresse email. L\'équipe 237GO vérifie le dossier.' },
       { q: 'Comment vendre sur GO Market ?', a: 'Profil → Devenir marchand. Il faut une adresse email, une pièce d\'identité et les informations de la boutique. Le menu peut être importé depuis un fichier Excel.' },
-      { q: 'Quelle commission prend 237GO ?', a: 'Sur les courses et les livraisons, 237GO garde 15 % du prix. Le reste est versé au chauffeur.' },
+      { q: 'Quelle commission prend 237GO ?', a: 'Sur les courses et les livraisons, 237GO garde 10 % du prix. Le reste est versé au chauffeur. Chauffeur : vous pouvez aussi proposer un autre prix au passager, qui choisit parmi les offres reçues.' },
     ],
   },
 ];

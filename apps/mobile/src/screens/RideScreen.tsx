@@ -15,7 +15,7 @@ import {
 import * as Location from 'expo-location';
 import { sendSos, getTripShare, shareText } from '../config/safety';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRideStore } from '../store/rideStore';
+import { useRideStore, RideOffer } from '../store/rideStore';
 import { useLocation } from '../hooks/useLocation';
 import RideMap from '../components/RideMap';
 import DestinationPicker, { PickedPlace } from '../components/DestinationPicker';
@@ -69,6 +69,8 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
     getAllEstimates,
     createRide,
     cancelRide,
+    acceptOffer,
+    declineOffer,
     confirmArrival,
     openDispute,
     clearRide,
@@ -158,6 +160,44 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   }, [rideStatus]);
 
   const [confirming, setConfirming] = useState(false);
+
+  // Négociation : le passager choisit (ou refuse) l'offre d'un chauffeur
+  const [offerBusy, setOfferBusy] = useState<string | null>(null);
+
+  const handleAcceptOffer = async (offer: RideOffer) => {
+    if (!currentRide || offerBusy) return;
+    setOfferBusy(offer.id);
+    try {
+      await acceptOffer(currentRide.id, offer.id);
+      // L'écran passe tout seul à « chauffeur en route » (statut ACCEPTED)
+    } catch (error: any) {
+      const message: string = error?.response?.data?.message || 'Impossible de choisir ce chauffeur. Réessayez.';
+      if (error?.response?.status === 400 && /solde/i.test(message)) {
+        // Prix de l'offre supérieur au solde : proposer de recharger puis de réessayer
+        Alert.alert('Solde insuffisant 💰', `${message}\n\nRechargez votre portefeuille, puis acceptez de nouveau l'offre (elle reste valable quelques minutes).`, [
+          { text: 'Plus tard', style: 'cancel' },
+          { text: 'Recharger', onPress: () => navigation.navigate('Wallet') },
+        ]);
+      } else {
+        Alert.alert('Offre indisponible', message);
+      }
+      useRideStore.getState().refreshRide(); // retire l'offre si elle n'est plus valable
+    } finally {
+      setOfferBusy(null);
+    }
+  };
+
+  const handleDeclineOffer = async (offer: RideOffer) => {
+    if (!currentRide || offerBusy) return;
+    setOfferBusy(offer.id);
+    try {
+      await declineOffer(currentRide.id, offer.id);
+    } catch {
+      useRideStore.getState().refreshRide();
+    } finally {
+      setOfferBusy(null);
+    }
+  };
 
   const handleConfirmArrival = async () => {
     if (!currentRide) return;
@@ -725,11 +765,80 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
   // Step: En attente d'un chauffeur
   // (Avant : `step === 'waiting'` gardait cet écran affiché même après acceptation.)
   if (currentRide?.status === 'PENDING' || (step === 'waiting' && !currentRide)) {
+    const offers = currentRide?.offers || [];
     return (
-      <View style={[styles.container, styles.centerContent, safeTop, { paddingBottom: insets.bottom + spacing.md }]}>
+      <ScrollView
+        style={styles.scrollBg}
+        contentContainerStyle={[styles.waitScroll, safeTop, { paddingBottom: insets.bottom + spacing.lg }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.waitingTitle}>Recherche d'un chauffeur...</Text>
-        <Text style={styles.waitingSubtitle}>Veuillez patienter</Text>
+        <Text style={styles.waitingSubtitle}>
+          {offers.length > 0 ? 'Des chauffeurs vous font une offre' : 'Veuillez patienter'}
+        </Text>
+        {currentRide && (
+          <Text style={styles.waitingPrice}>
+            {currentRide.proposedPrice
+              ? `Votre proposition : ${currentRide.proposedPrice.toLocaleString()} F`
+              : `Prix estimé : ${currentRide.estimatedPrice.toLocaleString()} F`}
+          </Text>
+        )}
+
+        {/* Offres des chauffeurs (négociation) : le passager choisit le chauffeur et le prix */}
+        {offers.length > 0 && (
+          <View style={styles.offersBox}>
+            <Text style={styles.offersTitle}>💬 Offres des chauffeurs ({offers.length})</Text>
+            {offers.map((offer) => {
+              const d = offer.driver;
+              const busy = offerBusy === offer.id;
+              return (
+                <View key={offer.id} style={styles.offerCard}>
+                  <View style={styles.offerTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.offerDriver}>{d.firstName} {d.lastName}</Text>
+                      <Text style={styles.offerMeta}>
+                        {d.averageRating != null ? `⭐ ${Number(d.averageRating).toFixed(1)}` : '⭐ nouveau'}
+                        {d.totalTrips ? ` • ${d.totalTrips} course${d.totalTrips > 1 ? 's' : ''}` : ''}
+                      </Text>
+                      {(d.vehicleBrand || d.vehiclePlate) && (
+                        <Text style={styles.offerMeta}>
+                          {[d.vehicleBrand, d.vehicleModel].filter(Boolean).join(' ')}{d.vehiclePlate ? ` • ${d.vehiclePlate}` : ''}
+                        </Text>
+                      )}
+                      {offer.etaMin != null && (
+                        <Text style={styles.offerMeta}>
+                          🕒 Arrive dans ~{offer.etaMin} min{offer.distanceToPickup != null ? ` (${offer.distanceToPickup} km)` : ''}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.offerPrice}>{offer.price.toLocaleString()} F</Text>
+                  </View>
+                  <View style={styles.offerActions}>
+                    <TouchableOpacity
+                      style={[styles.offerAccept, busy && styles.buttonDisabled]}
+                      onPress={() => handleAcceptOffer(offer)}
+                      disabled={!!offerBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Accepter l'offre de ${d.firstName} à ${offer.price} francs`}
+                    >
+                      <Text style={styles.offerAcceptText}>{busy ? '...' : `✅ Accepter ${offer.price.toLocaleString()} F`}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.offerDecline, !!offerBusy && styles.buttonDisabled]}
+                      onPress={() => handleDeclineOffer(offer)}
+                      disabled={!!offerBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Refuser cette offre"
+                    >
+                      <Text style={styles.offerDeclineText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* Partage possible dès la commande : le proche verra le chauffeur dès qu'il accepte */}
         {currentRide?.id && (
@@ -751,7 +860,7 @@ export default function RideScreen({ navigation, route }: { navigation: any; rou
         >
           <Text style={[styles.buttonText, { color: colors.error }]}>Annuler</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -911,6 +1020,85 @@ const styles = StyleSheet.create({
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  waitScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  waitingPrice: {
+    fontSize: typography.sm,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.sm,
+  },
+  offersBox: {
+    alignSelf: 'stretch',
+    marginTop: spacing.lg,
+  },
+  offersTitle: {
+    fontSize: typography.md,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  offerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  offerTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  offerDriver: {
+    fontSize: typography.md,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  offerMeta: {
+    fontSize: typography.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  offerPrice: {
+    fontSize: typography.xl,
+    fontWeight: '800',
+    color: colors.primary,
+    marginLeft: spacing.sm,
+  },
+  offerActions: {
+    flexDirection: 'row',
+    marginTop: spacing.md,
+  },
+  offerAccept: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  offerAcceptText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: typography.sm,
+  },
+  offerDecline: {
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerDeclineText: {
+    color: colors.textSecondary,
+    fontWeight: '700',
   },
   title: {
     fontSize: typography.xl,

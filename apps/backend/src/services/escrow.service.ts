@@ -3,9 +3,11 @@ import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/error.middleware';
 import { addLoyaltyPoints } from './loyalty.service';
 import { sendPushNotification } from './notification.service';
+import { getCommissionRate } from '../lib/pricingSettings';
 
-// Taux de commission de la plateforme (15%)
-export const PLATFORM_COMMISSION_RATE = 0.15;
+// Taux de commission de la plateforme : réglable depuis l'admin (Paramètres), 10 % par défaut.
+// Il est lu au moment du blocage et ENREGISTRÉ avec chaque séquestre : changer le taux ne
+// modifie pas les paiements déjà en cours.
 
 /**
  * SYSTÈME D'ESCROW (séquestre de paiement)
@@ -44,7 +46,7 @@ export interface HoldFundsParams {
 export async function holdFunds(params: HoldFundsParams) {
   const { amount, payerId, payeeId, paymentMethod, serviceType, serviceId } = params;
 
-  const commission = Math.round(amount * PLATFORM_COMMISSION_RATE);
+  const commission = Math.round(amount * (await getCommissionRate()));
 
   return prisma.$transaction(async (tx) => {
     // VERROU par service : sans lui, deux transactions simultanées lisent toutes les deux
@@ -387,6 +389,7 @@ export async function isServiceCompleted(serviceType: EscrowServiceType, service
  */
 export async function cancelWithRefund(escrowId: string, refundRatio: number, cancelledBy: string) {
   const ratio = Math.min(Math.max(refundRatio, 0), 1);
+  const commissionRate = await getCommissionRate();
 
   const result = await prisma.$transaction(async (tx) => {
     const current = await tx.escrow.findUnique({ where: { id: escrowId } });
@@ -402,7 +405,7 @@ export async function cancelWithRefund(escrowId: string, refundRatio: number, ca
 
     const refund = Math.round(current.amount * ratio);
     const kept = current.amount - refund;
-    const keptCommission = Math.round(kept * PLATFORM_COMMISSION_RATE);
+    const keptCommission = Math.round(kept * commissionRate);
     const providerShare = kept - keptCommission;
     const ref = current.serviceId.substring(0, 8);
 
