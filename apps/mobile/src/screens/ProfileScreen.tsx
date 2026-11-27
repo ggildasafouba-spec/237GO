@@ -360,29 +360,43 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 
         {showAddContact && (
           <View style={styles.addContactForm}>
+            <Text style={styles.contactIntro}>
+              Ajoutez une personne de confiance. En cas d'alerte SOS, elle pourra être prévenue avec votre position.
+            </Text>
+
+            <Text style={styles.fieldLabel}>Nom de la personne</Text>
             <TextInput
               style={styles.input}
-              placeholder="Nom du contact"
+              placeholder="Ex : Marie Ndiaye"
+              placeholderTextColor={colors.textLight}
               value={newContactName}
               onChangeText={setNewContactName}
-              accessibilityLabel="Nom du contact d'urgence"
+              accessibilityLabel="Nom de la personne à prévenir en cas d'urgence"
             />
+
+            <Text style={styles.fieldLabel}>Son numéro de téléphone</Text>
             <TextInput
               style={styles.input}
-              placeholder="Téléphone (6XXXXXXXX)"
+              placeholder="Ex : 677123456"
+              placeholderTextColor={colors.textLight}
               value={newContactPhone}
               onChangeText={setNewContactPhone}
               keyboardType="phone-pad"
               maxLength={9}
-              accessibilityLabel="Téléphone du contact d'urgence"
+              accessibilityLabel="Numéro de téléphone de la personne, 9 chiffres"
             />
+            <Text style={styles.fieldHint}>9 chiffres, sans le +237 (le numéro commence par 6).</Text>
+
+            <Text style={styles.fieldLabel}>Lien avec vous (facultatif)</Text>
             <TextInput
               style={styles.input}
-              placeholder="Relation (frère, mère, ami...)"
+              placeholder="Ex : sœur, mère, ami, collègue"
+              placeholderTextColor={colors.textLight}
               value={newContactRelation}
               onChangeText={setNewContactRelation}
-              accessibilityLabel="Relation avec le contact"
+              accessibilityLabel="Lien avec cette personne, facultatif"
             />
+
             <TouchableOpacity style={styles.saveButton} onPress={handleAddContact} accessibilityRole="button">
               <Text style={styles.saveButtonText}>Ajouter le contact</Text>
             </TouchableOpacity>
@@ -391,7 +405,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 
         {emergencyContacts.length === 0 ? (
           <Text style={styles.emptyText}>
-            Ajoutez des contacts d'urgence pour votre sécurité
+            Aucun contact pour l'instant. Touchez « + Ajouter » pour enregistrer une personne de confiance (nom, numéro, lien avec vous) : elle pourra être prévenue en cas d'alerte SOS.
           </Text>
         ) : (
           emergencyContacts.map((contact) => (
@@ -607,7 +621,11 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: colors.background, padding: spacing.md, borderRadius: 10,
     fontSize: typography.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm,
+    color: colors.text,
   },
+  contactIntro: { fontSize: typography.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.md },
+  fieldLabel: { fontSize: typography.sm, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
+  fieldHint: { fontSize: typography.xs, color: colors.textSecondary, marginTop: -spacing.xs, marginBottom: spacing.sm },
   labelSmall: { fontSize: typography.xs, color: colors.textSecondary, marginTop: spacing.sm, marginBottom: spacing.xs },
   languageRow: { flexDirection: 'row', marginBottom: spacing.md },
   langChip: {
